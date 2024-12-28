@@ -1,0 +1,1 @@
+const STORE: &str = "./store";
