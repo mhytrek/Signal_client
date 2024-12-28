@@ -1,1 +1,1 @@
-const STORE: &str = "./store";
+pub const STORE: &str = "./store";
