@@ -4,3 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+presage = { git = "https://github.com/whisperfish/presage" }
+presage-store-sled = { git = "https://github.com/whisperfish/presage" }
+anyhow = "1.0.95"
+futures = "0.3.31"
+qr2term = "=0.1.2"
