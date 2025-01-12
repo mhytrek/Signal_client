@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 
 use signal_client::args::{Cli, Command};
-use signal_client::{devices,tui};
+use signal_client::{devices, tui};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
