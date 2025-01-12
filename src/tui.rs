@@ -1,4 +1,5 @@
-use std::{error::Error, io};
+use std::io;
+use anyhow::Result;
 
 use ratatui::{
     backend::{Backend, CrosstermBackend},
@@ -15,7 +16,7 @@ use crate::{
     ui::ui,
 };
 
-pub fn run_tui() -> Result<(), Box<dyn Error>> {
+pub fn run_tui() -> Result<()> {
     enable_raw_mode()?;
     let mut stderr = io::stderr();
     execute!(stderr, EnterAlternateScreen, EnableMouseCapture)?;
