@@ -11,6 +11,12 @@ pub struct App {
     pub current_screen: CurrentScreen,
 }
 
+impl Default for App {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl App {
     pub fn new() -> App {
         App {
