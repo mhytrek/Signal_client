@@ -8,118 +8,93 @@ use ratatui::{
 
 use crate::app::{App, CurrentScreen};
 
-
 // Main UI rendering function.
 pub fn ui(frame: &mut Frame, app: &App) {
-
-
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(1),
-            Constraint::Length(3),
-        ])
+        .constraints([Constraint::Min(1), Constraint::Length(3)])
         .split(frame.area());
 
     let main_chunks = Layout::default()
-    .direction(Direction::Horizontal)
-    .constraints([
-        Constraint::Ratio(1, 4), 
-        Constraint::Ratio(3, 4), 
-    ])
-    .split(chunks[0]);
-
-
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Ratio(1, 4), Constraint::Ratio(3, 4)])
+        .split(chunks[0]);
 
     match app.current_screen {
         CurrentScreen::Main => {
-            render_contact_list(frame,app, main_chunks[0]);
+            render_contact_list(frame, app, main_chunks[0]);
             render_footer(frame, app, chunks[1]);
-        },
+        }
         CurrentScreen::Writing => {
-            render_contact_list(frame,app, main_chunks[0]);
+            render_contact_list(frame, app, main_chunks[0]);
             render_chat_and_contact(frame, app, main_chunks[1]);
             render_footer(frame, app, chunks[1]);
-
-        },
+        }
         CurrentScreen::Options => {
             render_options(frame);
             render_footer(frame, app, chunks[1]);
-        },
+        }
         CurrentScreen::Exiting => {
             // frame.render_widget(Clear, frame.area()); //clear the entire screen
             render_exit_popup(frame);
-
-        },
+        }
     }
-
 }
 
 // Renders the contact list in the left chunk of the screen
-fn render_contact_list(frame: &mut Frame, app:&App, area: Rect){
-
+fn render_contact_list(frame: &mut Frame, app: &App, area: Rect) {
     let list_items: Vec<ListItem> = app
         .contacts
         .iter()
         .enumerate()
         .map(|(i, name)| {
-            let mut style = Style::default().fg(Color::White); 
+            let mut style = Style::default().fg(Color::White);
             if i == app.selected {
                 style = style
-                    .bg(Color::White) 
-                    .fg(Color::Black) 
-                    .add_modifier(Modifier::BOLD); 
+                    .bg(Color::White)
+                    .fg(Color::Black)
+                    .add_modifier(Modifier::BOLD);
             }
             ListItem::new(name.clone()).style(style)
         })
         .collect();
 
-
-
-    let chat_list_widget = List::new(list_items)
-        .block(Block::default()
-        .padding(Padding::new(1,1,1,1)) 
-        .title("Chats")
-        .borders(Borders::ALL));
+    let chat_list_widget = List::new(list_items).block(
+        Block::default()
+            .padding(Padding::new(1, 1, 1, 1))
+            .title("Chats")
+            .borders(Borders::ALL),
+    );
 
     frame.render_widget(chat_list_widget, area);
 }
 
 // Renders the chat window and input box in the right chunk of the screen
-fn render_chat_and_contact(frame: &mut Frame, app:&App, area: Rect){
+fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
     let chat_chunks = Layout::default()
-    .direction(Direction::Vertical)
-    .constraints([
-        Constraint::Min(1), 
-        Constraint::Length(3), 
-    ])
-    .split(area);
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(3)])
+        .split(area);
 
+    let chat_window = Paragraph::new("Tu będzie chat :p").centered().block(
+        Block::default()
+            .title(app.contacts[app.selected].clone())
+            .borders(Borders::ALL),
+    );
 
-    let chat_window =
-        Paragraph::new("Tu będzie chat :p")
+    let input_window = Paragraph::new(" :)")
         .centered()
-        .block(Block::default()
-        .title(app.contacts[app.selected].clone())
-        .borders(Borders::ALL));
-
-    let input_window =
-        Paragraph::new(" :)")
-        .centered()
-        .block(Block::default()
-        .title("Input")
-        .borders(Borders::ALL));
+        .block(Block::default().title("Input").borders(Borders::ALL));
 
     frame.render_widget(chat_window, chat_chunks[0]);
     frame.render_widget(input_window, chat_chunks[1]);
-
 }
 
 // Renders a popup asking the user if they want to quit the application.
-fn render_exit_popup(frame: &mut Frame){
+fn render_exit_popup(frame: &mut Frame) {
     let popup_block = Block::default()
-    .borders(Borders::ALL)
-    .border_type(BorderType::Double);
+        .borders(Borders::ALL)
+        .border_type(BorderType::Double);
 
     let exit_text = Text::styled(
         "Would you like to quit? \n (y/n)",
@@ -132,11 +107,10 @@ fn render_exit_popup(frame: &mut Frame){
 
     let area = centered_rect(60, 25, frame.area());
     frame.render_widget(exit_paragraph, area);
-
 }
 
 // Renders the footer section at the bottom of the screen.
-fn render_footer(frame:&mut Frame, app:&App,area: Rect){
+fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     let current_keys_hint = {
         match app.current_screen {
             CurrentScreen::Main => Span::styled(
@@ -159,20 +133,16 @@ fn render_footer(frame:&mut Frame, app:&App,area: Rect){
     };
 
     let key_notes_footer =
-        Paragraph::new(Line::from(current_keys_hint))
-        .block(Block::default()
-        .borders(Borders::ALL));
+        Paragraph::new(Line::from(current_keys_hint)).block(Block::default().borders(Borders::ALL));
 
     frame.render_widget(key_notes_footer, area);
-
 }
 
 // Renders the options screen
-fn render_options(frame:&mut Frame){
+fn render_options(frame: &mut Frame) {
     let popup_block = Block::default()
-    .borders(Borders::ALL)
-    .border_type(BorderType::Double);
-
+        .borders(Borders::ALL)
+        .border_type(BorderType::Double);
 
     let exit_paragraph = Paragraph::new("lista opcji....")
         .block(popup_block)
@@ -192,7 +162,6 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
             Constraint::Percentage((100 - percent_y) / 2),
             Constraint::Percentage(percent_y),
             Constraint::Percentage((100 - percent_y) / 2),
-            
         ])
         .split(r);
 
@@ -203,5 +172,5 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
             Constraint::Percentage(percent_x),
             Constraint::Percentage((100 - percent_x) / 2),
         ])
-        .split(popup_layout[1])[1] 
+        .split(popup_layout[1])[1]
 }

@@ -1,4 +1,3 @@
-
 pub enum CurrentScreen {
     Main,
     Writing,
@@ -6,13 +5,11 @@ pub enum CurrentScreen {
     Exiting,
 }
 
-
 pub struct App {
     pub contacts: Vec<String>,
     pub selected: usize,
     pub current_screen: CurrentScreen,
 }
-
 
 impl App {
     pub fn new() -> App {
@@ -28,5 +25,4 @@ impl App {
             current_screen: CurrentScreen::Main,
         }
     }
-
 }

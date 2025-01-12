@@ -10,17 +10,15 @@ use ratatui::{
     Terminal,
 };
 
-
 use crate::{
     app::{App, CurrentScreen},
     ui::ui,
 };
 
-
 pub fn run_tui() -> Result<(), Box<dyn Error>> {
     enable_raw_mode()?;
     let mut stderr = io::stderr();
-    execute!(stderr, EnterAlternateScreen, EnableMouseCapture)?; 
+    execute!(stderr, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stderr);
     let mut terminal = Terminal::new(backend)?;
 
@@ -30,10 +28,10 @@ pub fn run_tui() -> Result<(), Box<dyn Error>> {
     disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),
-        LeaveAlternateScreen, 
-        DisableMouseCapture    
+        LeaveAlternateScreen,
+        DisableMouseCapture
     )?;
-    terminal.show_cursor()?; 
+    terminal.show_cursor()?;
 
     if let Err(err) = res {
         println!("{err:?}");
