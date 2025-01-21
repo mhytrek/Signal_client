@@ -10,6 +10,8 @@ pub struct Cli {
 pub enum Command {
     /// Link this device to your signal account
     LinkDevice(LinkDeviceArgs),
+    /// Displays a prototype of a layout with example data
+    RunApp,
 }
 
 #[derive(Args)]
