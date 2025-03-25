@@ -1,4 +1,6 @@
 use anyhow::Result;
+use futures::{pin_mut, StreamExt};
+use presage::model::messages::Received;
 use presage::Manager;
 use presage::model::{identity::OnNewIdentity, contacts::Contact};
 use presage::store::ContentsStore;
@@ -15,7 +17,16 @@ pub async fn sync_contacts() -> Result<()> {
     )
     .await?;
     let mut manager = Manager::load_registered(store).await?;
-    manager.request_contacts().await?;
+    // manager.request_contacts().await?;
+    let messages = manager.receive_messages().await?;
+    pin_mut!(messages);
+    while let Some(content) = messages.next().await {
+        match content {
+            Received::QueueEmpty => break,
+            Received::Contacts => println!("Got contacts!"),
+            Received::Content(_) => continue,
+        }
+    }
     Ok(())
 }
 

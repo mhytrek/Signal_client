@@ -4,6 +4,7 @@ use crate::contacts::list_contacts;
 
 fn print_contact(contact: &Contact) {
     println!("Name: {}", contact.name);
+    println!("UUID: {}", contact.uuid);
     if let Some(phone_number) = &contact.phone_number {
         println!("Phone number: {}", phone_number);
     }
