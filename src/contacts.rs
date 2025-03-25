@@ -17,7 +17,6 @@ pub async fn sync_contacts() -> Result<()> {
     )
     .await?;
     let mut manager = Manager::load_registered(store).await?;
-    // manager.request_contacts().await?;
     let messages = manager.receive_messages().await?;
     pin_mut!(messages);
     while let Some(content) = messages.next().await {
