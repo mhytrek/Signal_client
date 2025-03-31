@@ -13,11 +13,9 @@ fn print_contact(contact: &Contact) {
 pub async fn print_contacts() -> Result<()> {
     let contacts = list_contacts().await?;
     
-    for contact_res in contacts {
-        if let Ok(contact) = contact_res {
-            print_contact(&contact);
-            println!("================");
-        }
+    for contact in contacts.into_iter().flatten() {
+        print_contact(&contact);
+        println!("================");
     }
     Ok(())
 }
