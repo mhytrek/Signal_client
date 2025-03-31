@@ -1,9 +1,9 @@
 use anyhow::Result;
 use futures::{pin_mut, StreamExt};
 use presage::model::messages::Received;
-use presage::Manager;
-use presage::model::{identity::OnNewIdentity, contacts::Contact};
+use presage::model::{contacts::Contact, identity::OnNewIdentity};
 use presage::store::ContentsStore;
+use presage::Manager;
 use presage_store_sled::{MigrationConflictStrategy, SledStore, SledStoreError};
 
 use crate::paths;
@@ -48,8 +48,8 @@ pub async fn list_contacts() -> Result<Vec<Result<Contact, SledStoreError>>> {
     )
     .await?;
 
-    
     let manager = Manager::load_registered(store).await?;
-    let contacts: Vec<Result<Contact, SledStoreError>> = manager.store().contacts().await?.collect();
+    let contacts: Vec<Result<Contact, SledStoreError>> =
+        manager.store().contacts().await?.collect();
     Ok(contacts)
 }
