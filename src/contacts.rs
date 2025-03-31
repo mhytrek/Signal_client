@@ -26,6 +26,16 @@ pub async fn sync_contacts() -> Result<()> {
             Received::Content(_) => continue,
         }
     }
+    manager.request_contacts().await?;
+    let messages = manager.receive_messages().await?;
+    pin_mut!(messages);
+    while let Some(content) = messages.next().await {
+        match content {
+            Received::QueueEmpty => break,
+            Received::Contacts => println!("Got contacts!"),
+            Received::Content(_) => continue,
+        };
+    }
     Ok(())
 }
 
