@@ -2,8 +2,8 @@ use anyhow::Result;
 use clap::Parser;
 
 use signal_client::args::{Cli, Command};
-use signal_client::{cli, contacts, devices, tui};
 use signal_client::sending_text;
+use signal_client::{cli, contacts, devices, tui};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
@@ -14,7 +14,9 @@ async fn main() -> Result<()> {
         Command::SyncContacts => contacts::sync_contacts().await?,
         Command::ListContacts => cli::print_contacts().await?,
         Command::RunApp => tui::run_tui()?,
-        Command::SendMessage(args) => sending_text::send_message(args.recipient, args.text_message).await?,
+        Command::SendMessage(args) => {
+            sending_text::send_message(args.recipient, args.text_message).await?
+        }
     }
 
     Ok(())
