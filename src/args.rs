@@ -10,6 +10,10 @@ pub struct Cli {
 pub enum Command {
     /// Link this device to your signal account
     LinkDevice(LinkDeviceArgs),
+    /// Synchronizes contacts with primary device
+    SyncContacts,
+    /// Prints locally stored contacts
+    ListContacts,
     /// Displays a prototype of a layout with example data
     RunApp,
 }
