@@ -6,6 +6,6 @@ pub mod devices;
 pub mod paths;
 pub mod tui;
 pub mod ui;
-pub mod sending {
-    pub mod sending_text;
-}
+pub mod sending_text;
+
+pub mod sending {}
