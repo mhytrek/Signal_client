@@ -1,15 +1,14 @@
+use crate::contacts;
+use crate::ui::ui;
+use crossterm::event;
+use crossterm::event::{KeyCode, KeyEventKind};
+use ratatui::backend::CrosstermBackend;
+use ratatui::Terminal;
 use std::io;
 use std::io::Stderr;
 use std::sync::mpsc;
-use std::sync::mpsc::{Receiver};
+use std::sync::mpsc::Receiver;
 use std::thread;
-use crossterm::event;
-use crossterm::event::{KeyCode, KeyEventKind};
-use ratatui::backend::{Backend, CrosstermBackend};
-use ratatui::{Terminal};
-use crate::app::CurrentScreen::{Exiting, Main, Options, Writing};
-use crate::ui::ui;
-use crate::contacts;
 
 pub enum CurrentScreen {
     Main,
@@ -29,11 +28,15 @@ impl App {
         App {
             contacts: vec![],
             selected: 0,
-            current_screen: Main,
+            current_screen: CurrentScreen::Main,
         }
     }
 
-    pub(crate) fn run(&mut self, terminal: &mut Terminal<CrosstermBackend<Stderr>>, rx: Receiver<EventApp>) -> io::Result<bool> {
+    pub(crate) fn run(
+        &mut self,
+        terminal: &mut Terminal<CrosstermBackend<Stderr>>,
+        rx: Receiver<EventApp>,
+    ) -> io::Result<bool> {
         loop {
             terminal.draw(|f| ui(f, self))?;
 
@@ -95,17 +98,13 @@ impl App {
         }
         Ok(false)
     }
-
-
 }
-
 
 impl Default for App {
     fn default() -> Self {
         Self::new()
     }
 }
-
 
 pub enum EventApp {
     KeyInput(event::KeyEvent),
@@ -114,14 +113,11 @@ pub enum EventApp {
 
 pub fn handle_key_input_events(tx: mpsc::Sender<EventApp>) {
     loop {
-        match crossterm::event::read() {
-            Ok(event::Event::Key(key_event)) => {
-                if tx.send(EventApp::KeyInput(key_event)).is_err() {
-                    eprintln!("Failed to send key event");
-                    break;
-                }
+        if let Ok(event::Event::Key(key_event)) = crossterm::event::read() {
+            if tx.send(EventApp::KeyInput(key_event)).is_err() {
+                eprintln!("Failed to send key event");
+                break;
             }
-            _ => {}
         }
     }
 }
@@ -155,7 +151,10 @@ pub async fn handle_contacts(tx: mpsc::Sender<EventApp>) {
             .collect();
 
         if contact_names != previous_contacts {
-            if tx.send(EventApp::ContactsList(contact_names.clone())).is_err() {
+            if tx
+                .send(EventApp::ContactsList(contact_names.clone()))
+                .is_err()
+            {
                 break;
             }
 
@@ -163,4 +162,3 @@ pub async fn handle_contacts(tx: mpsc::Sender<EventApp>) {
         }
     }
 }
-

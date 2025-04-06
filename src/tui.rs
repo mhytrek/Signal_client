@@ -3,9 +3,8 @@ use std::io;
 use std::sync::mpsc;
 use std::thread;
 
-
 use ratatui::{
-    backend::{Backend, CrosstermBackend},
+    backend::CrosstermBackend,
     crossterm::{
         event::{DisableMouseCapture, EnableMouseCapture},
         execute,
@@ -14,7 +13,7 @@ use ratatui::{
     Terminal,
 };
 
-use crate::{app, app::{App},};
+use crate::{app, app::App};
 
 pub fn run_tui() -> Result<()> {
     enable_raw_mode()?;
@@ -37,7 +36,6 @@ pub fn run_tui() -> Result<()> {
         });
     });
 
-
     let res = app.run(&mut terminal, rx);
 
     disable_raw_mode()?;
@@ -54,5 +52,3 @@ pub fn run_tui() -> Result<()> {
 
     Ok(())
 }
-
-
