@@ -1,20 +1,20 @@
 use anyhow::Result;
 use std::io;
+use std::sync::mpsc;
+use std::thread;
+
 
 use ratatui::{
     backend::{Backend, CrosstermBackend},
     crossterm::{
-        event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+        event::{DisableMouseCapture, EnableMouseCapture},
         execute,
         terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     },
     Terminal,
 };
 
-use crate::{
-    app::{App, CurrentScreen},
-    ui::ui,
-};
+use crate::{app, app::{App},};
 
 pub fn run_tui() -> Result<()> {
     enable_raw_mode()?;
@@ -24,7 +24,21 @@ pub fn run_tui() -> Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     let mut app = App::new();
-    let res = run_app(&mut terminal, &mut app);
+
+    let (tx, rx) = mpsc::channel::<app::EventApp>();
+
+    let tx_key_events = tx.clone();
+    thread::spawn(move || app::handle_key_input_events(tx_key_events));
+
+    let tx_contacts_events = tx.clone();
+    thread::spawn(move || {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            app::handle_contacts(tx_contacts_events).await;
+        });
+    });
+
+
+    let res = app.run(&mut terminal, rx);
 
     disable_raw_mode()?;
     execute!(
@@ -41,59 +55,4 @@ pub fn run_tui() -> Result<()> {
     Ok(())
 }
 
-fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<bool> {
-    loop {
-        terminal.draw(|f| ui(f, app))?;
 
-        if let Event::Key(key) = event::read()? {
-            if key.kind == event::KeyEventKind::Release {
-                continue;
-            }
-            match app.current_screen {
-                CurrentScreen::Main => match key.code {
-                    KeyCode::Right | KeyCode::Char('d') => {
-                        app.current_screen = CurrentScreen::Writing;
-                    }
-                    KeyCode::Char('q') | KeyCode::Esc => {
-                        app.current_screen = CurrentScreen::Exiting;
-                    }
-                    KeyCode::Char('e') => {
-                        app.current_screen = CurrentScreen::Options;
-                    }
-                    KeyCode::Down | KeyCode::Char('s') => {
-                        if app.selected < app.contacts.len() - 1 {
-                            app.selected += 1;
-                        }
-                    }
-                    KeyCode::Up | KeyCode::Char('w') => {
-                        if app.selected > 0 {
-                            app.selected -= 1;
-                        }
-                    }
-                    _ => {}
-                },
-                CurrentScreen::Exiting => match key.code {
-                    KeyCode::Char('y') | KeyCode::Esc | KeyCode::Char('q') => {
-                        return Ok(true);
-                    }
-                    KeyCode::Char('n') => {
-                        app.current_screen = CurrentScreen::Main;
-                    }
-                    _ => {}
-                },
-                CurrentScreen::Writing => match key.code {
-                    KeyCode::Esc | KeyCode::Left | KeyCode::Char('a') => {
-                        app.current_screen = CurrentScreen::Main;
-                    }
-                    _ => {}
-                },
-                CurrentScreen::Options => match key.code {
-                    KeyCode::Esc | KeyCode::Char('q') => {
-                        app.current_screen = CurrentScreen::Main;
-                    }
-                    _ => {}
-                },
-            }
-        }
-    }
-}
