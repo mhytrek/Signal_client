@@ -1,6 +1,9 @@
-use presage::{manager::{Manager, Registered}, model::identity::OnNewIdentity};
-use presage_store_sled::{MigrationConflictStrategy, SledStore};
 use anyhow::{Error, Result};
+use presage::{
+    manager::{Manager, Registered},
+    model::identity::OnNewIdentity,
+};
+use presage_store_sled::{MigrationConflictStrategy, SledStore};
 
 pub mod app;
 pub mod args;
@@ -22,7 +25,7 @@ pub async fn create_registered_manager() -> Result<Manager<SledStore, Registered
         OnNewIdentity::Trust,
     )
     .await?;
-    
+
     // Sadly it has to be done this way, because anyhow::Error doesn't cover errors
     // from presage
     match Manager::load_registered(store).await {

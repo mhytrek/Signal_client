@@ -1,7 +1,7 @@
 use anyhow::Result;
 use futures::{pin_mut, StreamExt};
-use presage::model::messages::Received;
 use presage::model::contacts::Contact;
+use presage::model::messages::Received;
 use presage::store::ContentsStore;
 use presage_store_sled::SledStoreError;
 
