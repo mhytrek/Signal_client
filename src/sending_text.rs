@@ -1,14 +1,13 @@
-use crate::paths;
+use crate::create_registered_manager;
 use anyhow::Result;
 use presage::libsignal_service::content::ContentBody;
 use presage::libsignal_service::prelude::Uuid;
 use presage::libsignal_service::protocol::ServiceId;
 use presage::manager::Registered;
 use presage::model::contacts::Contact;
-use presage::model::identity::OnNewIdentity;
 use presage::store::ContentsStore;
 use presage::Manager;
-use presage_store_sled::{MigrationConflictStrategy, SledStore, SledStoreError};
+use presage_store_sled::{SledStore, SledStoreError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// finds contact uuid from string that can be contact_name or contact phone_number
@@ -32,14 +31,7 @@ pub async fn find_uuid(
 
 /// sends text message to recipient ( phone number or name )
 pub async fn send_message(recipient: String, text_message: String) -> Result<()> {
-    let store = SledStore::open(
-        paths::STORE,
-        MigrationConflictStrategy::Drop,
-        OnNewIdentity::Trust,
-    )
-    .await?;
-
-    let mut manager = Manager::load_registered(store).await?;
+    let mut manager = create_registered_manager().await?;
 
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
 
