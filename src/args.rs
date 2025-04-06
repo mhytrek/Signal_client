@@ -16,6 +16,8 @@ pub enum Command {
     ListContacts,
     /// Displays a prototype of a layout with example data
     RunApp,
+    /// Send text message
+    SendMessage(SendMessageArgs),
 }
 
 #[derive(Args)]
@@ -23,4 +25,12 @@ pub struct LinkDeviceArgs {
     /// Name of under which linked device should be saved
     #[arg(short, long)]
     pub device_name: String,
+}
+
+#[derive(Args)]
+pub struct SendMessageArgs {
+    /// Name of under which linked device should be saved
+    #[arg(short, long)]
+    pub recipient: String,
+    pub text_message: String,
 }
