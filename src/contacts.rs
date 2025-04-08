@@ -1,10 +1,11 @@
 use anyhow::Result;
 use futures::{pin_mut, StreamExt};
+use presage::Manager;
+use presage::manager::Registered;
 use presage::model::contacts::Contact;
 use presage::model::messages::Received;
 use presage::store::ContentsStore;
-use presage_store_sled::SledStoreError;
-
+use presage_store_sled::{SledStore, SledStoreError};
 use crate::create_registered_manager;
 
 /// Function to sync contacts
@@ -15,7 +16,7 @@ pub async fn sync_contacts() -> Result<()> {
     while let Some(content) = messages.next().await {
         match content {
             Received::QueueEmpty => break,
-            Received::Contacts => println!("Got contacts!"),
+            Received::Contacts => {},
             Received::Content(_) => continue,
         }
     }
@@ -25,7 +26,7 @@ pub async fn sync_contacts() -> Result<()> {
     while let Some(content) = messages.next().await {
         match content {
             Received::QueueEmpty => break,
-            Received::Contacts => println!("Got contacts!"),
+            Received::Contacts => {},
             Received::Content(_) => continue,
         };
     }

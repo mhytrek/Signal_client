@@ -2,7 +2,9 @@ use anyhow::Result;
 use std::io;
 use std::sync::mpsc;
 use std::thread;
-
+use presage::Manager;
+use presage::manager::Registered;
+use presage_store_sled::SledStore;
 use ratatui::{
     backend::CrosstermBackend,
     crossterm::{
@@ -12,8 +14,9 @@ use ratatui::{
     },
     Terminal,
 };
-
+use std::sync::{Arc, Mutex};
 use crate::{app, app::App};
+
 
 pub fn run_tui() -> Result<()> {
     enable_raw_mode()?;
@@ -24,19 +27,27 @@ pub fn run_tui() -> Result<()> {
 
     let mut app = App::new();
 
-    let (tx, rx) = mpsc::channel::<app::EventApp>();
+    let (tx_thread, rx_tui) = mpsc::channel::<app::EventApp>();
 
-    let tx_key_events = tx.clone();
+    let (tx_tui, rx_thread) = mpsc::channel::<app::EventSend>();
+
+    let tx_key_events = tx_thread.clone();
     thread::spawn(move || app::handle_key_input_events(tx_key_events));
 
-    let tx_contacts_events = tx.clone();
+    let tx_contacts_events = tx_thread.clone();
     thread::spawn(move || {
         tokio::runtime::Runtime::new().unwrap().block_on(async {
             app::handle_contacts(tx_contacts_events).await;
         });
     });
 
-    let res = app.run(&mut terminal, rx);
+    thread::spawn(move || {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            app::handle_sending_messages(rx_thread).await;
+        });
+    });
+
+    let res = app.run(&mut terminal, rx_tui, tx_tui);
 
     disable_raw_mode()?;
     execute!(

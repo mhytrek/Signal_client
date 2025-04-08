@@ -1,4 +1,3 @@
-use crate::create_registered_manager;
 use anyhow::Result;
 use presage::libsignal_service::content::ContentBody;
 use presage::libsignal_service::prelude::Uuid;
@@ -9,6 +8,7 @@ use presage::store::ContentsStore;
 use presage::Manager;
 use presage_store_sled::{SledStore, SledStoreError};
 use std::time::{SystemTime, UNIX_EPOCH};
+use crate::create_registered_manager;
 
 /// finds contact uuid from string that can be contact_name or contact phone_number
 pub async fn find_uuid(
@@ -49,6 +49,8 @@ pub async fn send_message(recipient: String, text_message: String) -> Result<()>
         ..Default::default()
     };
 
+    println!("Sending");
+
     manager
         .send_message(
             recipient_address,
@@ -58,7 +60,9 @@ pub async fn send_message(recipient: String, text_message: String) -> Result<()>
         .await
         .map_err(|e| anyhow::anyhow!("Failed to send message: {}", e))?;
 
-    let _ = manager.receive_messages().await?;
+    // let _ = manager.receive_messages().await?;
+
+    println!("Send");
 
     Ok(())
 }
