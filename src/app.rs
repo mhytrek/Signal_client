@@ -315,7 +315,7 @@ pub async fn handle_sending_messages(
 }
 
 pub async fn handle_linking_device(tx: mpsc::Sender<EventApp>, device_name: String) {
-    let result = devices::link_new_device(device_name).await;
+    let result = devices::link_new_device(device_name,true).await;
 
     let success = result.is_ok();
 

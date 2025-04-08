@@ -8,13 +8,15 @@ use qrcode_generator::QrCodeEcc;
 use crate::paths::{self, QRCODE};
 
 /// Function to link device to signal account under a given name
-pub async fn link_new_device(device_name: String) -> Result<()> {
+pub async fn link_new_device(device_name: String,to_png:bool) -> Result<()> {
     let store = SledStore::open(
         paths::STORE,
         MigrationConflictStrategy::Drop,
         OnNewIdentity::Trust,
     )
     .await?;
+
+
 
     let (tx, rx) = oneshot::channel();
     let (_manager, _err) = future::join(
@@ -23,9 +25,13 @@ pub async fn link_new_device(device_name: String) -> Result<()> {
             match rx.await {
                 Ok(url) => {
                     // println!("Scan the QR code to link the device!");
-                    // qr2term::print_qr(url.as_ref()).expect("QR generation failed");
                     // println!("You can also use the URL: {}", url);
-                    qrcode_generator::to_png_to_file(url.as_ref(), QrCodeEcc::Low, 512, QRCODE).unwrap();
+                    if to_png{
+                        qrcode_generator::to_png_to_file(url.as_ref(), QrCodeEcc::Low, 512, QRCODE).unwrap();
+                    }
+                    else{
+                        qr2term::print_qr(url.as_ref()).expect("QR generation failed");
+                    }
 
                 }
                 Err(err) => println!("Error while linking device: {}", err),
