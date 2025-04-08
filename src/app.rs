@@ -1,45 +1,66 @@
 use crate::sending_text::send_message_tui;
+use crate::{contacts, devices,AsyncRegisteredManager};
+use crate::paths::QRCODE;
 use crate::ui::ui;
-use crate::{contacts, AsyncRegisteredManager};
 use crossterm::event;
 use crossterm::event::{KeyCode, KeyEventKind};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
-use std::io;
+use std::{fs, io};
 use std::io::Stderr;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::Arc;
+use std::path::Path;
 
+use std::thread;
 pub enum CurrentScreen {
     Main,
+    LinkingNewDevice,
+    QrCode,
     Writing,
     Options,
     Exiting,
+}
+
+pub enum LinkingStatus {
+    Unlinked,
+    InProgress,
+    Linked,
 }
 
 pub struct App {
     pub contacts: Vec<(String, String)>, // contact_name, input for this contact
     pub selected: usize,
     pub current_screen: CurrentScreen,
+    pub linking_status:LinkingStatus,
     pub character_index: usize,
+    pub textarea: String,
+    pub tx: mpsc::Sender<EventApp>,
+
+
+
 }
 
 pub enum EventApp {
     KeyInput(event::KeyEvent),
     ContactsList(Vec<String>),
+    LinkingFinished(bool),
 }
-
 pub enum EventSend {
     SendText(String, String),
+
 }
 
 impl App {
-    pub fn new() -> App {
+    pub fn new(linking_status: LinkingStatus,tx: mpsc::Sender<EventApp>) -> App {
         App {
+            linking_status,
             contacts: vec![],
             selected: 0,
-            current_screen: CurrentScreen::Main,
             character_index: 0,
+            current_screen: CurrentScreen::LinkingNewDevice,
+            textarea: String::new(),
+            tx
         }
     }
 
@@ -74,7 +95,14 @@ impl App {
                     .map(|name| (name, String::new()))
                     .collect();
                 Ok(false)
+                    }
+            EventApp::LinkingFinished(result) => {
+                match result{
+                true => self.linking_status = LinkingStatus::Linked,
+                false => self.linking_status = LinkingStatus::Unlinked, 
             }
+            Ok(false)
+        },
         }
     }
 
@@ -141,16 +169,72 @@ impl App {
                 KeyCode::Esc | KeyCode::Char('q') => self.current_screen = Main,
                 _ => {}
             },
+            LinkingNewDevice => {
+                match self.linking_status{
+                    LinkingStatus::Linked => self.current_screen = Main,
+                    LinkingStatus::Unlinked =>{
+                        if key.kind == KeyEventKind::Press {
+
+                            match key.code {
+                                KeyCode::Enter => {       
+                                    if Path::new(QRCODE).exists(){
+                                        fs::remove_file(QRCODE)?;
+                                    }                     
+                                        self.current_screen = QrCode;
+                                    }
+                                KeyCode::Backspace => {
+                                            self.textarea.pop();
+                                        }
+                    
+                                KeyCode::Esc => {
+                                    self.current_screen = LinkingNewDevice;
+                                }
+
+                                KeyCode::Char(value) => {
+
+                                    self.textarea.push(value)
+                                            }
+                            
+                        
+                                _ => {}
+                            }
+                        }
+                    }
+                    LinkingStatus::InProgress => {},
+                }
+                },
+
+            QrCode => {
+                match self.linking_status{
+                    LinkingStatus::Linked => self.current_screen = Main,
+                    LinkingStatus::Unlinked =>{
+                        let tx_link_device_event = self.tx.clone();
+                        let device_name = self.textarea.clone();
+
+                        thread::spawn(move || {
+                            tokio::runtime::Runtime::new().unwrap().block_on(async {
+                                handle_linking_device(tx_link_device_event,device_name).await;
+                            });
+                        });
+                    }
+                    LinkingStatus::InProgress => {}
+                }
+
+
+            },
         }
         Ok(false)
     }
 }
 
-impl Default for App {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// impl Default for App {
+//     fn default() -> Self {
+//         let (tx, rx) = mpsc::channel::<EventApp>();
+
+//         Self::new(CurrentScreen::LinkingNewDevice,tx)
+//     }
+// }
+
 
 pub fn handle_key_input_events(tx: mpsc::Sender<EventApp>) {
     loop {
@@ -200,6 +284,7 @@ pub async fn handle_contacts(tx: mpsc::Sender<EventApp>, manager_mutex: AsyncReg
             }
 
             previous_contacts = contact_names;
+
         }
 
         tokio::time::sleep(std::time::Duration::from_secs(20)).await;
@@ -226,5 +311,15 @@ pub async fn handle_sending_messages(
                 }
             }
         }
+    }
+}
+
+pub async fn handle_linking_device(tx: mpsc::Sender<EventApp>, device_name: String) {
+    let result = devices::link_new_device(device_name).await;
+
+    let success = result.is_ok();
+
+    if tx.send(EventApp::LinkingFinished(success)).is_err() {
+        eprintln!("Failed to send linking status");
     }
 }

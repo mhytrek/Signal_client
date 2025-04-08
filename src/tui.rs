@@ -20,6 +20,9 @@ use ratatui::{
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use crate::{app::LinkingStatus, devices::is_registered};
+
+
 pub async fn run_tui() -> Result<()> {
     enable_raw_mode()?;
     let mut stderr = io::stderr();
@@ -28,11 +31,21 @@ pub async fn run_tui() -> Result<()> {
     let mut terminal = Terminal::new(backend)?;
     let manager: AsyncRegisteredManager = Arc::new(RwLock::new(create_registered_manager().await?));
 
-    let mut app = App::new();
+    let linking_status = is_registered().await?;
+
+    let status = match linking_status{
+        true => LinkingStatus::Linked,
+        false => LinkingStatus::Unlinked, 
+    };
+        
 
     let (tx_thread, rx_tui) = mpsc::channel();
 
+
     let (tx_tui, rx_thread) = mpsc::channel();
+
+    let mut app = App::new(status,tx_thread.clone());
+
 
     let tx_key_events = tx_thread.clone();
     thread::spawn(move || {
@@ -76,6 +89,7 @@ pub async fn run_tui() -> Result<()> {
         .unwrap();
 
     let res = app.run(&mut terminal, rx_tui, tx_tui).await;
+
 
     disable_raw_mode()?;
     execute!(

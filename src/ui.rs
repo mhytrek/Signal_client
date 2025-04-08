@@ -1,12 +1,15 @@
+
+
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{ Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
     widgets::{Block, BorderType, Borders, List, ListItem, Padding, Paragraph, Wrap},
     Frame,
 };
+use ratatui_image::{picker::Picker, Image, Resize};
 
-use crate::app::{App, CurrentScreen};
+use crate::{app::{App, CurrentScreen}, paths::QRCODE};
 
 // Main UI rendering function.
 pub fn ui(frame: &mut Frame, app: &App) {
@@ -22,22 +25,29 @@ pub fn ui(frame: &mut Frame, app: &App) {
 
     match app.current_screen {
         CurrentScreen::Main => {
-            render_contact_list(frame, app, main_chunks[0]);
-            render_footer(frame, app, chunks[1]);
-        }
+                        render_contact_list(frame, app, main_chunks[0]);
+                        render_footer(frame, app, chunks[1]);
+            }
         CurrentScreen::Writing => {
-            render_contact_list(frame, app, main_chunks[0]);
-            render_chat_and_contact(frame, app, main_chunks[1]);
-            render_footer(frame, app, chunks[1]);
-        }
+                render_contact_list(frame, app, main_chunks[0]);
+                render_chat_and_contact(frame, app, main_chunks[1]);
+                render_footer(frame, app, chunks[1]);
+            }
         CurrentScreen::Options => {
-            render_options(frame);
-            render_footer(frame, app, chunks[1]);
-        }
+                render_options(frame);
+                render_footer(frame, app, chunks[1]);
+            }
         CurrentScreen::Exiting => {
-            // frame.render_widget(Clear, frame.area()); //clear the entire screen
-            render_exit_popup(frame);
-        }
+                render_popup(frame,frame.area(),"Would you like to quit? \n (y/n)");
+            }
+        CurrentScreen::LinkingNewDevice => {
+            render_textarea(frame, app,frame.area());
+
+        },
+        CurrentScreen::QrCode =>{
+            render_qrcode(frame, frame.area());
+
+        },
     }
 }
 
@@ -96,43 +106,53 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
     }
 }
 
-// Renders a popup asking the user if they want to quit the application.
-fn render_exit_popup(frame: &mut Frame) {
+// Renders a popup  with given text
+fn render_popup(frame: &mut Frame, area: Rect, text: &str) {
     let popup_block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Double);
 
-    let exit_text = Text::styled(
-        "Would you like to quit? \n (y/n)",
+    let styled_text = Text::styled(
+        text,
         Style::default().fg(Color::White),
     );
-    let exit_paragraph = Paragraph::new(exit_text)
+
+    let paragraph = Paragraph::new(styled_text)
         .block(popup_block)
         .centered()
         .wrap(Wrap { trim: false });
 
-    let area = centered_rect(60, 25, frame.area());
-    frame.render_widget(exit_paragraph, area);
+    let popup_area = centered_rect(60, 25, area);
+    frame.render_widget(paragraph, popup_area);
 }
+
 
 // Renders the footer section at the bottom of the screen.
 fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     let current_keys_hint = {
         match app.current_screen {
             CurrentScreen::Main => Span::styled(
-                "(q) to quit | (↑ ↓) to navigate | (→) to select chat | (e) to show more options",
-                Style::default().fg(Color::Red),
-            ),
+                        "(q) to quit | (↑ ↓) to navigate | (→) to select chat | (e) to show more options",
+                        Style::default().fg(Color::Red),
+                    ),
             CurrentScreen::Writing => Span::styled(
-                "(q) to exit | (ENTER) to send",
-                Style::default().fg(Color::Red),
-            ),
+                        "(q) to exit | (ENTER) to send",
+                        Style::default().fg(Color::Red),
+                    ),
             CurrentScreen::Options => Span::styled(
-                "(q) to exit | (e) to select",
+                        "(q) to exit | (e) to select",
+                        Style::default().fg(Color::Red),
+                    ),
+            CurrentScreen::Exiting => Span::styled(
+                        "(y) to quit | (n) to return to the main screen",
+                        Style::default().fg(Color::Red),
+                    ),
+            CurrentScreen::LinkingNewDevice => Span::styled(
+                "(y) to link new device | (n) to continue",
                 Style::default().fg(Color::Red),
             ),
-            CurrentScreen::Exiting => Span::styled(
-                "(q) to quit | (e) to write message",
+            CurrentScreen::QrCode =>  Span::styled(
+                "(esc) to go back | (enter) to confirm",
                 Style::default().fg(Color::Red),
             ),
         }
@@ -144,6 +164,51 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(key_notes_footer, area);
 }
 
+
+fn render_textarea(frame: &mut Frame, app: &App,area:Rect){
+    let input_area = Block::default().title("Input device name").borders(Borders::ALL);
+    let input_text = Paragraph::new(app.textarea.clone()).block(input_area);
+    let area = centered_rect(60, 10, area);
+
+    frame.render_widget(input_text,area);
+
+}
+
+fn render_qrcode(frame: &mut Frame,area:Rect){
+
+    if let Ok(image_reader) = image::ImageReader::open(QRCODE) {
+        match image_reader.decode() {
+            Ok(image_source) => {
+
+                let picker = Picker::from_query_stdio().unwrap();
+                let mut image_static = picker
+                .new_protocol(image_source.clone(), Rect::new(0,0,70,70),Resize::Scale(None))
+                .unwrap();
+
+            let image = Image::new(&mut image_static);
+            if area.width>=70 && area.height>=50{
+            frame.render_widget(image, area);
+
+            }
+            else{
+
+                let text = format!("x: {}, y: {}", area.width, area.height);
+                render_popup(frame, area, &text);
+            }
+            }
+            Err(_e) => {
+                return;
+            }
+        }
+    } else {
+        let text = "Generating QR Code...";
+        render_popup(frame, area, text);
+    }
+    
+
+
+
+}
 // Renders the options screen
 fn render_options(frame: &mut Frame) {
     let popup_block = Block::default()
