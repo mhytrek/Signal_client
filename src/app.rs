@@ -7,8 +7,13 @@ use ratatui::Terminal;
 use std::io;
 use std::io::Stderr;
 use std::sync::mpsc;
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
+use presage::Manager;
+use presage::manager::Registered;
+use presage_store_sled::SledStore;
+use crate::contacts::sync_contacts;
+use crate::sending_text::send_message;
 
 pub enum CurrentScreen {
     Main,
@@ -18,10 +23,21 @@ pub enum CurrentScreen {
 }
 
 pub struct App {
-    pub contacts: Vec<String>,
+    pub contacts: Vec<(String, String)>, // contact_name, input for this contact
     pub selected: usize,
     pub current_screen: CurrentScreen,
+    pub character_index: usize,
 }
+
+pub enum EventApp {
+    KeyInput(event::KeyEvent),
+    ContactsList(Vec<String>),
+}
+
+pub enum EventSend {
+    SendText(String, String),
+}
+
 
 impl App {
     pub fn new() -> App {
@@ -29,6 +45,7 @@ impl App {
             contacts: vec![],
             selected: 0,
             current_screen: CurrentScreen::Main,
+            character_index: 0,
         }
     }
 
@@ -36,34 +53,61 @@ impl App {
         &mut self,
         terminal: &mut Terminal<CrosstermBackend<Stderr>>,
         rx: Receiver<EventApp>,
+        tx: Sender<EventSend>
     ) -> io::Result<bool> {
         loop {
             terminal.draw(|f| ui(f, self))?;
 
             if let Ok(event) = rx.recv() {
-                if self.handle_event(event)? {
+                if self.handle_event(event, &tx)? {
                     return Ok(true);
                 }
             }
         }
     }
 
-    fn handle_event(&mut self, event: EventApp) -> io::Result<bool> {
+    fn handle_event(&mut self, event: EventApp, tx: &Sender<EventSend>) -> io::Result<bool> {
         match event {
             EventApp::KeyInput(key) => {
                 if key.kind == KeyEventKind::Release {
                     return Ok(false);
                 }
-                self.handle_key_event(key)
+                self.handle_key_event(key, tx)
             }
             EventApp::ContactsList(contacts) => {
-                self.contacts = contacts;
+                self.contacts = contacts.into_iter().map(|name| (name, String::new())).collect();
                 Ok(false)
             }
         }
     }
 
-    fn handle_key_event(&mut self, key: event::KeyEvent) -> io::Result<bool> {
+    fn enter_char(&mut self, new_char: char) {
+        if let Some((_, input)) = self.contacts.get_mut(self.selected) {
+            input.push(new_char);
+            self.character_index += 1;
+        }
+    }
+
+    fn delete_char(&mut self) {
+        if let Some((_, input)) = self.contacts.get_mut(self.selected) {
+            input.pop();
+            self.character_index -= 1;
+        }
+    }
+    fn submit_message(&mut self, tx: &Sender<EventSend>) {
+        if let Some((name, input)) = self.contacts.get_mut(self.selected) {
+            if !input.trim().is_empty() {
+                let message = input.clone();
+                if tx.send(EventSend::SendText(name.clone(), message)).is_err() {
+                    log::warn!("Receiver for sending messages has been dropped.");
+                }
+                input.clear();
+                self.character_index = 0;
+            }
+        }
+    }
+
+    fn handle_key_event(&mut self, key: event::KeyEvent, tx: &Sender<EventSend>) -> io::Result<bool> {
         use CurrentScreen::*;
         match self.current_screen {
             Main => match key.code {
@@ -88,7 +132,10 @@ impl App {
                 _ => {}
             },
             Writing => match key.code {
-                KeyCode::Esc | KeyCode::Left | KeyCode::Char('a') => self.current_screen = Main,
+                KeyCode::Esc | KeyCode::Left => self.current_screen = Main,
+                KeyCode::Enter => self.submit_message(tx),
+                KeyCode::Char(to_insert) => self.enter_char(to_insert),
+                KeyCode::Backspace => self.delete_char(),
                 _ => {}
             },
             Options => match key.code {
@@ -106,10 +153,6 @@ impl Default for App {
     }
 }
 
-pub enum EventApp {
-    KeyInput(event::KeyEvent),
-    ContactsList(Vec<String>),
-}
 
 pub fn handle_key_input_events(tx: mpsc::Sender<EventApp>) {
     loop {
@@ -126,7 +169,8 @@ pub async fn handle_contacts(tx: mpsc::Sender<EventApp>) {
     let mut previous_contacts: Vec<String> = Vec::new();
 
     loop {
-        thread::sleep(std::time::Duration::from_secs(1));
+        // problematyczna linijka
+        // let res = contacts::sync_contacts().await;
 
         let result = contacts::list_contacts().await;
 
@@ -137,28 +181,46 @@ pub async fn handle_contacts(tx: mpsc::Sender<EventApp>) {
 
         let contact_names: Vec<String> = contacts
             .into_iter()
-            .filter_map(|contact| match contact {
-                Ok(contact) => {
-                    let name = contact.name.trim().to_string();
-                    if name.is_empty() {
-                        None
-                    } else {
-                        Some(name)
-                    }
+            .filter_map(|contact| {
+                let name = contact.ok()?.name.trim().to_string();
+                if name.is_empty() {
+                    None
+                } else {
+                    Some(name)
                 }
-                Err(_) => None,
             })
             .collect();
 
         if contact_names != previous_contacts {
-            if tx
-                .send(EventApp::ContactsList(contact_names.clone()))
-                .is_err()
-            {
+            if tx.send(EventApp::ContactsList(contact_names.clone())).is_err() {
                 break;
             }
 
             previous_contacts = contact_names;
+        }
+
+        tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+    }
+}
+
+pub async fn handle_sending_messages(rx: Receiver<EventSend>){
+    loop {
+        if let Ok(event) = rx.recv() {
+            match event {
+                EventSend::SendText(recipient, text) => {
+                    match send_message(recipient, text).await{
+                        Result::Err(err_mess) => println!("{:?}", err_mess),
+                        Result::Ok(_) => {}
+                    }
+                    // problematyczna linijka
+                    let result = sync_contacts().await;
+                    match result {
+                        Ok(_) => log::info!("Contacts synced successfully."),
+                        Err(e) => log::error!("Error syncing contacts: {:?}", e),
+                    }
+                    // Need to add error handling
+                }
+            }
         }
     }
 }

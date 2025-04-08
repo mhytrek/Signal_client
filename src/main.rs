@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 
 use signal_client::args::{Cli, Command};
-use signal_client::sending_text;
+use signal_client::{sending_text};
 use signal_client::{cli, contacts, devices, tui};
 
 #[tokio::main(flavor = "current_thread")]
