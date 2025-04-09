@@ -177,9 +177,7 @@ impl App {
 
                             match key.code {
                                 KeyCode::Enter => {       
-                                    if Path::new(QRCODE).exists(){
-                                        fs::remove_file(QRCODE)?;
-                                    }                     
+
                                         self.current_screen = QrCode;
                                     }
                                 KeyCode::Backspace => {
@@ -208,8 +206,14 @@ impl App {
                 match self.linking_status{
                     LinkingStatus::Linked => self.current_screen = Main,
                     LinkingStatus::Unlinked =>{
+
                         let tx_link_device_event = self.tx.clone();
                         let device_name = self.textarea.clone();
+                        self.linking_status = LinkingStatus::InProgress;      
+                        if Path::new(QRCODE).exists(){
+                            fs::remove_file(QRCODE)?;
+                        }           
+
 
                         thread::spawn(move || {
                             tokio::runtime::Runtime::new().unwrap().block_on(async {
