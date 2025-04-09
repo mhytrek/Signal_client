@@ -4,6 +4,8 @@ use presage::{
     model::identity::OnNewIdentity,
 };
 use presage_store_sled::{MigrationConflictStrategy, SledStore};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 pub mod app;
 pub mod args;
@@ -16,6 +18,8 @@ pub mod tui;
 pub mod ui;
 
 pub mod sending {}
+
+pub type AsyncRegisteredManager = Arc<Mutex<Manager<SledStore, Registered>>>;
 
 /// Creates new manager in registered state
 pub async fn create_registered_manager() -> Result<Manager<SledStore, Registered>> {

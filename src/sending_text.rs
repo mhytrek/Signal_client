@@ -7,14 +7,15 @@ use presage::model::contacts::Contact;
 use presage::store::ContentsStore;
 use presage::Manager;
 use presage_store_sled::{SledStore, SledStoreError};
-use std::time::{SystemTime, UNIX_EPOCH};
-use crate::create_registered_manager;
+use std::{sync::Arc, time::{SystemTime, UNIX_EPOCH}};
+use crate::{contacts::{receiving_loop, sync_contacts_tui}, create_registered_manager, AsyncRegisteredManager};
 
 /// finds contact uuid from string that can be contact_name or contact phone_number
 pub async fn find_uuid(
     recipient_info: String,
-    manager: Manager<SledStore, Registered>,
+    manager_mutex: AsyncRegisteredManager,
 ) -> Result<Uuid> {
+    let manager = manager_mutex.lock().await;
     let contacts: Vec<Result<Contact, SledStoreError>> =
         manager.store().contacts().await?.collect();
     let uuid = contacts
@@ -30,12 +31,13 @@ pub async fn find_uuid(
 }
 
 /// sends text message to recipient ( phone number or name )
-pub async fn send_message(recipient: String, text_message: String) -> Result<()> {
-    let mut manager = create_registered_manager().await?;
+pub async fn send_message(recipient: String, text_message: String, manager_mutex: AsyncRegisteredManager) -> Result<()> {
+    // let mut manager = create_registered_manager().await?;
 
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
-
-    let recipient_uuid = find_uuid(recipient, manager.clone()).await?;
+    
+    let new_mutex = Arc::clone(&manager_mutex);
+    let recipient_uuid = find_uuid(recipient, new_mutex).await?;
 
     let recipient_address = ServiceId::Aci(recipient_uuid.into());
 
@@ -51,10 +53,15 @@ pub async fn send_message(recipient: String, text_message: String) -> Result<()>
 
     println!("Sending");
 
+    let mut manager = manager_mutex.lock().await;
+
+    let messages = manager.receive_messages().await?;
+    receiving_loop(messages).await;
+
     manager
         .send_message(
             recipient_address,
-            ContentBody::from(data_message),
+            data_message,
             timestamp,
         )
         .await
