@@ -46,7 +46,7 @@ pub async fn run_tui() -> Result<()> {
         .name(String::from("contacts_thread"))
         .stack_size(1024 * 1024 * 8)
         .spawn(move || {
-            let runtime = Builder::new_current_thread()
+            let runtime = Builder::new_multi_thread()
                 .thread_name("contacts_runtime")
                 .enable_all()
                 .build()
@@ -63,7 +63,7 @@ pub async fn run_tui() -> Result<()> {
         .name(String::from("sending_thread"))
         .stack_size(1024 * 1024 * 8)
         .spawn(move || {
-            let runtime = Builder::new_current_thread()
+            let runtime = Builder::new_multi_thread()
                 .thread_name("sending_runtime")
                 .enable_all()
                 .build()
