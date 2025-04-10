@@ -47,7 +47,7 @@ fn render_contact_list(frame: &mut Frame, app: &App, area: Rect) {
         .contacts
         .iter()
         .enumerate()
-        .map(|(i, name)| {
+        .map(|(i, (name, _id))| {
             let mut style = Style::default().fg(Color::White);
             if i == app.selected {
                 style = style
@@ -76,18 +76,24 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(3)])
         .split(area);
 
-    let chat_window = Paragraph::new("Tu będzie chat :p").centered().block(
+    let chat_window = Paragraph::new("Tu będzie chat :p").block(
         Block::default()
-            .title(app.contacts[app.selected].clone())
+            .title(app.contacts[app.selected].0.clone())
             .borders(Borders::ALL),
     );
 
-    let input_window = Paragraph::new(" :)")
-        .centered()
+    let input_window = Paragraph::new(app.contacts[app.selected].1.clone())
         .block(Block::default().title("Input").borders(Borders::ALL));
 
     frame.render_widget(chat_window, chat_chunks[0]);
     frame.render_widget(input_window, chat_chunks[1]);
+
+    if let CurrentScreen::Writing = app.current_screen {
+        frame.set_cursor_position((
+            chat_chunks[1].x + app.character_index as u16 + 1,
+            chat_chunks[1].y + 1,
+        ));
+    }
 }
 
 // Renders a popup asking the user if they want to quit the application.
