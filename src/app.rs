@@ -54,20 +54,20 @@ impl App {
             terminal.draw(|f| ui(f, self))?;
 
             if let Ok(event) = rx.recv() {
-                if self.handle_event(event, &tx).await? {
+                if self.handle_event(event, &tx)? {
                     return Ok(true);
                 }
             }
         }
     }
 
-    async fn handle_event(&mut self, event: EventApp, tx: &Sender<EventSend>) -> io::Result<bool> {
+    fn handle_event(&mut self, event: EventApp, tx: &Sender<EventSend>) -> io::Result<bool> {
         match event {
             EventApp::KeyInput(key) => {
                 if key.kind == KeyEventKind::Release {
                     return Ok(false);
                 }
-                self.handle_key_event(key, tx).await
+                self.handle_key_event(key, tx)
             }
             EventApp::ContactsList(contacts) => {
                 self.contacts = contacts.into_iter().map(|name| (name, String::new())).collect();
@@ -89,7 +89,7 @@ impl App {
             self.character_index -= 1;
         }
     }
-    async fn submit_message(&mut self, tx: &Sender<EventSend>) {
+    fn submit_message(&mut self, tx: &Sender<EventSend>) {
         if let Some((name, input)) = self.contacts.get_mut(self.selected) {
             if !input.trim().is_empty() {
                 let message = input.clone();
@@ -100,7 +100,7 @@ impl App {
         }
     }
 
-    async fn handle_key_event(&mut self, key: event::KeyEvent, tx: &Sender<EventSend>) -> io::Result<bool> {
+    fn handle_key_event(&mut self, key: event::KeyEvent, tx: &Sender<EventSend>) -> io::Result<bool> {
         use CurrentScreen::*;
         match self.current_screen {
             Main => match key.code {
@@ -126,7 +126,7 @@ impl App {
             },
             Writing => match key.code {
                 KeyCode::Esc | KeyCode::Left => self.current_screen = Main,
-                KeyCode::Enter => self.submit_message(tx).await,
+                KeyCode::Enter => self.submit_message(tx),
                 KeyCode::Char(to_insert) => self.enter_char(to_insert),
                 KeyCode::Backspace => self.delete_char(),
                 _ => {}
@@ -177,7 +177,8 @@ pub async fn handle_contacts(tx: mpsc::Sender<EventApp>, manager_mutex: AsyncReg
         let contact_names: Vec<String> = contacts
             .into_iter()
             .filter_map(|contact| {
-                let name = contact.ok()?.name.trim().to_string();
+                // let name = contact.ok()?.name.trim().to_string();
+                let name = contact.ok()?.uuid.to_string().trim().to_string();
                 if name.is_empty() {
                     None
                 } else {
