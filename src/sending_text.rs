@@ -7,7 +7,7 @@ use presage::model::contacts::Contact;
 use presage::store::ContentsStore;
 use presage::Manager;
 use presage_store_sled::{SledStore, SledStoreError};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{str::FromStr, time::{SystemTime, UNIX_EPOCH}};
 use crate::{contacts::receiving_loop, create_registered_manager, AsyncRegisteredManager};
 
 /// finds contact uuid from string that can be contact_name or contact phone_number
@@ -30,8 +30,9 @@ pub async fn find_uuid(
 }
 
 
-async fn get_address(recipient: String, manager: &mut Manager<SledStore, Registered>) -> Result<ServiceId> {
-    let recipient_uuid = find_uuid(recipient, manager).await?;
+async fn get_address(recipient: String, _manager: &mut Manager<SledStore, Registered>) -> Result<ServiceId> {
+    // let recipient_uuid = find_uuid(recipient, manager).await?;
+    let recipient_uuid = Uuid::from_str(&recipient)?;
     Ok(ServiceId::Aci(recipient_uuid.into()))
 }
 
