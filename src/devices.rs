@@ -1,11 +1,14 @@
+use std::path::Path;
+
 use anyhow::Result;
 use futures::{channel::oneshot, future};
 use presage::model::identity::OnNewIdentity;
 use presage::{libsignal_service::configuration::SignalServers, Manager};
 use presage_store_sled::{MigrationConflictStrategy, SledStore};
 use qrcode_generator::QrCodeEcc;
+use tokio::fs;
 
-use crate::paths::{self, QRCODE};
+use crate::paths::{self, ASSETS, QRCODE};
 
 /// Function to link device to signal account under a given name
 pub async fn link_new_device(device_name: String,to_png:bool) -> Result<()> {
@@ -16,7 +19,9 @@ pub async fn link_new_device(device_name: String,to_png:bool) -> Result<()> {
     )
     .await?;
 
-
+    if Path::new(ASSETS).exists(){
+        fs::create_dir(ASSETS).await?;
+    }  
 
     let (tx, rx) = oneshot::channel();
     let (_manager, _err) = future::join(
@@ -24,13 +29,13 @@ pub async fn link_new_device(device_name: String,to_png:bool) -> Result<()> {
         async move {
             match rx.await {
                 Ok(url) => {
-                    // println!("Scan the QR code to link the device!");
-                    // println!("You can also use the URL: {}", url);
                     if to_png{
                         qrcode_generator::to_png_to_file(url.as_ref(), QrCodeEcc::Low, 512, QRCODE).unwrap();
                     }
                     else{
+                        println!("Scan the QR code to link the device!");
                         qr2term::print_qr(url.as_ref()).expect("QR generation failed");
+                        println!("You can also use the URL: {}", url);
                     }
 
                 }

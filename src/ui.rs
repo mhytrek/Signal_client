@@ -25,8 +25,8 @@ pub fn ui(frame: &mut Frame, app: &App) {
 
     match app.current_screen {
         CurrentScreen::Main => {
-                        render_contact_list(frame, app, main_chunks[0]);
-                        render_footer(frame, app, chunks[1]);
+                render_contact_list(frame, app, main_chunks[0]);
+                render_footer(frame, app, chunks[1]);
             }
         CurrentScreen::Writing => {
                 render_contact_list(frame, app, main_chunks[0]);
@@ -133,28 +133,18 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
         match app.current_screen {
             CurrentScreen::Main => Span::styled(
                         "(q) to quit | (↑ ↓) to navigate | (→) to select chat | (e) to show more options",
-                        Style::default().fg(Color::Red),
+                        Style::default(),
                     ),
             CurrentScreen::Writing => Span::styled(
                         "(q) to exit | (ENTER) to send",
-                        Style::default().fg(Color::Red),
+                        Style::default(),
                     ),
             CurrentScreen::Options => Span::styled(
                         "(q) to exit | (e) to select",
-                        Style::default().fg(Color::Red),
+                        Style::default(),
                     ),
-            CurrentScreen::Exiting => Span::styled(
-                        "(y) to quit | (n) to return to the main screen",
-                        Style::default().fg(Color::Red),
-                    ),
-            CurrentScreen::LinkingNewDevice => Span::styled(
-                "(y) to link new device | (n) to continue",
-                Style::default().fg(Color::Red),
-            ),
-            CurrentScreen::QrCode =>  Span::styled(
-                "(esc) to go back | (enter) to confirm",
-                Style::default().fg(Color::Red),
-            ),
+
+            _ => Span::default(),
         }
     };
 
@@ -164,16 +154,16 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(key_notes_footer, area);
 }
 
-
+//Renders a textarea for device name
 fn render_textarea(frame: &mut Frame, app: &App,area:Rect){
     let input_area = Block::default().title("Input device name").borders(Borders::ALL);
     let input_text = Paragraph::new(app.textarea.clone()).block(input_area);
-    let area = centered_rect(60, 10, area);
+    let area = centered_rect(60, 30, area);
 
     frame.render_widget(input_text,area);
-
 }
 
+//Renders 70x70 QRCode if it exists in the QRCODE path
 fn render_qrcode(frame: &mut Frame,area:Rect){
 
     if let Ok(image_reader) = image::ImageReader::open(QRCODE) {
@@ -186,13 +176,13 @@ fn render_qrcode(frame: &mut Frame,area:Rect){
                 .unwrap();
 
             let image = Image::new(&mut image_static);
-            if area.width>=70 && area.height>=50{
+            if area.width>=70 && area.height>=70{
             frame.render_widget(image, area);
 
             }
             else{
 
-                let text = format!("x: {}, y: {}", area.width, area.height);
+                let text = format!("Terminal too small to show QRcode.\nMinimum window size 70x70 \n Curren window size {}x{}", area.width, area.height);
                 render_popup(frame, area, &text);
             }
             }
@@ -204,11 +194,10 @@ fn render_qrcode(frame: &mut Frame,area:Rect){
         let text = "Generating QR Code...";
         render_popup(frame, area, text);
     }
-    
-
-
 
 }
+
+
 // Renders the options screen
 fn render_options(frame: &mut Frame) {
     let popup_block = Block::default()

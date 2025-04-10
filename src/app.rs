@@ -71,6 +71,7 @@ impl App {
         tx: Sender<EventSend>,
     ) -> io::Result<bool> {
         loop {
+            
             terminal.draw(|f| ui(f, self))?;
 
             if let Ok(event) = rx.recv() {
