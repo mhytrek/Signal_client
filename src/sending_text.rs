@@ -1,14 +1,17 @@
+use crate::{contacts::receiving_loop, create_registered_manager, AsyncRegisteredManager};
 use anyhow::Result;
-use presage::proto::DataMessage;
 use presage::libsignal_service::prelude::Uuid;
 use presage::libsignal_service::protocol::ServiceId;
 use presage::manager::Registered;
 use presage::model::contacts::Contact;
+use presage::proto::DataMessage;
 use presage::store::ContentsStore;
 use presage::Manager;
 use presage_store_sled::{SledStore, SledStoreError};
-use std::{str::FromStr, time::{SystemTime, UNIX_EPOCH}};
-use crate::{contacts::receiving_loop, create_registered_manager, AsyncRegisteredManager};
+use std::{
+    str::FromStr,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 /// finds contact uuid from string that can be contact_name or contact phone_number
 pub async fn find_uuid(
@@ -22,15 +25,18 @@ pub async fn find_uuid(
         .filter_map(|c| c.ok())
         .find(|c| {
             c.name == recipient_info
-                || (c.phone_number.is_some() && c.phone_number.clone().unwrap().to_string() == recipient_info)
+                || (c.phone_number.is_some()
+                    && c.phone_number.clone().unwrap().to_string() == recipient_info)
         })
         .map(|c| c.uuid);
 
     uuid.ok_or_else(|| anyhow::anyhow!("Recipient '{}' not found", recipient_info))
 }
 
-
-async fn get_address(recipient: String, _manager: &mut Manager<SledStore, Registered>) -> Result<ServiceId> {
+async fn get_address(
+    recipient: String,
+    _manager: &mut Manager<SledStore, Registered>,
+) -> Result<ServiceId> {
     // let recipient_uuid = find_uuid(recipient, manager).await?;
     let recipient_uuid = Uuid::from_str(&recipient)?;
     Ok(ServiceId::Aci(recipient_uuid.into()))
@@ -56,11 +62,7 @@ async fn send(
     timestamp: u64,
 ) -> Result<()> {
     manager
-        .send_message(
-            recipient_addr,
-            data_message,
-            timestamp,
-        )
+        .send_message(recipient_addr, data_message, timestamp)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to send message: {}", e))?;
     Ok(())
@@ -84,7 +86,11 @@ async fn send_message(
 }
 
 /// sends text message to recipient ( phone number or name ), for usage with TUI
-pub async fn send_message_tui(recipient: String, text_message: String, manager_mutex: AsyncRegisteredManager) -> Result<()> {
+pub async fn send_message_tui(
+    recipient: String,
+    text_message: String,
+    manager_mutex: AsyncRegisteredManager,
+) -> Result<()> {
     // let mut manager = create_registered_manager().await?;
     let mut manager = manager_mutex.lock().await;
     send_message(&mut manager, recipient, text_message).await

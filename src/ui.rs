@@ -76,12 +76,11 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(3)])
         .split(area);
 
-    let chat_window = Paragraph::new("Tu będzie chat :p")
-        .block(
-            Block::default()
-                .title(app.contacts[app.selected].0.clone())
-                .borders(Borders::ALL),
-        );
+    let chat_window = Paragraph::new("Tu będzie chat :p").block(
+        Block::default()
+            .title(app.contacts[app.selected].0.clone())
+            .borders(Borders::ALL),
+    );
 
     let input_window = Paragraph::new(app.contacts[app.selected].1.clone())
         .block(Block::default().title("Input").borders(Borders::ALL));
@@ -89,17 +88,13 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(chat_window, chat_chunks[0]);
     frame.render_widget(input_window, chat_chunks[1]);
 
-    match app.current_screen {
-        CurrentScreen::Writing => {
-            frame.set_cursor_position((
+    if let CurrentScreen::Writing = app.current_screen {
+        frame.set_cursor_position((
             chat_chunks[1].x + app.character_index as u16 + 1,
             chat_chunks[1].y + 1,
-            ));
-        }
-        _ => {}
+        ));
     }
 }
-
 
 // Renders a popup asking the user if they want to quit the application.
 fn render_exit_popup(frame: &mut Frame) {

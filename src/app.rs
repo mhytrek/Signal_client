@@ -1,14 +1,14 @@
-use crate::{contacts, AsyncRegisteredManager};
+use crate::sending_text::send_message_tui;
 use crate::ui::ui;
+use crate::{contacts, AsyncRegisteredManager};
 use crossterm::event;
 use crossterm::event::{KeyCode, KeyEventKind};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io;
 use std::io::Stderr;
-use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
-use crate::sending_text::send_message_tui;
+use std::sync::Arc;
 
 pub enum CurrentScreen {
     Main,
@@ -33,7 +33,6 @@ pub enum EventSend {
     SendText(String, String),
 }
 
-
 impl App {
     pub fn new() -> App {
         App {
@@ -48,7 +47,7 @@ impl App {
         &mut self,
         terminal: &mut Terminal<CrosstermBackend<Stderr>>,
         rx: Receiver<EventApp>,
-        tx: Sender<EventSend>
+        tx: Sender<EventSend>,
     ) -> io::Result<bool> {
         loop {
             terminal.draw(|f| ui(f, self))?;
@@ -70,7 +69,10 @@ impl App {
                 self.handle_key_event(key, tx)
             }
             EventApp::ContactsList(contacts) => {
-                self.contacts = contacts.into_iter().map(|name| (name, String::new())).collect();
+                self.contacts = contacts
+                    .into_iter()
+                    .map(|name| (name, String::new()))
+                    .collect();
                 Ok(false)
             }
         }
@@ -100,7 +102,11 @@ impl App {
         }
     }
 
-    fn handle_key_event(&mut self, key: event::KeyEvent, tx: &Sender<EventSend>) -> io::Result<bool> {
+    fn handle_key_event(
+        &mut self,
+        key: event::KeyEvent,
+        tx: &Sender<EventSend>,
+    ) -> io::Result<bool> {
         use CurrentScreen::*;
         match self.current_screen {
             Main => match key.code {
@@ -146,7 +152,6 @@ impl Default for App {
     }
 }
 
-
 pub fn handle_key_input_events(tx: mpsc::Sender<EventApp>) {
     loop {
         if let Ok(event::Event::Key(key_event)) = crossterm::event::read() {
@@ -173,7 +178,6 @@ pub async fn handle_contacts(tx: mpsc::Sender<EventApp>, manager_mutex: AsyncReg
             Err(_) => continue,
         };
 
-
         let contact_names: Vec<String> = contacts
             .into_iter()
             .filter_map(|contact| {
@@ -188,7 +192,10 @@ pub async fn handle_contacts(tx: mpsc::Sender<EventApp>, manager_mutex: AsyncReg
             .collect();
 
         if contact_names != previous_contacts {
-            if tx.send(EventApp::ContactsList(contact_names.clone())).is_err() {
+            if tx
+                .send(EventApp::ContactsList(contact_names.clone()))
+                .is_err()
+            {
                 break;
             }
 
@@ -199,16 +206,22 @@ pub async fn handle_contacts(tx: mpsc::Sender<EventApp>, manager_mutex: AsyncReg
     }
 }
 
-pub async fn handle_sending_messages(rx: Receiver<EventSend>, manager_mutex: AsyncRegisteredManager) {
+pub async fn handle_sending_messages(
+    rx: Receiver<EventSend>,
+    manager_mutex: AsyncRegisteredManager,
+) {
     loop {
         if let Ok(event) = rx.recv() {
             match event {
                 EventSend::SendText(recipient, text) => {
-                    match send_message_tui(recipient, text, Arc::clone(&manager_mutex)).await{
-                        Result::Err(err_mess) => println!("{:?}", err_mess),
-                        Result::Ok(_) => {}
+                    if let Result::Err(err_mess) =
+                        send_message_tui(recipient, text, Arc::clone(&manager_mutex)).await
+                    {
+                        println!("{:?}", err_mess)
                     }
-                    contacts::sync_contacts_tui(Arc::clone(&manager_mutex)).await.unwrap();
+                    contacts::sync_contacts_tui(Arc::clone(&manager_mutex))
+                        .await
+                        .unwrap();
                     // Need to add error handling
                 }
             }

@@ -1,3 +1,5 @@
+use crate::create_registered_manager;
+use crate::AsyncRegisteredManager;
 use anyhow::Result;
 use futures::Stream;
 use futures::{pin_mut, StreamExt};
@@ -7,15 +9,13 @@ use presage::model::messages::Received;
 use presage::store::ContentsStore;
 use presage::Manager;
 use presage_store_sled::{SledStore, SledStoreError};
-use crate::create_registered_manager;
-use crate::AsyncRegisteredManager;
 
 pub async fn receiving_loop(messages: impl Stream<Item = Received>) {
     pin_mut!(messages);
     while let Some(content) = messages.next().await {
         match content {
             Received::QueueEmpty => break,
-            Received::Contacts => {},
+            Received::Contacts => {}
             Received::Content(_) => continue,
         }
     }
@@ -42,7 +42,9 @@ pub async fn sync_contacts_tui(manager_mutex: AsyncRegisteredManager) -> Result<
     sync_contacts(&mut manager).await
 }
 
-async fn list_contacts(manager: &Manager<SledStore, Registered>) -> Result<Vec<Result<Contact, SledStoreError>>> {
+async fn list_contacts(
+    manager: &Manager<SledStore, Registered>,
+) -> Result<Vec<Result<Contact, SledStoreError>>> {
     Ok(manager.store().contacts().await?.collect())
 }
 
@@ -53,7 +55,9 @@ pub async fn list_contacts_cli() -> Result<Vec<Result<Contact, SledStoreError>>>
 }
 
 /// Returns iterator over stored contacts, for use in CLI
-pub async fn list_contacts_tui(manager_mutex: AsyncRegisteredManager) -> Result<Vec<Result<Contact, SledStoreError>>> {
+pub async fn list_contacts_tui(
+    manager_mutex: AsyncRegisteredManager,
+) -> Result<Vec<Result<Contact, SledStoreError>>> {
     let manager = manager_mutex.lock().await;
-    list_contacts(&manager).await   
+    list_contacts(&manager).await
 }
