@@ -18,7 +18,7 @@ use ratatui::{
     Terminal,
 };
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
 pub async fn run_tui() -> Result<()> {
     enable_raw_mode()?;
@@ -26,7 +26,7 @@ pub async fn run_tui() -> Result<()> {
     execute!(stderr, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stderr);
     let mut terminal = Terminal::new(backend)?;
-    let manager: AsyncRegisteredManager = Arc::new(Mutex::new(create_registered_manager().await?));
+    let manager: AsyncRegisteredManager = Arc::new(RwLock::new(create_registered_manager().await?));
 
     let mut app = App::new();
 

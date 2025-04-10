@@ -38,7 +38,7 @@ pub async fn sync_contacts_cli() -> Result<()> {
 
 /// Function to sync contacts when TUI is used
 pub async fn sync_contacts_tui(manager_mutex: AsyncRegisteredManager) -> Result<()> {
-    let mut manager = manager_mutex.lock().await;
+    let mut manager = manager_mutex.write().await;
     sync_contacts(&mut manager).await
 }
 
@@ -58,6 +58,6 @@ pub async fn list_contacts_cli() -> Result<Vec<Result<Contact, SledStoreError>>>
 pub async fn list_contacts_tui(
     manager_mutex: AsyncRegisteredManager,
 ) -> Result<Vec<Result<Contact, SledStoreError>>> {
-    let manager = manager_mutex.lock().await;
+    let manager = manager_mutex.read().await;
     list_contacts(&manager).await
 }

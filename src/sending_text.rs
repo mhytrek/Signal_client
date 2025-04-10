@@ -92,7 +92,7 @@ pub async fn send_message_tui(
     manager_mutex: AsyncRegisteredManager,
 ) -> Result<()> {
     // let mut manager = create_registered_manager().await?;
-    let mut manager = manager_mutex.lock().await;
+    let mut manager = manager_mutex.write().await;
     send_message(&mut manager, recipient, text_message).await
 }
 
