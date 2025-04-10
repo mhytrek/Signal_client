@@ -1,4 +1,5 @@
 use anyhow::Result;
+use tokio::runtime::Builder;
 use std::{io, thread};
 use std::sync::mpsc;
 // use std::thread;
@@ -13,7 +14,6 @@ use ratatui::{
 };
 use std::sync::Arc;
 use tokio::sync::Mutex;
-// use tokio::sync::mpsc;
 use crate::{app::{self, App}, create_registered_manager};
 use crate::AsyncRegisteredManager;
 
@@ -33,26 +33,43 @@ pub async fn run_tui() -> Result<()> {
     let (tx_tui, rx_thread) = mpsc::channel();
 
     let tx_key_events = tx_thread.clone();
-    tokio::spawn(async move {
-        app::handle_key_input_events(tx_key_events).await;
+    thread::spawn(move || {
+        app::handle_key_input_events(tx_key_events);
     });
     
     let tx_contacts_events = tx_thread.clone();
-    // let new_manager = Arc::clone(&manager);
-    tokio::spawn(async move {
-        // tokio::runtime::Runtime::new().unwrap().block_on(async {
-            app::handle_contacts(tx_contacts_events).await;
-        // });
-        // let x = tx_contacts_events; // doesn't shout when only this is used
-    });
+    let new_manager = Arc::clone(&manager);
+    // thread::spawn(move || {
+    thread::Builder::new()
+    .name(String::from("contacts_thread"))
+    .stack_size(1024*1024*8)
+    .spawn(move || {
+        let runtime = Builder::new_current_thread()
+            .thread_name("contacts_runtime")
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async move {
+            app::handle_contacts(tx_contacts_events, new_manager).await;
+        })
+    }).unwrap();
 
     let new_manager = Arc::clone(&manager);
-    tokio::spawn(async move {
-        // tokio::runtime::Runtime::new().unwrap().block_on(async {
+    // thread::spawn(move || {
+    thread::Builder::new()
+    .name(String::from("sending_thread"))
+    .stack_size(1024*1024*8)
+    .spawn(move || {
+        let runtime = Builder::new_current_thread()
+            .thread_name("sending_runtime")
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async move {
             app::handle_sending_messages(rx_thread, new_manager).await;
-        // });
+        })
         // let x = rx_thread;
-    });
+    }).unwrap();
 
     let res = app.run(&mut terminal, rx_tui, tx_tui).await;
 

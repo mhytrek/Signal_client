@@ -15,7 +15,7 @@ async fn main() -> Result<()> {
         Command::ListContacts => cli::print_contacts().await?,
         Command::RunApp => tui::run_tui().await?,
         Command::SendMessage(args) => {
-            sending_text::send_message(args.recipient, args.text_message).await?
+            sending_text::send_message_cli(args.recipient, args.text_message).await?
         }
     }
 

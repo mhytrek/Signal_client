@@ -7,12 +7,8 @@ use ratatui::Terminal;
 use std::io;
 use std::io::Stderr;
 use std::sync::Arc;
-// use std::ops::DerefMut;
-// use std::sync::Arc;
-// use tokio::sync::mpsc::{self, Receiver, Sender};
 use std::sync::mpsc::{self, Receiver, Sender};
-// use crate::contacts::sync_contacts_tui;
-use crate::sending_text::send_message;
+use crate::sending_text::send_message_tui;
 
 pub enum CurrentScreen {
     Main,
@@ -151,7 +147,7 @@ impl Default for App {
 }
 
 
-pub async fn handle_key_input_events(tx: mpsc::Sender<EventApp>) {
+pub fn handle_key_input_events(tx: mpsc::Sender<EventApp>) {
     loop {
         if let Ok(event::Event::Key(key_event)) = crossterm::event::read() {
             if tx.send(EventApp::KeyInput(key_event)).is_err() {
@@ -162,16 +158,15 @@ pub async fn handle_key_input_events(tx: mpsc::Sender<EventApp>) {
     }
 }
 
-pub async fn handle_contacts(tx: mpsc::Sender<EventApp>) {
+pub async fn handle_contacts(tx: mpsc::Sender<EventApp>, manager_mutex: AsyncRegisteredManager) {
     let mut previous_contacts: Vec<String> = Vec::new();
 
     loop {
-        // problematyczna linijka
-        // let new_mutex = Arc::clone(&manager_mutex);
-        contacts::sync_contacts_cli().await.unwrap();
+        let new_mutex = Arc::clone(&manager_mutex);
+        contacts::sync_contacts_tui(new_mutex).await.unwrap();
 
-        // let new_mutex = Arc::clone(&manager_mutex);
-        let result = contacts::list_contacts_cli().await;
+        let new_mutex = Arc::clone(&manager_mutex);
+        let result = contacts::list_contacts_tui(new_mutex).await;
 
         let contacts = match result {
             Ok(list) => list,
@@ -182,8 +177,7 @@ pub async fn handle_contacts(tx: mpsc::Sender<EventApp>) {
         let contact_names: Vec<String> = contacts
             .into_iter()
             .filter_map(|contact| {
-                // let name = contact.ok()?.name.trim().to_string();
-                let name = contact.ok()?.uuid.to_string().trim().to_string();
+                let name = contact.ok()?.name.trim().to_string();
                 if name.is_empty() {
                     None
                 } else {
@@ -209,11 +203,10 @@ pub async fn handle_sending_messages(rx: Receiver<EventSend>, manager_mutex: Asy
         if let Ok(event) = rx.recv() {
             match event {
                 EventSend::SendText(recipient, text) => {
-                    match send_message(recipient, text, Arc::clone(&manager_mutex)).await{
+                    match send_message_tui(recipient, text, Arc::clone(&manager_mutex)).await{
                         Result::Err(err_mess) => println!("{:?}", err_mess),
                         Result::Ok(_) => {}
                     }
-                    // problematyczna linijka
                     contacts::sync_contacts_tui(Arc::clone(&manager_mutex)).await.unwrap();
                     // Need to add error handling
                 }
