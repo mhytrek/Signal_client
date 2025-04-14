@@ -145,14 +145,14 @@ impl App {
             terminal.draw(|f| ui(f, self))?;
 
             if let Ok(event) = self.rx_tui.recv() {
-                if self.handle_event(event, &self.tx_tui.clone())? {
+                if self.handle_event(event, &self.tx_tui.clone()).await? {
                     return Ok(true);
                 }
             }
         }
     }
 
-    fn handle_event(&mut self, event: EventApp, tx: &Sender<EventSend>) -> io::Result<bool> {
+    async fn handle_event(&mut self, event: EventApp, tx: &Sender<EventSend>) -> io::Result<bool> {
         match event {
             EventApp::KeyInput(key) => {
                 if key.kind == KeyEventKind::Release {
@@ -171,7 +171,7 @@ impl App {
                 match result{
                 true => {
                     self.linking_status = LinkingStatus::Linked;
-                    self.init();
+                    let _ = self.init().await;
                 },
                 false => self.linking_status = LinkingStatus::Unlinked, 
             }
