@@ -1,3 +1,5 @@
+use crate::create_registered_manager;
+use crate::AsyncRegisteredManager;
 use std::path::Path;
 
 use anyhow::Result;
@@ -19,7 +21,7 @@ pub async fn link_new_device(device_name: String,to_png:bool) -> Result<()> {
     )
     .await?;
 
-    if Path::new(ASSETS).exists(){
+    if !Path::new(ASSETS).exists(){
         fs::create_dir(ASSETS).await?;
     }  
 
@@ -63,3 +65,13 @@ pub async fn is_registered() -> Result<bool>{
     }
 }
 
+
+// pub async fn is_registered_cli() -> Result<bool>{
+//     let manager = create_registered_manager().await;
+
+//     match manager{
+//         Ok(_) => return Ok(true),
+//         Err(_) => return Ok(false),
+//     }
+
+// }

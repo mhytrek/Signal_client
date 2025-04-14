@@ -176,13 +176,13 @@ fn render_qrcode(frame: &mut Frame,area:Rect){
                 .unwrap();
 
             let image = Image::new(&mut image_static);
-            if area.width>=70 && area.height>=70{
+            if area.width>=50 && area.height>=50{
             frame.render_widget(image, area);
 
             }
             else{
 
-                let text = format!("Terminal too small to show QRcode.\nMinimum window size 70x70 \n Curren window size {}x{}", area.width, area.height);
+                let text = format!("Terminal too small to show QRcode.\nMinimum window size 50x50 \n Curren window size {}x{}", area.width, area.height);
                 render_popup(frame, area, &text);
             }
             }
