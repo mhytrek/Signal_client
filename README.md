@@ -1,26 +1,41 @@
 <h1 align="center">Signal Client</h1>
 
-## About the project
+## About the Project
 
 ### Description
-A desktop client for Signal with a terminal interface, provides basic functionalities and is designed to run on Linux, Windows, and macOS platforms.
-
+A desktop client for Signal with a terminal interface, providing basic functionalities. It is designed to run on Linux, Windows, and macOS platforms.
 
 ### Built with
 ![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)
 
+---
+
 ## Getting Started
-To have the best experience follow the guide bellow :)
 
-### Prerequisites
-To use the application, you need to install:
-- [Rust]()
-- [Protoc]()
-- [Cargo]()
+To ensure the best experience, follow the guide below:
 
-### Installation
+### Installation Guide
 
-To install, download the latest release tag from the project's repository and follow the provided instructions.
+1. **Install Rust and Cargo**  
+   Follow the official guide to install Rust and Cargo:  
+   [Rust Installation Guide](https://www.rust-lang.org/tools/install)
+
+2. **Install `protoc`**  
+   Follow the official guide to install `protoc`:  
+   [Protoc Installation Guide](https://protobuf.dev/installation/)
+
+3. **Download the Latest Release**
+  * 3.1. Navigate to the project's releases page.
+  * 3.2. Download the latest tagged release suitable for your operating system.
+  * 3.3. Extract the contents to your desired directory.
+
+4. **Run the Project**
+  * 4.1. Open a terminal or command prompt.
+  * 4.2. Navigate to the project's directory:
+  * 4.3. Run the project using Cargo:  
+    `cargo run`
+
+---
 
 ## Usage
 ```bash
@@ -28,40 +43,57 @@ cargo run <command>
 ```
 
 ## Functionalities
-### Commands
 
-#### link-device
+### **link-device**
 Links this device to your Signal account.
-`cargo run link-device --device-name "MyDevice"`
+```bash
+cargo run link-device --device-name "MyDevice"
+```
 
-#### sync-contacts
+
+### **sync-contacts**
 Synchronizes contacts with the primary device.
-`cargo run sync-contacts`
+```bash
+cargo run sync-contacts
+```
 
-#### list-contacts
+
+### **list-contacts**
 Prints the locally stored contacts.
-`cargo run list-contacts`
+```bash
+cargo run list-contacts
+```
 
-#### run-app
+
+### **run-app**
 Displays a prototype layout with example data.
 - Includes synchronization of the contact list (based on UUID).
-- Allows sending messages using the UUID of a contact (requires fetching the UUID in a separate process using `cargo run list-contacts`).
-  `cargo run run-app`
+- Allows sending messages using the UUID of a contact.
+  
+```bash
+cargo run run-app
+```
 
 Functionalities in app:
 - sync contacts (in the background)
 - sending message (using UUID) ~ UUID can be checked using `cargo run list-contacts`
 
-#### send-message
+
+### **send-message**
 Sends a text message.
-(not working! Bug!)
-`cargo run send-message --recipient "phone_number/name" "Hello, this is a test message!"`
 
-#### help
+```bash
+cargo run send-message --recipient "recipient_uuid" "Hello, this is a test message!"
+```
+
+
+### **help**
 Prints this help message or details for specific subcommands.
-`cargo run --help`
+```bash
+cargo run --help
+```
 
-
+---
 
 ## Authors
 - Ciepiela Ida
