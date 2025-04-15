@@ -20,24 +20,47 @@ To use the application, you need to install:
 
 ### Installation
 
+To install, download the latest release tag from the project's repository and follow the provided instructions.
+
 ## Usage
 ```bash
-
+cargo run <command>
 ```
 
 ## Functionalities
-### Implemented
-1. Messages
--
-2. Chats
--
-3. Synchronization
--
-4. Accounts
--
-5. Settings
--
-6. 
+### Commands
+
+#### link-device
+Links this device to your Signal account.
+`cargo run link-device --device-name "MyDevice"`
+
+#### sync-contacts
+Synchronizes contacts with the primary device.
+`cargo run sync-contacts`
+
+#### list-contacts
+Prints the locally stored contacts.
+`cargo run list-contacts`
+
+#### run-app
+Displays a prototype layout with example data.
+- Includes synchronization of the contact list (based on UUID).
+- Allows sending messages using the UUID of a contact (requires fetching the UUID in a separate process using `cargo run list-contacts`).
+  `cargo run run-app`
+
+Functionalities in app:
+- sync contacts (in the background)
+- sending message (using UUID) ~ UUID can be checked using `cargo run list-contacts`
+
+#### send-message
+Sends a text message.
+(not working! Bug!)
+`cargo run send-message --recipient "phone_number/name" "Hello, this is a test message!"`
+
+#### help
+Prints this help message or details for specific subcommands.
+`cargo run --help`
+
 
 
 ## Authors
