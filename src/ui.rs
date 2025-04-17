@@ -45,7 +45,7 @@ pub fn ui(frame: &mut Frame, app: &App) {
 
         },
         CurrentScreen::QrCode =>{
-            render_qrcode(frame, frame.area());
+            render_qrcode(frame, frame.area(),app);
 
         },
     }
@@ -164,24 +164,20 @@ fn render_textarea(frame: &mut Frame, app: &App,area:Rect){
 }
 
 //Renders 70x70 QRCode if it exists in the QRCODE path
-fn render_qrcode(frame: &mut Frame,area:Rect){
+fn render_qrcode(frame: &mut Frame,area:Rect, app: &App){
 
     if let Ok(image_reader) = image::ImageReader::open(QRCODE) {
         match image_reader.decode() {
             Ok(image_source) => {
 
-                let picker = Picker::from_query_stdio().unwrap();
-                let mut image_static = picker
-                .new_protocol(image_source.clone(), Rect::new(0,0,70,70),Resize::Scale(None))
-                .unwrap();
-
-            let image = Image::new(&mut image_static);
-            if area.width>=50 && area.height>=50{
-            frame.render_widget(image, area);
-
+            if area.width>=30 && area.height>=30{
+                let mut image_static = app.picker
+                    .new_protocol(image_source.clone(), Rect::new(0,0,70,70),Resize::Scale(None))
+                    .unwrap();
+                let image = Image::new(&mut image_static);
+                frame.render_widget(image, area);
             }
             else{
-
                 let text = format!("Terminal too small to show QRcode.\nMinimum window size 50x50 \n Curren window size {}x{}", area.width, area.height);
                 render_popup(frame, area, &text);
             }

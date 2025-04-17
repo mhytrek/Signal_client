@@ -6,6 +6,7 @@ use crossterm::event;
 use crossterm::event::{KeyCode, KeyEventKind};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
+use ratatui_image::picker::Picker;
 use tokio::runtime::Builder;
 use tokio::sync::RwLock;
 use std::{fs, io};
@@ -44,7 +45,9 @@ pub struct App {
     pub rx_tui: mpsc::Receiver<EventApp>,
 
     pub tx_tui: mpsc::Sender<EventSend>,
-    pub rx_thread: mpsc::Receiver<EventSend>,
+    pub rx_thread: Option<mpsc::Receiver<EventSend>>,
+
+    pub picker:Picker
 
 
 
@@ -75,50 +78,12 @@ impl App {
             tx_thread,
             rx_tui,
             tx_tui,
-            rx_thread,
+            rx_thread:Some(rx_thread),
+            picker: Picker::from_query_stdio().unwrap(),
+            
             
         }
     }
-
-    pub async fn init(&self) -> Result<()>{
-        let manager: AsyncRegisteredManager = Arc::new(RwLock::new(create_registered_manager().await?));
-
-        let tx_contacts_events = self.tx_thread.clone();
-        let new_manager = Arc::clone(&manager);
-        thread::Builder::new()
-            .name(String::from("contacts_thread"))
-            .stack_size(1024 * 1024 * 8)
-            .spawn(move || {
-                let runtime = Builder::new_multi_thread()
-                    .thread_name("contacts_runtime")
-                    .enable_all()
-                    .build()
-                    .unwrap();
-                runtime.block_on(async move {
-                    handle_contacts(tx_contacts_events, new_manager).await;
-                })
-            })
-            .unwrap();
-
-        // let new_manager = Arc::clone(&manager);
-        // thread::Builder::new()
-        //     .name(String::from("sending_thread"))
-        //     .stack_size(1024 * 1024 * 8)
-        //     .spawn(move || {
-        //         let runtime = Builder::new_multi_thread()
-        //             .thread_name("sending_runtime")
-        //             .enable_all()
-        //             .build()
-        //             .unwrap();
-        //         runtime.block_on(async move {
-        //             handle_sending_messages(self.rx_thread, new_manager).await;
-        //         });
-        //     })
-        //     .unwrap();
-
-        Ok(())
-    }
-
 
 
     pub(crate) async fn run(
@@ -126,27 +91,38 @@ impl App {
         terminal: &mut Terminal<CrosstermBackend<Stderr>>
     ) -> io::Result<bool> {
 
-        let tx_key_events = self.tx_thread.clone();
-        thread::spawn(move || {
-            handle_key_input_events(tx_key_events);
-        });
 
         match self.linking_status {
             LinkingStatus::Linked => {
-                let _ = self.init().await;
+                if let Some(rx) = self.rx_thread.take(){
+                    let _ = init_threads(self.tx_thread.clone(),rx).await;
+                    
+                    }
                 self.current_screen = CurrentScreen::Main;
             },
             _ => {},
         };
+
+        let tx_key_events = self.tx_thread.clone();
+        thread::spawn(move || {
+            handle_key_input_events(tx_key_events);
+        });
+        
         
 
 
         loop {
             terminal.draw(|f| ui(f, self))?;
 
-            if let Ok(event) = self.rx_tui.recv() {
-                if self.handle_event(event, &self.tx_tui.clone()).await? {
-                    return Ok(true);
+            match self.rx_tui.try_recv() {
+                Ok(event) => {
+                    if self.handle_event(event, &self.tx_tui.clone()).await? {
+                        return Ok(true);
+                    }
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    return Ok(false);
                 }
             }
         }
@@ -171,7 +147,10 @@ impl App {
                 match result{
                 true => {
                     self.linking_status = LinkingStatus::Linked;
-                    let _ = self.init().await;
+                    if let Some(rx) = self.rx_thread.take(){
+                    let _ = init_threads(self.tx_thread.clone(),rx).await;
+                    
+                    }
                 },
                 false => self.linking_status = LinkingStatus::Unlinked, 
             }
@@ -247,7 +226,7 @@ impl App {
                 match self.linking_status{
                     LinkingStatus::Linked => self.current_screen = Main,
                     LinkingStatus::Unlinked =>{
-                        print!("aaa");
+                        // print!("aaa");
                         if key.kind == KeyEventKind::Press {
 
                             match key.code {
@@ -311,13 +290,50 @@ impl App {
     }
 }
 
-// impl Default for App {
-//     fn default() -> Self {
-//         let (tx, rx) = mpsc::channel::<EventApp>();
+pub async fn init_threads(tx_thread: mpsc::Sender<EventApp>,
+    rx_thread:mpsc::Receiver<EventSend>) -> Result<()>{
+    let manager: AsyncRegisteredManager = Arc::new(RwLock::new(create_registered_manager().await?));
 
-//         Self::new(CurrentScreen::LinkingNewDevice,tx)
-//     }
-// }
+    let tx_contacts_events = tx_thread.clone();
+    let new_manager = Arc::clone(&manager);
+    thread::Builder::new()
+        .name(String::from("contacts_thread"))
+        .stack_size(1024 * 1024 * 8)
+        .spawn(move || {
+            let runtime = Builder::new_multi_thread()
+                .thread_name("contacts_runtime")
+                .enable_all()
+                .build()
+                .unwrap();
+            runtime.block_on(async move {
+                handle_contacts(tx_contacts_events, new_manager).await;
+            })
+        })
+        .unwrap();
+
+
+        let new_manager = Arc::clone(&manager);
+        let rx_sending_thread = rx_thread;
+        // thread::spawn(move || {
+        thread::Builder::new()
+            .name(String::from("sending_thread"))
+            .stack_size(1024 * 1024 * 8)
+            .spawn(move || {
+                let runtime = Builder::new_multi_thread()
+                    .thread_name("sending_runtime")
+                    .enable_all()
+                    .build()
+                    .unwrap();
+                runtime.block_on(async move {
+                    handle_sending_messages(rx_sending_thread, new_manager).await;
+                })
+                // let x = rx_thread;
+            })
+            .unwrap();
+
+    Ok(())
+}
+
 
 
 pub fn handle_key_input_events(tx: mpsc::Sender<EventApp>) {
