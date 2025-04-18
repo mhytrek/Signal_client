@@ -9,7 +9,7 @@ use ratatui::{
 };
 use ratatui_image::{picker::Picker, Image, Resize};
 
-use crate::{app::{App, CurrentScreen}, paths::QRCODE};
+use crate::{app::{App, CurrentScreen,LinkingStatus}, paths::QRCODE};
 
 // Main UI rendering function.
 pub fn ui(frame: &mut Frame, app: &App) {
@@ -41,11 +41,15 @@ pub fn ui(frame: &mut Frame, app: &App) {
                 render_popup(frame,frame.area(),"Would you like to quit? \n (y/n)");
             }
         CurrentScreen::LinkingNewDevice => {
-            render_textarea(frame, app,frame.area());
-
-        },
-        CurrentScreen::QrCode =>{
-            render_qrcode(frame, frame.area(),app);
+            match app.linking_status{
+                LinkingStatus::Unlinked => {
+                    render_textarea(frame, app,frame.area());
+                },
+                LinkingStatus::InProgress => {
+                    render_qrcode(frame, frame.area(),app);
+                },
+                LinkingStatus::Linked => {},
+            }
 
         },
     }

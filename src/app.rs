@@ -21,12 +21,12 @@ use std::thread;
 pub enum CurrentScreen {
     Main,
     LinkingNewDevice,
-    QrCode,
     Writing,
     Options,
     Exiting,
 }
 
+#[derive(PartialEq)]
 pub enum LinkingStatus {
     Unlinked,
     InProgress,
@@ -92,16 +92,15 @@ impl App {
     ) -> io::Result<bool> {
 
 
-        match self.linking_status {
-            LinkingStatus::Linked => {
-                if let Some(rx) = self.rx_thread.take(){
-                    let _ = init_threads(self.tx_thread.clone(),rx).await;
-                    
-                    }
-                self.current_screen = CurrentScreen::Main;
-            },
-            _ => {},
-        };
+        if self.linking_status == LinkingStatus::Linked {
+            if let Some(rx) = self.rx_thread.take() {
+                if let Err(e) = init_threads(self.tx_thread.clone(), rx).await {
+                    eprintln!("Failed to init threads: {:?}", e);
+                }
+            }
+            self.current_screen = CurrentScreen::Main;
+        }
+        
 
         let tx_key_events = self.tx_thread.clone();
         thread::spawn(move || {
@@ -151,6 +150,7 @@ impl App {
                     let _ = init_threads(self.tx_thread.clone(),rx).await;
                     
                     }
+                    self.current_screen = CurrentScreen::Main;
                 },
                 false => self.linking_status = LinkingStatus::Unlinked, 
             }
@@ -226,7 +226,6 @@ impl App {
                 match self.linking_status{
                     LinkingStatus::Linked => self.current_screen = Main,
                     LinkingStatus::Unlinked =>{
-                        // print!("aaa");
                         if key.kind == KeyEventKind::Press {
 
                             match key.code {
@@ -234,7 +233,25 @@ impl App {
                                     if Path::new(QRCODE).exists(){
                                         fs::remove_file(QRCODE)?;
                                     }                     
-                                        self.current_screen = QrCode;
+                                    let device_name = self.textarea.clone();
+                                    let tx_link_device_event = self.tx_thread.clone();
+            
+                                    thread::Builder::new()
+                                        .name(String::from("linking_device_thread"))
+                                        .stack_size(1024 * 1024 * 8)
+                                        .spawn(move || {
+                                            let runtime = Builder::new_multi_thread()
+                                                .thread_name("linking_device_runtime")
+                                                .enable_all()
+                                                .build()
+                                                .unwrap();
+                                            runtime.block_on(async move {
+                                                handle_linking_device(tx_link_device_event, device_name).await;
+                                            })
+                                        })
+                                        .unwrap();
+            
+                                    self.linking_status = LinkingStatus::InProgress
                                     }
                                 KeyCode::Backspace => {
                                             self.textarea.pop();
@@ -258,33 +275,6 @@ impl App {
                 }
                 },
 
-            QrCode => {
-                match self.linking_status{
-                    LinkingStatus::Linked => self.current_screen = Main,
-                    LinkingStatus::Unlinked =>{
-                        let device_name = self.textarea.clone();
-                        let tx_link_device_event = self.tx_thread.clone();
-
-                        thread::Builder::new()
-                            .name(String::from("linking_device_thread"))
-                            .stack_size(1024 * 1024 * 8)
-                            .spawn(move || {
-                                let runtime = Builder::new_multi_thread()
-                                    .thread_name("linking_device_runtime")
-                                    .enable_all()
-                                    .build()
-                                    .unwrap();
-                                runtime.block_on(async move {
-                                    handle_linking_device(tx_link_device_event, device_name).await;
-                                })
-                            })
-                            .unwrap();
-                    }
-                    LinkingStatus::InProgress => {}
-                }
-
-
-            },
         }
         Ok(false)
     }
