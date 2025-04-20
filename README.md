@@ -67,6 +67,7 @@ cargo run list-contacts
 
 ### **run-app**
 Displays a prototype layout with example data.
+- Allows registering new device if it's not already registered
 - Includes synchronization of the contact list (based on UUID).
 - Allows sending messages using the UUID of a contact.
   
@@ -75,6 +76,7 @@ cargo run run-app
 ```
 
 Functionalities in app:
+- linking new device 
 - sync contacts (in the background)
 - sending message (using UUID) ~ UUID can be checked using `cargo run list-contacts`
 
