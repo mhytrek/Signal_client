@@ -7,11 +7,11 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, List, ListItem, Padding, Paragraph, Wrap},
     Frame,
 };
-use ratatui_image::{picker::Picker, Image, Resize};
+use ratatui_image::{Image, Resize};
 
 use crate::{app::{App, CurrentScreen,LinkingStatus}, paths::QRCODE};
 
-// Main UI rendering function.
+/// Main UI rendering function.
 pub fn ui(frame: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -25,37 +25,44 @@ pub fn ui(frame: &mut Frame, app: &App) {
 
     match app.current_screen {
         CurrentScreen::Main => {
-                render_contact_list(frame, app, main_chunks[0]);
-                render_footer(frame, app, chunks[1]);
-            }
+                    render_contact_list(frame, app, main_chunks[0]);
+                    render_footer(frame, app, chunks[1]);
+                }
         CurrentScreen::Writing => {
-                render_contact_list(frame, app, main_chunks[0]);
-                render_chat_and_contact(frame, app, main_chunks[1]);
-                render_footer(frame, app, chunks[1]);
-            }
+                    render_contact_list(frame, app, main_chunks[0]);
+                    render_chat_and_contact(frame, app, main_chunks[1]);
+                    render_footer(frame, app, chunks[1]);
+                }
         CurrentScreen::Options => {
-                render_options(frame);
-                render_footer(frame, app, chunks[1]);
-            }
+                    render_options(frame);
+                    render_footer(frame, app, chunks[1]);
+                }
         CurrentScreen::Exiting => {
-                render_popup(frame,frame.area(),"Would you like to quit? \n (y/n)");
-            }
+                    render_popup(frame,frame.area(),"Would you like to quit? \n (y/n)");
+                }
         CurrentScreen::LinkingNewDevice => {
-            match app.linking_status{
-                LinkingStatus::Unlinked => {
-                    render_textarea(frame, app,frame.area());
-                },
-                LinkingStatus::InProgress => {
-                    render_qrcode(frame, frame.area(),app);
-                },
-                LinkingStatus::Linked => {},
-            }
+                match app.linking_status{
+                    LinkingStatus::Unlinked => {
+                        render_textarea(frame, app,frame.area());
+                    },
+                    LinkingStatus::InProgress => {
+                        let qr_area = centered_rect_fixed_size(60, 30, chunks[0]);
+                        render_qrcode(frame, qr_area,app);
+                        let text = "Scan the QR code to link new device...";
+                        render_paragraph(frame, chunks[1], text);
+                    },
+                    LinkingStatus::Linked => {},
+                }
+
+            },
+        CurrentScreen::Syncing => {
+            render_popup(frame,frame.area(),"Syncing contacts and messeges...");
 
         },
     }
 }
 
-// Renders the contact list in the left chunk of the screen
+/// Renders the contact list in the left chunk of the screen
 fn render_contact_list(frame: &mut Frame, app: &App, area: Rect) {
     let list_items: Vec<ListItem> = app
         .contacts
@@ -83,7 +90,7 @@ fn render_contact_list(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(chat_list_widget, area);
 }
 
-// Renders the chat window and input box in the right chunk of the screen
+/// Renders the chat window and input box in the right chunk of the screen
 fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
     let chat_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -110,7 +117,7 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
     }
 }
 
-// Renders a popup  with given text
+/// Renders a popup with given text
 fn render_popup(frame: &mut Frame, area: Rect, text: &str) {
     let popup_block = Block::default()
         .borders(Borders::ALL)
@@ -130,8 +137,24 @@ fn render_popup(frame: &mut Frame, area: Rect, text: &str) {
     frame.render_widget(paragraph, popup_area);
 }
 
+/// Renders a paragraph with given text
+fn render_paragraph(frame: &mut Frame, area: Rect, text: &str) {
+    let block = Block::default()
+        .borders(Borders::ALL);
 
-// Renders the footer section at the bottom of the screen.
+    let styled_text = Text::styled(
+        text,
+        Style::default().fg(Color::White),
+    );
+
+    let paragraph = Paragraph::new(styled_text)
+        .block(block)
+        .centered()
+        .wrap(Wrap { trim: false });
+
+    frame.render_widget(paragraph, area);
+}
+/// Renders the footer section at the bottom of the screen.
 fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     let current_keys_hint = {
         match app.current_screen {
@@ -158,31 +181,31 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(key_notes_footer, area);
 }
 
-//Renders a textarea for device name
+/// Renders a textarea for device name
 fn render_textarea(frame: &mut Frame, app: &App,area:Rect){
     let input_area = Block::default().title("Input device name").borders(Borders::ALL);
     let input_text = Paragraph::new(app.textarea.clone()).block(input_area);
-    let area = centered_rect(60, 30, area);
+    let area = centered_rect_fixed_size(50, 5, area);
 
     frame.render_widget(input_text,area);
 }
 
-//Renders 70x70 QRCode if it exists in the QRCODE path
+/// Renders 60x60 QRCode if it exists in the QRCODE path
 fn render_qrcode(frame: &mut Frame,area:Rect, app: &App){
 
     if let Ok(image_reader) = image::ImageReader::open(QRCODE) {
         match image_reader.decode() {
             Ok(image_source) => {
 
-            if area.width>=30 && area.height>=30{
+            if area.width>=60 && area.height>=30{
                 let mut image_static = app.picker
-                    .new_protocol(image_source.clone(), Rect::new(0,0,70,70),Resize::Scale(None))
+                    .new_protocol(image_source.clone(), Rect::new(0, 0,130, 130 ),Resize::Crop(None))
                     .unwrap();
                 let image = Image::new(&mut image_static);
                 frame.render_widget(image, area);
             }
             else{
-                let text = format!("Terminal too small to show QRcode.\nMinimum window size 50x50 \n Curren window size {}x{}", area.width, area.height);
+                let text = format!("Terminal too small to show QRcode.\nMinimum window size 60x30 \n Current window size {}x{}", area.width, area.height);
                 render_popup(frame, area, &text);
             }
             }
@@ -198,7 +221,7 @@ fn render_qrcode(frame: &mut Frame,area:Rect, app: &App){
 }
 
 
-// Renders the options screen
+/// Renders the options screen
 fn render_options(frame: &mut Frame) {
     let popup_block = Block::default()
         .borders(Borders::ALL)
@@ -214,7 +237,7 @@ fn render_options(frame: &mut Frame) {
     frame.render_widget(exit_paragraph, area);
 }
 
-// Creates a rectangular area centered within the given Rect
+/// Creates a rectangular area centered within the given Rect
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
@@ -233,4 +256,20 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
             Constraint::Percentage((100 - percent_x) / 2),
         ])
         .split(popup_layout[1])[1]
+}
+
+/// Creates a rectangular area centered within the given Rect with fixed size
+fn centered_rect_fixed_size(width: u16, height: u16, r: Rect) -> Rect {
+    let rect_width = width.min(r.width);
+    let rect_height = height.min(r.height);
+
+    let x = r.x + (r.width - rect_width) / 2;
+    let y = r.y + (r.height - rect_height) / 2;
+
+    Rect {
+        x,
+        y,
+        width: rect_width,
+        height: rect_height,
+    }
 }

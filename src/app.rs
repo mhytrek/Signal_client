@@ -18,8 +18,11 @@ use anyhow::Result;
 
 
 use std::thread;
+
+#[derive(PartialEq)]
 pub enum CurrentScreen {
     Main,
+    Syncing,
     LinkingNewDevice,
     Writing,
     Options,
@@ -94,11 +97,11 @@ impl App {
 
         if self.linking_status == LinkingStatus::Linked {
             if let Some(rx) = self.rx_thread.take() {
-                if let Err(e) = init_threads(self.tx_thread.clone(), rx).await {
+                if let Err(e) = init_background_threadss(self.tx_thread.clone(), rx).await {
                     eprintln!("Failed to init threads: {:?}", e);
                 }
             }
-            self.current_screen = CurrentScreen::Main;
+            self.current_screen = CurrentScreen::Syncing;
         }
         
 
@@ -136,6 +139,9 @@ impl App {
                 self.handle_key_event(key, tx)
             }
             EventApp::ContactsList(contacts) => {
+                if self.current_screen == CurrentScreen::Syncing{
+                    self.current_screen = CurrentScreen::Main;
+                }
                 self.contacts = contacts
                     .into_iter()
                     .map(|name| (name, String::new()))
@@ -147,10 +153,10 @@ impl App {
                 true => {
                     self.linking_status = LinkingStatus::Linked;
                     if let Some(rx) = self.rx_thread.take(){
-                    let _ = init_threads(self.tx_thread.clone(),rx).await;
+                    let _ = init_background_threadss(self.tx_thread.clone(),rx).await;
                     
                     }
-                    self.current_screen = CurrentScreen::Main;
+                    self.current_screen = CurrentScreen::Syncing;
                 },
                 false => self.linking_status = LinkingStatus::Unlinked, 
             }
@@ -191,99 +197,105 @@ impl App {
         use CurrentScreen::*;
         match self.current_screen {
             Main => match key.code {
-                KeyCode::Right | KeyCode::Char('d') => self.current_screen = Writing,
-                KeyCode::Char('q') | KeyCode::Esc => self.current_screen = Exiting,
-                KeyCode::Char('e') => self.current_screen = Options,
-                KeyCode::Down | KeyCode::Char('s') => {
-                    if self.selected < self.contacts.len() - 1 {
-                        self.selected += 1;
-                    }
-                }
-                KeyCode::Up | KeyCode::Char('w') => {
-                    if self.selected > 0 {
-                        self.selected -= 1;
-                    }
-                }
-                _ => {}
-            },
-            Exiting => match key.code {
-                KeyCode::Char('y') | KeyCode::Esc | KeyCode::Char('q') => return Ok(true),
-                KeyCode::Char('n') => self.current_screen = Main,
-                _ => {}
-            },
-            Writing => match key.code {
-                KeyCode::Esc | KeyCode::Left => self.current_screen = Main,
-                KeyCode::Enter => self.submit_message(tx),
-                KeyCode::Char(to_insert) => self.enter_char(to_insert),
-                KeyCode::Backspace => self.delete_char(),
-                _ => {}
-            },
-            Options => match key.code {
-                KeyCode::Esc | KeyCode::Char('q') => self.current_screen = Main,
-                _ => {}
-            },
-            LinkingNewDevice => {
-                match self.linking_status{
-                    LinkingStatus::Linked => self.current_screen = Main,
-                    LinkingStatus::Unlinked =>{
-                        if key.kind == KeyEventKind::Press {
-
-                            match key.code {
-                                KeyCode::Enter => {       
-                                    if Path::new(QRCODE).exists(){
-                                        fs::remove_file(QRCODE)?;
-                                    }                     
-                                    let device_name = self.textarea.clone();
-                                    let tx_link_device_event = self.tx_thread.clone();
-            
-                                    thread::Builder::new()
-                                        .name(String::from("linking_device_thread"))
-                                        .stack_size(1024 * 1024 * 8)
-                                        .spawn(move || {
-                                            let runtime = Builder::new_multi_thread()
-                                                .thread_name("linking_device_runtime")
-                                                .enable_all()
-                                                .build()
-                                                .unwrap();
-                                            runtime.block_on(async move {
-                                                handle_linking_device(tx_link_device_event, device_name).await;
-                                            })
-                                        })
-                                        .unwrap();
-            
-                                    self.linking_status = LinkingStatus::InProgress
-                                    }
-                                KeyCode::Backspace => {
-                                            self.textarea.pop();
-                                        }
-                    
-                                KeyCode::Esc => {
-                                    self.current_screen = LinkingNewDevice;
-                                }
-
-                                KeyCode::Char(value) => {
-
-                                    self.textarea.push(value)
-                                            }
-                            
-                        
-                                _ => {}
+                        KeyCode::Right | KeyCode::Char('d') => self.current_screen = Writing,
+                        KeyCode::Char('q') | KeyCode::Esc => self.current_screen = Exiting,
+                        KeyCode::Char('e') => self.current_screen = Options,
+                        KeyCode::Down | KeyCode::Char('s') => {
+                            if self.selected < self.contacts.len() - 1 {
+                                self.selected += 1;
                             }
                         }
-                    }
-                    LinkingStatus::InProgress => {},
-                }
-                },
+                        KeyCode::Up | KeyCode::Char('w') => {
+                            if self.selected > 0 {
+                                self.selected -= 1;
+                            }
+                        }
+                        _ => {}
+                    },
+            Exiting => match key.code {
+                        KeyCode::Char('y') | KeyCode::Esc | KeyCode::Char('q') => return Ok(true),
+                        KeyCode::Char('n') => self.current_screen = Main,
+                        _ => {}
+                    },
+            Writing => match key.code {
+                        KeyCode::Esc | KeyCode::Left => self.current_screen = Main,
+                        KeyCode::Enter => self.submit_message(tx),
+                        KeyCode::Char(to_insert) => self.enter_char(to_insert),
+                        KeyCode::Backspace => self.delete_char(),
+                        _ => {}
+                    },
+            Options => match key.code {
+                        KeyCode::Esc | KeyCode::Char('q') => self.current_screen = Main,
+                        _ => {}
+                    },
+            LinkingNewDevice => {
+                        match self.linking_status{
+                            LinkingStatus::Linked => self.current_screen = Syncing,
+                            LinkingStatus::Unlinked =>{
+                                if key.kind == KeyEventKind::Press {
 
-        }
+                                    match key.code {
+                                        KeyCode::Enter => {       
+                                            if Path::new(QRCODE).exists(){
+                                                fs::remove_file(QRCODE)?;
+                                            } 
+
+                                            //spawn thread to link device
+                                            let device_name = self.textarea.clone();
+                                            let tx_link_device_event = self.tx_thread.clone();
+                                            thread::Builder::new()
+                                                .name(String::from("linking_device_thread"))
+                                                .stack_size(1024 * 1024 * 8)
+                                                .spawn(move || {
+                                                    let runtime = Builder::new_multi_thread()
+                                                        .thread_name("linking_device_runtime")
+                                                        .enable_all()
+                                                        .build()
+                                                        .unwrap();
+                                                    runtime.block_on(async move {
+                                                        handle_linking_device(tx_link_device_event, device_name).await;
+                                                    })
+                                                })
+                                                .unwrap();
+            
+                                            self.linking_status = LinkingStatus::InProgress
+
+                                            }
+                                        KeyCode::Backspace => {
+                                                    self.textarea.pop();
+                                                }
+                    
+                                        KeyCode::Esc => {
+                                            self.current_screen = LinkingNewDevice;
+                                        }
+
+                                        KeyCode::Char(value) => {
+
+                                            self.textarea.push(value)
+                                                    }
+                            
+                        
+                                        _ => {}
+                                    }
+                                }
+                            }
+                            LinkingStatus::InProgress => {},
+                        }
+                        },
+            Syncing => {
+                
+            },
+                        }
         Ok(false)
     }
 }
 
-pub async fn init_threads(tx_thread: mpsc::Sender<EventApp>,
+/// spawn thread to sync contacts and to send messeges
+pub async fn init_background_threadss(tx_thread: mpsc::Sender<EventApp>,
     rx_thread:mpsc::Receiver<EventSend>) -> Result<()>{
     let manager: AsyncRegisteredManager = Arc::new(RwLock::new(create_registered_manager().await?));
 
+    //spawn thread to sync contacts
     let tx_contacts_events = tx_thread.clone();
     let new_manager = Arc::clone(&manager);
     thread::Builder::new()
@@ -301,7 +313,7 @@ pub async fn init_threads(tx_thread: mpsc::Sender<EventApp>,
         })
         .unwrap();
 
-
+        //spawn thread to send messeges
         let new_manager = Arc::clone(&manager);
         let rx_sending_thread = rx_thread;
         // thread::spawn(move || {
@@ -405,7 +417,7 @@ pub async fn handle_sending_messages(
 }
 
 pub async fn handle_linking_device(tx: mpsc::Sender<EventApp>, device_name: String) {
-    let result = devices::link_new_device(device_name,true).await;
+    let result = devices::link_new_device_tui(device_name).await;
 
     let success = result.is_ok();
 
