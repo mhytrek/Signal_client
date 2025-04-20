@@ -1,7 +1,5 @@
-
-
 use ratatui::{
-    layout::{ Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
     widgets::{Block, BorderType, Borders, List, ListItem, Padding, Paragraph, Wrap},
@@ -9,7 +7,10 @@ use ratatui::{
 };
 use ratatui_image::{Image, Resize};
 
-use crate::{app::{App, CurrentScreen,LinkingStatus}, paths::QRCODE};
+use crate::{
+    app::{App, CurrentScreen, LinkingStatus},
+    paths::QRCODE,
+};
 
 /// Main UI rendering function.
 pub fn ui(frame: &mut Frame, app: &App) {
@@ -25,40 +26,36 @@ pub fn ui(frame: &mut Frame, app: &App) {
 
     match app.current_screen {
         CurrentScreen::Main => {
-                    render_contact_list(frame, app, main_chunks[0]);
-                    render_footer(frame, app, chunks[1]);
-                }
+            render_contact_list(frame, app, main_chunks[0]);
+            render_footer(frame, app, chunks[1]);
+        }
         CurrentScreen::Writing => {
-                    render_contact_list(frame, app, main_chunks[0]);
-                    render_chat_and_contact(frame, app, main_chunks[1]);
-                    render_footer(frame, app, chunks[1]);
-                }
+            render_contact_list(frame, app, main_chunks[0]);
+            render_chat_and_contact(frame, app, main_chunks[1]);
+            render_footer(frame, app, chunks[1]);
+        }
         CurrentScreen::Options => {
-                    render_options(frame);
-                    render_footer(frame, app, chunks[1]);
-                }
+            render_options(frame);
+            render_footer(frame, app, chunks[1]);
+        }
         CurrentScreen::Exiting => {
-                    render_popup(frame,frame.area(),"Would you like to quit? \n (y/n)");
-                }
-        CurrentScreen::LinkingNewDevice => {
-                match app.linking_status{
-                    LinkingStatus::Unlinked => {
-                        render_textarea(frame, app,frame.area());
-                    },
-                    LinkingStatus::InProgress => {
-                        let qr_area = centered_rect_fixed_size(60, 30, chunks[0]);
-                        render_qrcode(frame, qr_area,app);
-                        let text = "Scan the QR code to link new device...";
-                        render_paragraph(frame, chunks[1], text);
-                    },
-                    LinkingStatus::Linked => {},
-                }
-
-            },
-        CurrentScreen::Syncing => {
-            render_popup(frame,frame.area(),"Syncing contacts and messeges...");
-
+            render_popup(frame, frame.area(), "Would you like to quit? \n (y/n)");
+        }
+        CurrentScreen::LinkingNewDevice => match app.linking_status {
+            LinkingStatus::Unlinked => {
+                render_textarea(frame, app, frame.area());
+            }
+            LinkingStatus::InProgress => {
+                let qr_area = centered_rect_fixed_size(60, 30, chunks[0]);
+                render_qrcode(frame, qr_area, app);
+                let text = "Scan the QR code to link new device...";
+                render_paragraph(frame, chunks[1], text);
+            }
+            LinkingStatus::Linked => {}
         },
+        CurrentScreen::Syncing => {
+            render_popup(frame, frame.area(), "Syncing contacts and messeges...");
+        }
     }
 }
 
@@ -123,10 +120,7 @@ fn render_popup(frame: &mut Frame, area: Rect, text: &str) {
         .borders(Borders::ALL)
         .border_type(BorderType::Double);
 
-    let styled_text = Text::styled(
-        text,
-        Style::default().fg(Color::White),
-    );
+    let styled_text = Text::styled(text, Style::default().fg(Color::White));
 
     let paragraph = Paragraph::new(styled_text)
         .block(popup_block)
@@ -139,13 +133,9 @@ fn render_popup(frame: &mut Frame, area: Rect, text: &str) {
 
 /// Renders a paragraph with given text
 fn render_paragraph(frame: &mut Frame, area: Rect, text: &str) {
-    let block = Block::default()
-        .borders(Borders::ALL);
+    let block = Block::default().borders(Borders::ALL);
 
-    let styled_text = Text::styled(
-        text,
-        Style::default().fg(Color::White),
-    );
+    let styled_text = Text::styled(text, Style::default().fg(Color::White));
 
     let paragraph = Paragraph::new(styled_text)
         .block(block)
@@ -159,17 +149,13 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     let current_keys_hint = {
         match app.current_screen {
             CurrentScreen::Main => Span::styled(
-                        "(q) to quit | (↑ ↓) to navigate | (→) to select chat | (e) to show more options",
-                        Style::default(),
-                    ),
-            CurrentScreen::Writing => Span::styled(
-                        "(q) to exit | (ENTER) to send",
-                        Style::default(),
-                    ),
-            CurrentScreen::Options => Span::styled(
-                        "(q) to exit | (e) to select",
-                        Style::default(),
-                    ),
+                "(q) to quit | (↑ ↓) to navigate | (→) to select chat | (e) to show more options",
+                Style::default(),
+            ),
+            CurrentScreen::Writing => {
+                Span::styled("(q) to exit | (ENTER) to send", Style::default())
+            }
+            CurrentScreen::Options => Span::styled("(q) to exit | (e) to select", Style::default()),
 
             _ => Span::default(),
         }
@@ -182,44 +168,44 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 /// Renders a textarea for device name
-fn render_textarea(frame: &mut Frame, app: &App,area:Rect){
-    let input_area = Block::default().title("Input device name").borders(Borders::ALL);
+fn render_textarea(frame: &mut Frame, app: &App, area: Rect) {
+    let input_area = Block::default()
+        .title("Input device name")
+        .borders(Borders::ALL);
     let input_text = Paragraph::new(app.textarea.clone()).block(input_area);
     let area = centered_rect_fixed_size(50, 5, area);
 
-    frame.render_widget(input_text,area);
+    frame.render_widget(input_text, area);
 }
 
 /// Renders 60x60 QRCode if it exists in the QRCODE path
-fn render_qrcode(frame: &mut Frame,area:Rect, app: &App){
-
+fn render_qrcode(frame: &mut Frame, area: Rect, app: &App) {
     if let Ok(image_reader) = image::ImageReader::open(QRCODE) {
         match image_reader.decode() {
             Ok(image_source) => {
-
-            if area.width>=60 && area.height>=30{
-                let mut image_static = app.picker
-                    .new_protocol(image_source.clone(), Rect::new(0, 0,130, 130 ),Resize::Crop(None))
-                    .unwrap();
-                let image = Image::new(&mut image_static);
-                frame.render_widget(image, area);
+                if area.width >= 60 && area.height >= 30 {
+                    let mut image_static = app
+                        .picker
+                        .new_protocol(
+                            image_source.clone(),
+                            Rect::new(0, 0, 130, 130),
+                            Resize::Crop(None),
+                        )
+                        .unwrap();
+                    let image = Image::new(&mut image_static);
+                    frame.render_widget(image, area);
+                } else {
+                    let text = format!("Terminal too small to show QRcode.\nMinimum window size 60x30 \n Current window size {}x{}", area.width, area.height);
+                    render_popup(frame, area, &text);
+                }
             }
-            else{
-                let text = format!("Terminal too small to show QRcode.\nMinimum window size 60x30 \n Current window size {}x{}", area.width, area.height);
-                render_popup(frame, area, &text);
-            }
-            }
-            Err(_e) => {
-                return;
-            }
+            Err(_e) => {}
         }
     } else {
         let text = "Generating QR Code...";
         render_popup(frame, area, text);
     }
-
 }
-
 
 /// Renders the options screen
 fn render_options(frame: &mut Frame) {

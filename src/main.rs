@@ -17,7 +17,6 @@ async fn main() -> Result<()> {
         Command::SendMessage(args) => {
             sending_text::send_message_cli(args.recipient, args.text_message).await?
         }
-
     }
 
     Ok(())

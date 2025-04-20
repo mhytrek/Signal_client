@@ -20,9 +20,9 @@ pub async fn link_new_device_tui(device_name: String) -> Result<()> {
     )
     .await?;
 
-    if !Path::new(ASSETS).exists(){
+    if !Path::new(ASSETS).exists() {
         fs::create_dir(ASSETS).await?;
-    }  
+    }
 
     let (tx, rx) = oneshot::channel();
     let (_manager, _err) = future::join(
@@ -30,7 +30,8 @@ pub async fn link_new_device_tui(device_name: String) -> Result<()> {
         async move {
             match rx.await {
                 Ok(url) => {
-                    qrcode_generator::to_png_to_file(url.as_ref(), QrCodeEcc::Low, 600, QRCODE).unwrap();
+                    qrcode_generator::to_png_to_file(url.as_ref(), QrCodeEcc::Low, 600, QRCODE)
+                        .unwrap();
                 }
                 Err(err) => println!("Error while linking device: {}", err),
             }
@@ -38,9 +39,9 @@ pub async fn link_new_device_tui(device_name: String) -> Result<()> {
     )
     .await;
 
-    if Path::new(ASSETS).exists(){
+    if Path::new(ASSETS).exists() {
         fs::remove_dir_all(ASSETS).await?;
-    }  
+    }
 
     Ok(())
 }
@@ -73,9 +74,8 @@ pub async fn link_new_device_cli(device_name: String) -> Result<()> {
     Ok(())
 }
 
-
 /// return true if the device is registered and false otherwise
-pub async fn is_registered() -> Result<bool>{
+pub async fn is_registered() -> Result<bool> {
     let store = SledStore::open(
         paths::STORE,
         MigrationConflictStrategy::Drop,
@@ -83,10 +83,8 @@ pub async fn is_registered() -> Result<bool>{
     )
     .await?;
 
-
-    match Manager::load_registered(store).await{
-        Ok(_) => return Ok(true),
-        Err(_) => return Ok(false),
+    match Manager::load_registered(store).await {
+        Ok(_) => Ok(true),
+        Err(_) => Ok(false),
     }
 }
-

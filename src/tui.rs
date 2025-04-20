@@ -12,8 +12,10 @@ use ratatui::{
     Terminal,
 };
 
-use crate::{app::{App, LinkingStatus}, devices::is_registered};
-
+use crate::{
+    app::{App, LinkingStatus},
+    devices::is_registered,
+};
 
 pub async fn run_tui() -> Result<()> {
     enable_raw_mode()?;
@@ -24,18 +26,14 @@ pub async fn run_tui() -> Result<()> {
 
     let linking_status = is_registered().await?;
 
-    let status = match linking_status{
+    let status = match linking_status {
         true => LinkingStatus::Linked,
-        false => LinkingStatus::Unlinked, 
+        false => LinkingStatus::Unlinked,
     };
-    
+
     let mut app = App::new(status);
-    
-
-
 
     let res = app.run(&mut terminal).await;
-
 
     disable_raw_mode()?;
     execute!(
@@ -50,5 +48,4 @@ pub async fn run_tui() -> Result<()> {
     }
 
     Ok(())
-
 }
