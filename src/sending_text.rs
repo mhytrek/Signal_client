@@ -1,4 +1,5 @@
-use crate::{contacts::receiving_loop, create_registered_manager, AsyncRegisteredManager};
+use crate::messages::receive::receiving_loop;
+use crate::{create_registered_manager, AsyncRegisteredManager};
 use anyhow::Result;
 use presage::libsignal_service::prelude::Uuid;
 use presage::libsignal_service::protocol::ServiceId;

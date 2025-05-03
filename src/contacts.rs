@@ -1,25 +1,14 @@
 use crate::create_registered_manager;
+use crate::messages::receive::receiving_loop;
 use crate::AsyncRegisteredManager;
 use anyhow::Result;
-use futures::Stream;
-use futures::{pin_mut, StreamExt};
+use presage::libsignal_service::prelude::Uuid;
 use presage::manager::Registered;
 use presage::model::contacts::Contact;
-use presage::model::messages::Received;
 use presage::store::ContentsStore;
 use presage::Manager;
 use presage_store_sled::{SledStore, SledStoreError};
-
-pub async fn receiving_loop(messages: impl Stream<Item = Received>) {
-    pin_mut!(messages);
-    while let Some(content) = messages.next().await {
-        match content {
-            Received::QueueEmpty => break,
-            Received::Contacts => {}
-            Received::Content(_) => continue,
-        }
-    }
-}
+use std::collections::HashMap;
 
 async fn sync_contacts(manager: &mut Manager<SledStore, Registered>) -> Result<()> {
     let messages = manager.receive_messages().await?;
@@ -40,6 +29,30 @@ pub async fn sync_contacts_cli() -> Result<()> {
 pub async fn sync_contacts_tui(manager_mutex: AsyncRegisteredManager) -> Result<()> {
     let mut manager = manager_mutex.write().await;
     sync_contacts(&mut manager).await
+}
+
+async fn get_contacts(manager: &Manager<SledStore, Registered>) -> Result<HashMap<Uuid, Contact>> {
+    let contact_vec = list_contacts(manager).await?;
+
+    // No error handling for now, however it'll have to be done
+    let mut contacts_map: HashMap<Uuid, Contact> = HashMap::new();
+    for contact in contact_vec.into_iter().flatten() {
+        let uuid = contact.uuid;
+        contacts_map.insert(uuid, contact);
+    }
+    Ok(contacts_map)
+}
+
+pub async fn get_contacts_cli() -> Result<HashMap<Uuid, Contact>> {
+    let manager = create_registered_manager().await?;
+    get_contacts(&manager).await
+}
+
+pub async fn get_contacts_tui(
+    manager_mutex: AsyncRegisteredManager,
+) -> Result<HashMap<Uuid, Contact>> {
+    let manager = manager_mutex.read().await;
+    get_contacts(&manager).await
 }
 
 async fn list_contacts(

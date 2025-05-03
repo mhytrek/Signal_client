@@ -12,6 +12,7 @@ pub mod args;
 pub mod cli;
 pub mod contacts;
 pub mod devices;
+pub mod messages;
 pub mod paths;
 pub mod sending_text;
 pub mod tui;
