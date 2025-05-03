@@ -343,13 +343,20 @@ pub async fn handle_contacts(tx: mpsc::Sender<EventApp>, manager_mutex: AsyncReg
 
         let contact_names: Vec<String> = contacts
             .into_iter()
-            .filter_map(|contact| {
-                // let name = contact.ok()?.name.trim().to_string();
-                let name = contact.ok()?.uuid.to_string().trim().to_string();
-                if name.is_empty() {
+            .filter_map(|contact_res| {
+                let contact = contact_res.ok()?;
+                let mut info = contact.name;
+                if info.is_empty() {
+                    if contact.phone_number.is_some() {
+                        info = contact.phone_number.unwrap().to_string();
+                    } else {
+                        info = contact.uuid.to_string();
+                    }
+                }
+                if info.is_empty() {
                     None
                 } else {
-                    Some(name)
+                    Some(info)
                 }
             })
             .collect();
