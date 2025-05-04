@@ -1,3 +1,6 @@
+use std::{fs::{self}, path::Path};
+
+use qrcode::QrCode;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -5,7 +8,7 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, List, ListItem, Padding, Paragraph, Wrap},
     Frame,
 };
-use ratatui_image::{Image, Resize};
+use tui_qrcode::{Colors, QrCodeWidget};
 
 use crate::{
     app::{App, CurrentScreen, LinkingStatus},
@@ -46,8 +49,7 @@ pub fn ui(frame: &mut Frame, app: &App) {
                 render_textarea(frame, app, frame.area());
             }
             LinkingStatus::InProgress => {
-                let qr_area = centered_rect_fixed_size(60, 30, chunks[0]);
-                render_qrcode(frame, qr_area, app);
+                render_qrcode(frame, chunks[0]);
                 let text = "Scan the QR code to link new device...";
                 render_paragraph(frame, chunks[1], text);
             }
@@ -178,30 +180,24 @@ fn render_textarea(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(input_text, area);
 }
 
-/// Renders 60x60 QRCode if it exists in the QRCODE path
-fn render_qrcode(frame: &mut Frame, area: Rect, app: &App) {
-    if let Ok(image_reader) = image::ImageReader::open(QRCODE) {
-        match image_reader.decode() {
-            Ok(image_source) => {
-                if area.width >= 60 && area.height >= 30 {
-                    let mut image_static = app
-                        .picker
-                        .new_protocol(
-                            image_source.clone(),
-                            Rect::new(0, 0, 130, 130),
-                            Resize::Crop(None),
-                        )
-                        .unwrap();
-                    let image = Image::new(&mut image_static);
-                    frame.render_widget(image, area);
-                } else {
-                    let text = format!("Terminal too small to show QRcode.\nMinimum window size 60x30 \n Current window size {}x{}", area.width, area.height);
-                    render_popup(frame, area, &text);
-                }
-            }
-            Err(_e) => {}
+
+/// Renders 50x50 QRCode if it exists in the QRCODE path
+fn render_qrcode(frame: &mut Frame, area: Rect) {
+
+    if Path::new(QRCODE).exists() {
+        if area.width >= 50 && area.height >= 25 {
+            let url = fs::read_to_string(QRCODE).expect("failed to read from file");
+            let qr_code = QrCode::new(url).expect("Failed to generate QRcode");
+            let widget = QrCodeWidget::new(qr_code).colors(Colors::Inverted);
+            let qr_area = centered_rect_fixed_size(50, 25, area);
+            frame.render_widget(widget, qr_area);
+        } else {
+            let text = format!("Terminal too small to show QRcode.\nMinimum window size 50x25 \n Current window size {}x{}", area.width, area.height);
+            render_popup(frame, area, &text);
         }
-    } else {
+
+    }
+    else {
         let text = "Generating QR Code...";
         render_popup(frame, area, text);
     }

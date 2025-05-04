@@ -7,7 +7,6 @@ use crossterm::event;
 use crossterm::event::{KeyCode, KeyEventKind};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
-use ratatui_image::picker::Picker;
 use std::io::Stderr;
 use std::path::Path;
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -49,7 +48,6 @@ pub struct App {
     pub tx_tui: mpsc::Sender<EventSend>,
     pub rx_thread: Option<mpsc::Receiver<EventSend>>,
 
-    pub picker: Picker,
 }
 
 pub enum EventApp {
@@ -77,7 +75,6 @@ impl App {
             rx_tui,
             tx_tui,
             rx_thread: Some(rx_thread),
-            picker: Picker::from_query_stdio().unwrap(),
         }
     }
 

@@ -1,3 +1,5 @@
+use std::fs::File;
+use std::io::Write;
 use std::path::Path;
 
 use anyhow::Result;
@@ -5,13 +7,12 @@ use futures::{channel::oneshot, future};
 use presage::model::identity::OnNewIdentity;
 use presage::{libsignal_service::configuration::SignalServers, Manager};
 use presage_store_sled::{MigrationConflictStrategy, SledStore};
-use qrcode_generator::QrCodeEcc;
 use tokio::fs;
 
 use crate::paths::{self, ASSETS, QRCODE};
 
-/// Links a new device to the Signal account using the given name.
-/// Generates a QR code as a PNG file and waits for the user to scan it to complete the linking process.
+// / Links a new device to the Signal account using the given name.
+// / Generates a url and waits for the user to use it to complete the linking process.
 pub async fn link_new_device_tui(device_name: String) -> Result<()> {
     let store = SledStore::open(
         paths::STORE,
@@ -30,8 +31,10 @@ pub async fn link_new_device_tui(device_name: String) -> Result<()> {
         async move {
             match rx.await {
                 Ok(url) => {
-                    qrcode_generator::to_png_to_file(url.as_ref(), QrCodeEcc::Low, 600, QRCODE)
-                        .unwrap();
+                    let mut file = File::create(QRCODE).expect("Failed to create QRcode file");
+                
+                    file.write_all(url.as_ref().as_bytes()).expect("Failed to save url to qr code");
+                    
                 }
                 Err(err) => println!("Error while linking device: {}", err),
             }
@@ -45,6 +48,8 @@ pub async fn link_new_device_tui(device_name: String) -> Result<()> {
 
     Ok(())
 }
+
+
 
 /// Links a new device to the Signal account using the given name.
 /// Generates a QR code and prints it in the terminal, then waits for the user to scan it to complete the linking process.
