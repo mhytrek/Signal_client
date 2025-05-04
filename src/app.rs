@@ -47,7 +47,6 @@ pub struct App {
 
     pub tx_tui: mpsc::Sender<EventSend>,
     pub rx_thread: Option<mpsc::Receiver<EventSend>>,
-
 }
 
 pub enum EventApp {

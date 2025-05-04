@@ -32,9 +32,9 @@ pub async fn link_new_device_tui(device_name: String) -> Result<()> {
             match rx.await {
                 Ok(url) => {
                     let mut file = File::create(QRCODE).expect("Failed to create QRcode file");
-                
-                    file.write_all(url.as_ref().as_bytes()).expect("Failed to save url to qr code");
-                    
+
+                    file.write_all(url.as_ref().as_bytes())
+                        .expect("Failed to save url to qr code");
                 }
                 Err(err) => println!("Error while linking device: {}", err),
             }
@@ -48,8 +48,6 @@ pub async fn link_new_device_tui(device_name: String) -> Result<()> {
 
     Ok(())
 }
-
-
 
 /// Links a new device to the Signal account using the given name.
 /// Generates a QR code and prints it in the terminal, then waits for the user to scan it to complete the linking process.

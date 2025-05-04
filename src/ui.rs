@@ -1,4 +1,7 @@
-use std::{fs::{self}, path::Path};
+use std::{
+    fs::{self},
+    path::Path,
+};
 
 use qrcode::QrCode;
 use ratatui::{
@@ -180,10 +183,8 @@ fn render_textarea(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(input_text, area);
 }
 
-
 /// Renders 50x50 QRCode if it exists in the QRCODE path
 fn render_qrcode(frame: &mut Frame, area: Rect) {
-
     if Path::new(QRCODE).exists() {
         if area.width >= 50 && area.height >= 25 {
             let url = fs::read_to_string(QRCODE).expect("failed to read from file");
@@ -195,9 +196,7 @@ fn render_qrcode(frame: &mut Frame, area: Rect) {
             let text = format!("Terminal too small to show QRcode.\nMinimum window size 50x25 \n Current window size {}x{}", area.width, area.height);
             render_popup(frame, area, &text);
         }
-
-    }
-    else {
+    } else {
         let text = "Generating QR Code...";
         render_popup(frame, area, text);
     }
