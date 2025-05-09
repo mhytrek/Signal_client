@@ -67,7 +67,7 @@ pub async fn list_contacts_cli() -> Result<Vec<Result<Contact, SledStoreError>>>
     list_contacts(&manager).await
 }
 
-/// Returns iterator over stored contacts, for use in CLI
+/// Returns iterator over stored contacts, for use in TUI
 pub async fn list_contacts_tui(
     manager_mutex: AsyncRegisteredManager,
 ) -> Result<Vec<Result<Contact, SledStoreError>>> {

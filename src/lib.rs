@@ -16,6 +16,7 @@ pub mod messages;
 pub mod paths;
 pub mod tui;
 pub mod ui;
+pub mod messages;
 
 pub mod sending {}
 

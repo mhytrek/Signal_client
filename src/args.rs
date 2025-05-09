@@ -18,6 +18,10 @@ pub enum Command {
     RunApp,
     /// Send text message
     SendMessage(SendMessageArgs),
+    /// Prints messages from given point in time
+    ListMessages(ListMessagesArgs),
+    /// Prints received messeges
+    Receive,
 }
 
 #[derive(Args)]
@@ -29,8 +33,17 @@ pub struct LinkDeviceArgs {
 
 #[derive(Args)]
 pub struct SendMessageArgs {
-    /// Name of under which linked device should be saved
+    /// Uuid of the contact that the message should be send to
     #[arg(short, long)]
     pub recipient: String,
+    /// Content of the message
     pub text_message: String,
+}
+
+
+#[derive(Args)]
+pub struct ListMessagesArgs {
+    #[arg(short, long)]
+    pub recipient: String,
+    pub from: String,
 }
