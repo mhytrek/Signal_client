@@ -47,6 +47,7 @@ fn print_message(content: &Content) {
             DataMessage {
                 flags: Some(flag), ..
             } => Some(format!("[FLAG] Data message (flag: {})", flag)),
+
             // _ => Some("[DATA?] <unhandled data message>".to_string()),
             _ => None,
         },
@@ -72,6 +73,7 @@ fn print_message(content: &Content) {
                 DataMessage {
                     flags: Some(flag), ..
                 } => Some(format!("[FLAG] Synced data message (flag: {})", flag)),
+
                 // _ => Some("[SYNC?] <unhandled synchronized data message>".to_string()),
                 _ => None,
             },
@@ -85,6 +87,7 @@ fn print_message(content: &Content) {
         ContentBody::PniSignatureMessage(_) => {
             Some("[SIGNATURE] <pni signature message>".to_string())
         }
+
         ContentBody::EditMessage(_) => Some("[EDIT] <edit message>".to_string()),
     };
 
@@ -94,6 +97,7 @@ fn print_message(content: &Content) {
 }
 
 pub async fn print_messages(recipient: String, from: String) -> Result<()> {
+
     let messages = list_messages_cli(recipient, from).await?;
     for message in messages.into_iter().flatten() {
         print_message(&message);
@@ -102,6 +106,7 @@ pub async fn print_messages(recipient: String, from: String) -> Result<()> {
 }
 
 pub async fn print_received_message() -> Result<()> {
+
     let messages = receive_messages_cli().await?;
     for message in messages {
         print_message(&message);
