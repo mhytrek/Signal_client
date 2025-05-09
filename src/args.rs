@@ -44,6 +44,7 @@ pub struct SendMessageArgs {
     pub text_message: String,
 }
 
+
 #[derive(Args)]
 pub struct ListMessagesArgs {
     #[arg(short, long)]
