@@ -1,66 +1,118 @@
+use crate::paths::QRCODE;
 use crate::sending_text::send_message_tui;
 use crate::ui::ui;
-use crate::{contacts, AsyncRegisteredManager};
+use crate::{contacts, create_registered_manager, devices, AsyncRegisteredManager};
+use anyhow::Result;
 use crossterm::event;
 use crossterm::event::{KeyCode, KeyEventKind};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
-use std::io;
 use std::io::Stderr;
+use std::path::Path;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::Arc;
+use std::{fs, io};
+use tokio::runtime::Builder;
+use tokio::sync::RwLock;
 
+use std::thread;
+
+#[derive(PartialEq)]
 pub enum CurrentScreen {
     Main,
+    Syncing,
+    LinkingNewDevice,
     Writing,
     Options,
     Exiting,
+}
+
+#[derive(PartialEq)]
+pub enum LinkingStatus {
+    Unlinked,
+    InProgress,
+    Linked,
 }
 
 pub struct App {
     pub contacts: Vec<(String, String)>, // contact_name, input for this contact
     pub selected: usize,
     pub current_screen: CurrentScreen,
+    pub linking_status: LinkingStatus,
     pub character_index: usize,
+    pub textarea: String,
+
+    pub tx_thread: mpsc::Sender<EventApp>,
+    pub rx_tui: mpsc::Receiver<EventApp>,
+
+    pub tx_tui: mpsc::Sender<EventSend>,
+    pub rx_thread: Option<mpsc::Receiver<EventSend>>,
 }
 
 pub enum EventApp {
     KeyInput(event::KeyEvent),
     ContactsList(Vec<String>),
+    LinkingFinished(bool),
 }
-
 pub enum EventSend {
     SendText(String, String),
 }
 
 impl App {
-    pub fn new() -> App {
+    pub fn new(linking_status: LinkingStatus) -> App {
+        let (tx_thread, rx_tui) = mpsc::channel();
+        let (tx_tui, rx_thread) = mpsc::channel();
         App {
+            linking_status,
             contacts: vec![],
             selected: 0,
-            current_screen: CurrentScreen::Main,
             character_index: 0,
+            current_screen: CurrentScreen::LinkingNewDevice,
+            textarea: String::new(),
+
+            tx_thread,
+            rx_tui,
+            tx_tui,
+            rx_thread: Some(rx_thread),
         }
     }
 
     pub(crate) async fn run(
         &mut self,
         terminal: &mut Terminal<CrosstermBackend<Stderr>>,
-        rx: Receiver<EventApp>,
-        tx: Sender<EventSend>,
     ) -> io::Result<bool> {
+        if self.linking_status == LinkingStatus::Linked {
+            if let Some(rx) = self.rx_thread.take() {
+                if let Err(e) = init_background_threadss(self.tx_thread.clone(), rx).await {
+                    eprintln!("Failed to init threads: {:?}", e);
+                }
+            }
+            self.current_screen = CurrentScreen::Syncing;
+        }
+
+        let tx_key_events = self.tx_thread.clone();
+        thread::spawn(move || {
+            handle_key_input_events(tx_key_events);
+        });
+
         loop {
             terminal.draw(|f| ui(f, self))?;
 
-            if let Ok(event) = rx.recv() {
-                if self.handle_event(event, &tx)? {
-                    return Ok(true);
+            match self.rx_tui.try_recv() {
+                Ok(event) => {
+                    if self.handle_event(event, &self.tx_tui.clone()).await? {
+                        return Ok(true);
+                    }
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    return Ok(false);
                 }
             }
         }
     }
 
-    fn handle_event(&mut self, event: EventApp, tx: &Sender<EventSend>) -> io::Result<bool> {
+    async fn handle_event(&mut self, event: EventApp, tx: &Sender<EventSend>) -> io::Result<bool> {
         match event {
             EventApp::KeyInput(key) => {
                 if key.kind == KeyEventKind::Release {
@@ -69,10 +121,26 @@ impl App {
                 self.handle_key_event(key, tx)
             }
             EventApp::ContactsList(contacts) => {
+                if self.current_screen == CurrentScreen::Syncing {
+                    self.current_screen = CurrentScreen::Main;
+                }
                 self.contacts = contacts
                     .into_iter()
                     .map(|name| (name, String::new()))
                     .collect();
+                Ok(false)
+            }
+            EventApp::LinkingFinished(result) => {
+                match result {
+                    true => {
+                        self.linking_status = LinkingStatus::Linked;
+                        if let Some(rx) = self.rx_thread.take() {
+                            let _ = init_background_threadss(self.tx_thread.clone(), rx).await;
+                        }
+                        self.current_screen = CurrentScreen::Syncing;
+                    }
+                    false => self.linking_status = LinkingStatus::Unlinked,
+                }
                 Ok(false)
             }
         }
@@ -141,15 +209,110 @@ impl App {
                 KeyCode::Esc | KeyCode::Char('q') => self.current_screen = Main,
                 _ => {}
             },
+            LinkingNewDevice => {
+                match self.linking_status {
+                    LinkingStatus::Linked => self.current_screen = Syncing,
+                    LinkingStatus::Unlinked => {
+                        if key.kind == KeyEventKind::Press {
+                            match key.code {
+                                KeyCode::Enter => {
+                                    if Path::new(QRCODE).exists() {
+                                        fs::remove_file(QRCODE)?;
+                                    }
+
+                                    //spawn thread to link device
+                                    let device_name = self.textarea.clone();
+                                    let tx_link_device_event = self.tx_thread.clone();
+                                    thread::Builder::new()
+                                        .name(String::from("linking_device_thread"))
+                                        .stack_size(1024 * 1024 * 8)
+                                        .spawn(move || {
+                                            let runtime = Builder::new_multi_thread()
+                                                .thread_name("linking_device_runtime")
+                                                .enable_all()
+                                                .build()
+                                                .unwrap();
+                                            runtime.block_on(async move {
+                                                handle_linking_device(
+                                                    tx_link_device_event,
+                                                    device_name,
+                                                )
+                                                .await;
+                                            })
+                                        })
+                                        .unwrap();
+
+                                    self.linking_status = LinkingStatus::InProgress
+                                }
+                                KeyCode::Backspace => {
+                                    self.textarea.pop();
+                                }
+
+                                KeyCode::Esc => {
+                                    self.current_screen = LinkingNewDevice;
+                                }
+
+                                KeyCode::Char(value) => self.textarea.push(value),
+
+                                _ => {}
+                            }
+                        }
+                    }
+                    LinkingStatus::InProgress => {}
+                }
+            }
+            Syncing => {}
         }
         Ok(false)
     }
 }
 
-impl Default for App {
-    fn default() -> Self {
-        Self::new()
-    }
+/// spawn thread to sync contacts and to send messeges
+pub async fn init_background_threadss(
+    tx_thread: mpsc::Sender<EventApp>,
+    rx_thread: mpsc::Receiver<EventSend>,
+) -> Result<()> {
+    let manager: AsyncRegisteredManager = Arc::new(RwLock::new(create_registered_manager().await?));
+
+    //spawn thread to sync contacts
+    let tx_contacts_events = tx_thread.clone();
+    let new_manager = Arc::clone(&manager);
+    thread::Builder::new()
+        .name(String::from("contacts_thread"))
+        .stack_size(1024 * 1024 * 8)
+        .spawn(move || {
+            let runtime = Builder::new_multi_thread()
+                .thread_name("contacts_runtime")
+                .enable_all()
+                .build()
+                .unwrap();
+            runtime.block_on(async move {
+                handle_contacts(tx_contacts_events, new_manager).await;
+            })
+        })
+        .unwrap();
+
+    //spawn thread to send messeges
+    let new_manager = Arc::clone(&manager);
+    let rx_sending_thread = rx_thread;
+    // thread::spawn(move || {
+    thread::Builder::new()
+        .name(String::from("sending_thread"))
+        .stack_size(1024 * 1024 * 8)
+        .spawn(move || {
+            let runtime = Builder::new_multi_thread()
+                .thread_name("sending_runtime")
+                .enable_all()
+                .build()
+                .unwrap();
+            runtime.block_on(async move {
+                handle_sending_messages(rx_sending_thread, new_manager).await;
+            })
+            // let x = rx_thread;
+        })
+        .unwrap();
+
+    Ok(())
 }
 
 pub fn handle_key_input_events(tx: mpsc::Sender<EventApp>) {
@@ -226,5 +389,15 @@ pub async fn handle_sending_messages(
                 }
             }
         }
+    }
+}
+
+pub async fn handle_linking_device(tx: mpsc::Sender<EventApp>, device_name: String) {
+    let result = devices::link_new_device_tui(device_name).await;
+
+    let success = result.is_ok();
+
+    if tx.send(EventApp::LinkingFinished(success)).is_err() {
+        eprintln!("Failed to send linking status");
     }
 }
