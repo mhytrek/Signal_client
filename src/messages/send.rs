@@ -9,10 +9,7 @@ use presage::proto::DataMessage;
 use presage::store::ContentsStore;
 use presage::Manager;
 use presage_store_sled::{SledStore, SledStoreError};
-use std::{
-    str::FromStr,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// finds contact uuid from string that can be contact_name or contact phone_number
 pub async fn find_uuid(
@@ -25,9 +22,12 @@ pub async fn find_uuid(
         .into_iter()
         .filter_map(|c| c.ok())
         .find(|c| {
-            c.name == recipient_info
+            // Compare first by name, then by phone number
+            // and finally by UUID
+            (c.name == recipient_info) 
                 || (c.phone_number.is_some()
                     && c.phone_number.clone().unwrap().to_string() == recipient_info)
+                || (c.uuid.to_string() == recipient_info)
         })
         .map(|c| c.uuid);
 
@@ -36,10 +36,10 @@ pub async fn find_uuid(
 
 async fn get_address(
     recipient: String,
-    _manager: &mut Manager<SledStore, Registered>,
+    manager: &mut Manager<SledStore, Registered>,
 ) -> Result<ServiceId> {
-    // let recipient_uuid = find_uuid(recipient, manager).await?;
-    let recipient_uuid = Uuid::from_str(&recipient)?;
+    let recipient_uuid = find_uuid(recipient, manager).await?;
+    // let recipient_uuid = Uuid::from_str(&recipient)?;
     Ok(ServiceId::Aci(recipient_uuid.into()))
 }
 

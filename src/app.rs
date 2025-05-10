@@ -1,5 +1,5 @@
 use crate::paths::QRCODE;
-use crate::sending_text::send_message_tui;
+use crate::messages::send::send_message_tui;
 use crate::ui::ui;
 use crate::{contacts, create_registered_manager, devices, AsyncRegisteredManager};
 use anyhow::Result;
