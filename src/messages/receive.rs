@@ -104,7 +104,8 @@ pub async fn receive_messages_cli() -> Result<Vec<Content>> {
         &mut manager,
         Some(&mut contents),
         current_contacts_mutex
-    );
+    )
+    .await?;
 
     Ok(contents)
 }

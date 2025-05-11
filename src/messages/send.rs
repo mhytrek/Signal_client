@@ -89,7 +89,7 @@ async fn send_message(
         None,
         current_contacts_mutex,
     )
-    .await;
+    .await?;
 
     send(manager, recipient_address, data_message, timestamp).await?;
 
@@ -101,10 +101,11 @@ pub async fn send_message_tui(
     recipient: String,
     text_message: String,
     manager_mutex: AsyncRegisteredManager,
+    current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
     // let mut manager = create_registered_manager().await?;
     let mut manager = manager_mutex.write().await;
-    send_message(&mut manager, recipient, text_message).await
+    send_message(&mut manager, recipient, text_message, current_contacts_mutex).await
 }
 
 /// sends text message to recipient ( phone number or name ), for usage with CLI

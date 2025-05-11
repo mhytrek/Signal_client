@@ -25,7 +25,7 @@ async fn sync_contacts(
         None,
         new_contacts_mutex,
     )
-    .await;
+    .await?;
     manager.request_contacts().await?;
     let messages = manager.receive_messages().await?;
     receiving_loop(
@@ -34,7 +34,7 @@ async fn sync_contacts(
         None,
         current_contacts_mutex,
     )
-    .await;
+    .await?;
     Ok(())
 }
 
@@ -46,9 +46,9 @@ pub async fn sync_contacts_cli() -> Result<()> {
 }
 
 /// Function to sync contacts when TUI is used
-pub async fn sync_contacts_tui(manager_mutex: AsyncRegisteredManager) -> Result<()> {
+pub async fn sync_contacts_tui(manager_mutex: AsyncRegisteredManager, current_contacts_mutex: AsyncContactsMap) -> Result<()> {
     let mut manager = manager_mutex.write().await;
-    sync_contacts(&mut manager).await
+    sync_contacts(&mut manager, current_contacts_mutex).await
 }
 
 async fn get_contacts(manager: &Manager<SledStore, Registered>) -> Result<HashMap<Uuid, Contact>> {
