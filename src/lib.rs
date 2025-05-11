@@ -1,11 +1,11 @@
 use anyhow::{Error, Result};
 use presage::{
-    manager::{Manager, Registered},
-    model::identity::OnNewIdentity,
+    libsignal_service::prelude::Uuid, manager::{Manager, Registered}, model::{contacts::Contact, identity::OnNewIdentity}
 };
 use presage_store_sled::{MigrationConflictStrategy, SledStore};
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
+use std::collections::HashMap;
 
 pub mod app;
 pub mod args;
@@ -20,6 +20,8 @@ pub mod ui;
 pub mod sending {}
 
 pub type AsyncRegisteredManager = Arc<RwLock<Manager<SledStore, Registered>>>;
+
+pub type AsyncContactsMap = Arc<Mutex<HashMap<Uuid, Contact>>>;
 
 /// Creates new manager in registered state
 pub async fn create_registered_manager() -> Result<Manager<SledStore, Registered>> {
