@@ -43,6 +43,7 @@ pub struct App {
     pub selected: usize,
     pub current_screen: CurrentScreen,
     pub linking_status: LinkingStatus,
+    pub network_status: NetworkStatus,
     pub character_index: usize,
     pub textarea: String,
 
@@ -53,11 +54,18 @@ pub struct App {
     pub rx_thread: Option<mpsc::Receiver<EventSend>>,
 }
 
+#[derive(PartialEq, Clone)]
+pub enum NetworkStatus {
+    Connected,
+    Disconnected(String),
+}
+
 pub enum EventApp {
     KeyInput(event::KeyEvent),
     ContactsList(Vec<String>),
     LinkingFinished(bool),
     LinkingError(String),
+    NetworkStatusChanged(NetworkStatus),
 }
 pub enum EventSend {
     SendText(String, String),
@@ -74,6 +82,7 @@ impl App {
             character_index: 0,
             current_screen: CurrentScreen::LinkingNewDevice,
             textarea: String::new(),
+            network_status: NetworkStatus::Connected,
 
             tx_thread,
             rx_tui,
@@ -124,6 +133,10 @@ impl App {
                     return Ok(false);
                 }
                 self.handle_key_event(key, tx)
+            }
+            EventApp::NetworkStatusChanged(status) => {
+                self.network_status = status;
+                Ok(false)
             }
             EventApp::LinkingError(error_msg) => {
                 self.linking_status = LinkingStatus::Error(error_msg);
@@ -318,6 +331,7 @@ pub async fn init_background_threadss(
     let rx_sending_thread = rx_thread;
     let new_contacts = Arc::clone(&current_contacts_mutex);
     // thread::spawn(move || {
+    let tx_status_clone = tx_thread.clone(); // Clone for passing to sending thread
     thread::Builder::new()
         .name(String::from("sending_thread"))
         .stack_size(1024 * 1024 * 8)
@@ -328,9 +342,8 @@ pub async fn init_background_threadss(
                 .build()
                 .unwrap();
             runtime.block_on(async move {
-                handle_sending_messages(rx_sending_thread, new_manager, new_contacts).await;
+                handle_sending_messages(rx_sending_thread, new_manager, new_contacts,  tx_status_clone).await;
             })
-            // let x = rx_thread;
         })
         .unwrap();
 
@@ -358,9 +371,22 @@ pub async fn handle_contacts(
     loop {
         let new_mutex = Arc::clone(&manager_mutex);
         let new_contacts_mutex = Arc::clone(&current_contacts_mutex);
-        contacts::sync_contacts_tui(new_mutex, new_contacts_mutex)
-            .await
-            .unwrap();
+        match contacts::sync_contacts_tui(new_mutex, new_contacts_mutex).await {
+            Ok(_) => {
+                let _ = tx.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+            }
+            Err(e) => {
+                if e.to_string().contains("connection")
+                    || e.to_string().contains("network")
+                    || e.to_string().contains("Websocket")
+                    || e.to_string().contains("timeout")
+                {
+                    let _ = tx.send(EventApp::NetworkStatusChanged(NetworkStatus::Disconnected(
+                        "WiFi connection lost".to_string(),
+                    )));
+                }
+            }
+        };
 
         let new_mutex = Arc::clone(&manager_mutex);
         let result = contacts::list_contacts_tui(new_mutex).await;
@@ -409,28 +435,42 @@ pub async fn handle_sending_messages(
     rx: Receiver<EventSend>,
     manager_mutex: AsyncRegisteredManager,
     current_contacts_mutex: AsyncContactsMap,
+    tx_status: mpsc::Sender<EventApp>, // Add parameter for status updates
 ) {
     loop {
         if let Ok(event) = rx.recv() {
             match event {
                 EventSend::SendText(recipient, text) => {
-                    if let Result::Err(err_mess) = send_message_tui(
-                        recipient,
-                        text,
+                    match send_message_tui(
+                        recipient.clone(),
+                        text.clone(),
                         Arc::clone(&manager_mutex),
                         Arc::clone(&current_contacts_mutex),
                     )
                     .await
                     {
-                        println!("{:?}", err_mess)
+                        Ok(_) => {
+                            let _ = tx_status
+                                .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                        }
+                        Err(err) => {
+                            if err.to_string().contains("connection")
+                                || err.to_string().contains("network")
+                                || err.to_string().contains("Websocket")
+                                || err.to_string().contains("timeout")
+                            {
+                                let _ = tx_status.send(EventApp::NetworkStatusChanged(
+                                    NetworkStatus::Disconnected(
+                                        "Cannot send: WiFi disconnected".to_string(),
+                                    ),
+                                ));
+                            } else {
+                                println!("Error sending message: {:?}", err);
+                            }
+                        }
                     }
-                    contacts::sync_contacts_tui(
-                        Arc::clone(&manager_mutex),
-                        Arc::clone(&current_contacts_mutex),
-                    )
-                    .await
-                    .unwrap();
-                    // Need to add error handling
+
+                    let _ = contacts::sync_contacts_tui(Arc::clone(&manager_mutex), Arc::clone(&current_contacts_mutex)).await;
                 }
             }
         }
@@ -447,11 +487,11 @@ pub async fn handle_linking_device(tx: mpsc::Sender<EventApp>, device_name: Stri
             }
         }
         Err(e) => {
-            // Check if the error is related to network connectivity
-            let error_msg = if e.to_string().contains("connection") ||
-                e.to_string().contains("network") ||
-                e.to_string().contains("unreachable") ||
-                e.to_string().contains("timeout") {
+            let error_msg = if e.to_string().contains("connection")
+                || e.to_string().contains("network")
+                || e.to_string().contains("unreachable")
+                || e.to_string().contains("timeout")
+            {
                 "Network error: Please check your WiFi connection".to_string()
             } else {
                 e.to_string()
