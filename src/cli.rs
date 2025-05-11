@@ -1,6 +1,6 @@
-use crate::{contacts::list_contacts_cli, messages::{ list_messages_cli, receive_messages_cli}};
+use crate::{contacts::list_contacts_cli, messages::receive::{ list_messages_cli, receive_messages_cli}};
 use anyhow::Result;
-use presage::{libsignal_service::{content::ContentBody, prelude::Content}, model::contacts::Contact, proto::{sync_message::{message_request_response, Sent}, DataMessage, SyncMessage}, store::ContentExt};
+use presage::{libsignal_service::{content::ContentBody, prelude::Content}, model::contacts::Contact, proto::{sync_message::Sent, DataMessage, SyncMessage}, store::ContentExt};
 
 fn print_contact(contact: &Contact) {
     println!("Name: {}", contact.name);

@@ -1,4 +1,4 @@
-use crate::create_registered_manager;
+use crate::{create_registered_manager, AsyncContactsMap};
 use crate::messages::receive::receiving_loop;
 use crate::AsyncRegisteredManager;
 use anyhow::Result;
@@ -8,21 +8,41 @@ use presage::model::contacts::Contact;
 use presage::store::ContentsStore;
 use presage::Manager;
 use presage_store_sled::{SledStore, SledStoreError};
+use tokio::sync::Mutex;
 use std::collections::HashMap;
+use std::sync::Arc;
 
-async fn sync_contacts(manager: &mut Manager<SledStore, Registered>) -> Result<()> {
+async fn sync_contacts(
+    manager: &mut Manager<SledStore, Registered>,
+    current_contacts_mutex: AsyncContactsMap,
+) -> Result<()> {
     let messages = manager.receive_messages().await?;
-    receiving_loop(messages).await;
+
+    let new_contacts_mutex = Arc::clone(&current_contacts_mutex);
+    receiving_loop(
+        messages,
+        manager,
+        None,
+        new_contacts_mutex,
+    )
+    .await;
     manager.request_contacts().await?;
     let messages = manager.receive_messages().await?;
-    receiving_loop(messages).await;
+    receiving_loop(
+        messages,
+        manager,
+        None,
+        current_contacts_mutex,
+    )
+    .await;
     Ok(())
 }
 
 /// Function to sync contacts when CLI is used
 pub async fn sync_contacts_cli() -> Result<()> {
     let mut manager = create_registered_manager().await?;
-    sync_contacts(&mut manager).await
+    let current_contacts_mutex: AsyncContactsMap = Arc::new(Mutex::new(get_contacts(&manager).await?));
+    sync_contacts(&mut manager, current_contacts_mutex).await
 }
 
 /// Function to sync contacts when TUI is used
@@ -43,9 +63,9 @@ async fn get_contacts(manager: &Manager<SledStore, Registered>) -> Result<HashMa
     Ok(contacts_map)
 }
 
-pub async fn get_contacts_cli() -> Result<HashMap<Uuid, Contact>> {
-    let manager = create_registered_manager().await?;
-    get_contacts(&manager).await
+pub async fn get_contacts_cli(manager: &Manager<SledStore, Registered>) -> Result<HashMap<Uuid, Contact>> {
+    // let manager = create_registered_manager().await?;
+    get_contacts(manager).await
 }
 
 pub async fn get_contacts_tui(

@@ -3,4 +3,4 @@ store/
 .vscode/
 
 # Tags for vim
-src/tags
+tags
