@@ -57,6 +57,9 @@ pub fn ui(frame: &mut Frame, app: &App) {
                 render_paragraph(frame, chunks[1], text);
             }
             LinkingStatus::Linked => {}
+            LinkingStatus::Error(ref _error_msg) => {
+                render_popup(frame, frame.area(), &format!("Error linking device, check if you have Internet connection.\n PRESS ANY KEY TO RETRY"));
+            }
         },
         CurrentScreen::Syncing => {
             render_popup(frame, frame.area(), "Syncing contacts and messeges...");

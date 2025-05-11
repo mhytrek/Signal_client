@@ -35,6 +35,7 @@ pub enum LinkingStatus {
     Unlinked,
     InProgress,
     Linked,
+    Error(String),
 }
 
 pub struct App {
@@ -56,6 +57,7 @@ pub enum EventApp {
     KeyInput(event::KeyEvent),
     ContactsList(Vec<String>),
     LinkingFinished(bool),
+    LinkingError(String),
 }
 pub enum EventSend {
     SendText(String, String),
@@ -123,6 +125,10 @@ impl App {
                 }
                 self.handle_key_event(key, tx)
             }
+            EventApp::LinkingError(error_msg) => {
+                self.linking_status = LinkingStatus::Error(error_msg);
+                Ok(false)
+            }
             EventApp::ContactsList(contacts) => {
                 if self.current_screen == CurrentScreen::Syncing {
                     self.current_screen = CurrentScreen::Main;
@@ -158,8 +164,10 @@ impl App {
 
     fn delete_char(&mut self) {
         if let Some((_, input)) = self.contacts.get_mut(self.selected) {
-            input.pop();
-            self.character_index -= 1;
+            if self.character_index > 0 {
+                input.pop();
+                self.character_index -= 1;
+            }
         }
     }
     fn submit_message(&mut self, tx: &Sender<EventSend>) {
@@ -262,6 +270,11 @@ impl App {
                         }
                     }
                     LinkingStatus::InProgress => {}
+                    LinkingStatus::Error(_) => {
+                        if key.kind == KeyEventKind::Press {
+                            self.linking_status = LinkingStatus::Unlinked;
+                        }
+                    }
                 }
             }
             Syncing => {}
@@ -427,9 +440,26 @@ pub async fn handle_sending_messages(
 pub async fn handle_linking_device(tx: mpsc::Sender<EventApp>, device_name: String) {
     let result = devices::link_new_device_tui(device_name).await;
 
-    let success = result.is_ok();
+    match result {
+        Ok(_) => {
+            if tx.send(EventApp::LinkingFinished(true)).is_err() {
+                eprintln!("Failed to send linking status");
+            }
+        }
+        Err(e) => {
+            // Check if the error is related to network connectivity
+            let error_msg = if e.to_string().contains("connection") ||
+                e.to_string().contains("network") ||
+                e.to_string().contains("unreachable") ||
+                e.to_string().contains("timeout") {
+                "Network error: Please check your WiFi connection".to_string()
+            } else {
+                e.to_string()
+            };
 
-    if tx.send(EventApp::LinkingFinished(success)).is_err() {
-        eprintln!("Failed to send linking status");
+            if tx.send(EventApp::LinkingError(error_msg)).is_err() {
+                eprintln!("Failed to send linking error");
+            }
+        }
     }
 }

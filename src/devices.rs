@@ -19,32 +19,40 @@ pub async fn link_new_device_tui(device_name: String) -> Result<()> {
         MigrationConflictStrategy::Drop,
         OnNewIdentity::Trust,
     )
-    .await?;
+        .await?;
 
     if !Path::new(ASSETS).exists() {
         fs::create_dir(ASSETS).await?;
     }
 
     let (tx, rx) = oneshot::channel();
-    let (_manager, _err) = future::join(
-        Manager::link_secondary_device(store, SignalServers::Production, device_name, tx),
-        async move {
-            match rx.await {
-                Ok(url) => {
-                    let mut file = File::create(QRCODE).expect("Failed to create QRcode file");
 
-                    file.write_all(url.as_ref().as_bytes())
-                        .expect("Failed to save url to qr code");
-                }
-                Err(err) => println!("Error while linking device: {}", err),
+    let manager_task = Manager::link_secondary_device(store, SignalServers::Production, device_name, tx);
+
+    let url_handler_task = async move {
+        match rx.await {
+            Ok(url) => {
+                let mut file = File::create(QRCODE).map_err(|e| {
+                    anyhow::anyhow!("Failed to create QRcode file: {}", e)
+                })?;
+
+                file.write_all(url.as_ref().as_bytes()).map_err(|e| {
+                    anyhow::anyhow!("Failed to save url to qr code: {}", e)
+                })?;
+                Ok(())
             }
-        },
-    )
-    .await;
+            Err(err) => Err(anyhow::anyhow!("Login error: {}", err)),
+        }
+    };
+
+    let (manager_result, url_handler_result) = future::join(manager_task, url_handler_task).await;
 
     if Path::new(ASSETS).exists() {
         fs::remove_dir_all(ASSETS).await?;
     }
+
+    manager_result?;
+    url_handler_result?;
 
     Ok(())
 }
