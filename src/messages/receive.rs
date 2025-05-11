@@ -116,14 +116,13 @@ async fn check_contacts(
     current_contacts_mutex: AsyncContactsMap
 ) -> Result<()> {
     let mut current_contacts = current_contacts_mutex.lock().await;
-    let store_contacts: Vec<Contact> = manager
-        .store()
-        .contacts()
-        .await?
-        .filter_map(|c_res| c_res.ok())
-        .collect();
     
-    for mut contact in store_contacts {
+    for contact_res in manager.store().contacts().await? {
+        let mut contact = match contact_res {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        
         let old_contact = match current_contacts.get(&contact.uuid) {
             Some(c) => c,
             None => continue,
@@ -138,10 +137,18 @@ async fn check_contacts(
         }
 
         // Maybe it works, maybe it doesn't, requires behavioral testing
-        manager.store().to_owned().save_contact(&contact).await?;
+        // manager.store().to_owned().save_contact(&contact).await?;
+        // IT DEFINITELY REQUIRES TESTING
+        // EXTREMELY UNSAFE
+        // However avoids unnecessary copying
+        // It SHOULD work as long as receiving loop function is run with manager
+        // on write lock or owned instance (shouldn't be a problem, because function needs)
+        // a mutable reference, write lock is required for that
+        unsafe {
+            let store = manager.store() as *const SledStore as *mut SledStore;
+            (*store).save_contact(&contact).await?; 
+        }
         current_contacts.insert(contact.uuid, contact);
-
     }
-    
     Ok(())
 }
