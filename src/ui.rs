@@ -74,11 +74,9 @@ fn render_contact_list(frame: &mut Frame, app: &App, area: Rect) {
         .iter()
         .enumerate()
         .map(|(i, (name, _id))| {
-            let mut style = Style::default().fg(Color::White);
+            let mut style = Style::default();
             if i == app.selected {
                 style = style
-                    .bg(Color::White)
-                    .fg(Color::Black)
                     .add_modifier(Modifier::BOLD);
             }
             ListItem::new(name.clone()).style(style)
@@ -128,7 +126,7 @@ fn render_popup(frame: &mut Frame, area: Rect, text: &str) {
         .borders(Borders::ALL)
         .border_type(BorderType::Double);
 
-    let styled_text = Text::styled(text, Style::default().fg(Color::White));
+    let styled_text = Text::styled(text, Style::default());
 
     let paragraph = Paragraph::new(styled_text)
         .block(popup_block)
