@@ -14,7 +14,7 @@ use ratatui::{
 use tui_qrcode::{Colors, QrCodeWidget};
 
 use crate::{
-    app::{App, CurrentScreen, LinkingStatus},
+    app::{App, CurrentScreen, LinkingStatus, NetworkStatus},
     paths::QRCODE,
 };
 
@@ -58,7 +58,7 @@ pub fn ui(frame: &mut Frame, app: &App) {
             }
             LinkingStatus::Linked => {}
             LinkingStatus::Error(ref _error_msg) => {
-                render_popup(frame, frame.area(), &format!("Error linking device, check if you have Internet connection.\n PRESS ANY KEY TO RETRY"));
+                render_popup(frame, frame.area(), "Error linking device, check if you have Internet connection.\n PRESS ANY KEY TO RETRY");
             }
         },
         CurrentScreen::Syncing => {
@@ -169,8 +169,17 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
         }
     };
 
+    let network_status = match &app.network_status {
+        NetworkStatus::Connected => Span::styled("⚡ Online", Style::default().fg(Color::Green)),
+        NetworkStatus::Disconnected(msg) => {
+            Span::styled(format!("⚠ {}", msg), Style::default().fg(Color::Red))
+        }
+    };
+
+    let footer_text = Line::from(vec![current_keys_hint, Span::raw(" | "), network_status]);
+
     let key_notes_footer =
-        Paragraph::new(Line::from(current_keys_hint)).block(Block::default().borders(Borders::ALL));
+        Paragraph::new(footer_text).block(Block::default().borders(Borders::ALL));
 
     frame.render_widget(key_notes_footer, area);
 }
