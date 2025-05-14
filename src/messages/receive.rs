@@ -1,24 +1,23 @@
 use std::str::FromStr;
 use std::sync::Arc;
 
+use anyhow::Result;
 use futures::Stream;
 use futures::{pin_mut, StreamExt};
-use presage::manager::Registered;
-use presage::model::messages::Received;
-use presage_store_sled::{SledStore, SledStoreError};
-use presage::store::ContentsStore;
-use presage::manager::Manager;
-use presage::model::contacts::Contact;
-use anyhow::Result;
 use presage::libsignal_service::prelude::Content;
 use presage::libsignal_service::prelude::Uuid;
+use presage::manager::Manager;
+use presage::manager::Registered;
+use presage::model::messages::Received;
+use presage::store::ContentsStore;
 use presage::store::Thread;
+use presage_store_sled::{SledStore, SledStoreError};
 use tokio::sync::Mutex;
 
-use crate::AsyncContactsMap;
-use crate::create_registered_manager;
-use crate::AsyncRegisteredManager;
 use crate::contacts::get_contacts_cli;
+use crate::create_registered_manager;
+use crate::AsyncContactsMap;
+use crate::AsyncRegisteredManager;
 
 async fn loop_no_contents(messages: impl Stream<Item = Received>) {
     pin_mut!(messages);
@@ -31,10 +30,7 @@ async fn loop_no_contents(messages: impl Stream<Item = Received>) {
     }
 }
 
-async fn loop_with_contents(
-    messages: impl Stream<Item = Received>,
-    contents: &mut Vec<Content>,
-) {
+async fn loop_with_contents(messages: impl Stream<Item = Received>, contents: &mut Vec<Content>) {
     pin_mut!(messages);
     while let Some(received) = messages.next().await {
         match received {
@@ -59,7 +55,6 @@ pub async fn receiving_loop(
         None => loop_no_contents(messages).await,
     };
     check_contacts(manager, current_contacts_mutex).await
-
 }
 
 async fn list_messages(
@@ -71,31 +66,38 @@ async fn list_messages(
     let thread = Thread::Contact(recipient_uuid);
     let from_u64 = u64::from_str(&from)?;
 
-    Ok(manager.store().messages(&thread,from_u64..).await?.collect())
+    Ok(manager
+        .store()
+        .messages(&thread, from_u64..)
+        .await?
+        .collect())
 }
 
 /// Returns iterator over stored messeges from certain time for given contact uuid, for use in TUI
 pub async fn list_messages_tui(
     recipient: String,
-    from:String,
+    from: String,
     manager_mutex: AsyncRegisteredManager,
 ) -> Result<Vec<Result<Content, SledStoreError>>> {
     let manager = manager_mutex.read().await;
-    list_messages(&manager,recipient, from).await
+    list_messages(&manager, recipient, from).await
 }
 
-
 /// Returns iterator over stored messeges from certain time for given contact uuid, for use in CLI
-pub async fn list_messages_cli(recipient: String, from:String) -> Result<Vec<Result<Content, SledStoreError>>> {
+pub async fn list_messages_cli(
+    recipient: String,
+    from: String,
+) -> Result<Vec<Result<Content, SledStoreError>>> {
     let manager = create_registered_manager().await?;
-    list_messages(&manager,recipient, from).await
+    list_messages(&manager, recipient, from).await
     // print!("{:?}", mess);
 }
 
 /// Function to receive messages for CLI interface
 pub async fn receive_messages_cli() -> Result<Vec<Content>> {
     let mut manager = create_registered_manager().await?;
-    let current_contacts_mutex: AsyncContactsMap = Arc::new(Mutex::new(get_contacts_cli(&manager).await?));
+    let current_contacts_mutex: AsyncContactsMap =
+        Arc::new(Mutex::new(get_contacts_cli(&manager).await?));
     let messages = manager.receive_messages().await?;
     let mut contents = Vec::new();
 
@@ -103,33 +105,32 @@ pub async fn receive_messages_cli() -> Result<Vec<Content>> {
         messages,
         &mut manager,
         Some(&mut contents),
-        current_contacts_mutex
+        current_contacts_mutex,
     )
     .await?;
 
     Ok(contents)
 }
 
-
 async fn check_contacts(
     manager: &mut Manager<SledStore, Registered>,
-    current_contacts_mutex: AsyncContactsMap
+    current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
     let mut current_contacts = current_contacts_mutex.lock().await;
-    
+
     for contact_res in manager.store().contacts().await? {
         let mut contact = match contact_res {
             Ok(c) => c,
             Err(_) => continue,
         };
-        
+
         let old_contact = match current_contacts.get(&contact.uuid) {
             Some(c) => c,
             None => continue,
         };
 
         if contact.name.is_empty() && !old_contact.name.is_empty() {
-            contact.name = old_contact.name.clone(); 
+            contact.name = old_contact.name.clone();
         }
 
         if contact.phone_number.is_none() && old_contact.phone_number.is_some() {
@@ -146,7 +147,7 @@ async fn check_contacts(
         // a mutable reference, write lock is required for that
         unsafe {
             let store = manager.store() as *const SledStore as *mut SledStore;
-            (*store).save_contact(&contact).await?; 
+            (*store).save_contact(&contact).await?;
         }
         current_contacts.insert(contact.uuid, contact);
     }

@@ -10,9 +10,9 @@ use presage::proto::DataMessage;
 use presage::store::ContentsStore;
 use presage::Manager;
 use presage_store_sled::{SledStore, SledStoreError};
-use tokio::sync::Mutex;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::Mutex;
 
 /// finds contact uuid from string that can be contact_name or contact phone_number
 pub async fn find_uuid(
@@ -27,7 +27,7 @@ pub async fn find_uuid(
         .find(|c| {
             // Compare first by name, then by phone number
             // and finally by UUID
-            (c.name == recipient_info) 
+            (c.name == recipient_info)
                 || (c.phone_number.is_some()
                     && c.phone_number.clone().unwrap().to_string() == recipient_info)
                 || (c.uuid.to_string() == recipient_info)
@@ -83,13 +83,7 @@ async fn send_message(
     let data_message = create_data_message(text_message, timestamp)?;
 
     let messages = manager.receive_messages().await?;
-    receiving_loop(
-        messages,
-        manager,
-        None,
-        current_contacts_mutex,
-    )
-    .await?;
+    receiving_loop(messages, manager, None, current_contacts_mutex).await?;
 
     send(manager, recipient_address, data_message, timestamp).await?;
 
@@ -105,12 +99,25 @@ pub async fn send_message_tui(
 ) -> Result<()> {
     // let mut manager = create_registered_manager().await?;
     let mut manager = manager_mutex.write().await;
-    send_message(&mut manager, recipient, text_message, current_contacts_mutex).await
+    send_message(
+        &mut manager,
+        recipient,
+        text_message,
+        current_contacts_mutex,
+    )
+    .await
 }
 
 /// sends text message to recipient ( phone number or name ), for usage with CLI
 pub async fn send_message_cli(recipient: String, text_message: String) -> Result<()> {
     let mut manager = create_registered_manager().await?;
-    let current_contacts_mutex: AsyncContactsMap = Arc::new(Mutex::new(get_contacts_cli(&manager).await?));
-    send_message(&mut manager, recipient, text_message, current_contacts_mutex).await
+    let current_contacts_mutex: AsyncContactsMap =
+        Arc::new(Mutex::new(get_contacts_cli(&manager).await?));
+    send_message(
+        &mut manager,
+        recipient,
+        text_message,
+        current_contacts_mutex,
+    )
+    .await
 }

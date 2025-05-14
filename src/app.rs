@@ -1,8 +1,10 @@
 use crate::contacts::get_contacts_tui;
-use crate::paths::QRCODE;
 use crate::messages::send::send_message_tui;
+use crate::paths::QRCODE;
 use crate::ui::ui;
-use crate::{contacts, create_registered_manager, devices, AsyncContactsMap, AsyncRegisteredManager};
+use crate::{
+    contacts, create_registered_manager, devices, AsyncContactsMap, AsyncRegisteredManager,
+};
 use anyhow::Result;
 use crossterm::event;
 use crossterm::event::{KeyCode, KeyEventKind};
@@ -276,7 +278,8 @@ pub async fn init_background_threadss(
     let manager: AsyncRegisteredManager = Arc::new(RwLock::new(create_registered_manager().await?));
 
     let new_manager_mutex = Arc::clone(&manager);
-    let current_contacts_mutex: AsyncContactsMap = Arc::new(Mutex::new(get_contacts_tui(new_manager_mutex).await?));
+    let current_contacts_mutex: AsyncContactsMap =
+        Arc::new(Mutex::new(get_contacts_tui(new_manager_mutex).await?));
 
     //spawn thread to sync contacts
     let tx_contacts_events = tx_thread.clone();
@@ -342,7 +345,9 @@ pub async fn handle_contacts(
     loop {
         let new_mutex = Arc::clone(&manager_mutex);
         let new_contacts_mutex = Arc::clone(&current_contacts_mutex);
-        contacts::sync_contacts_tui(new_mutex, new_contacts_mutex).await.unwrap();
+        contacts::sync_contacts_tui(new_mutex, new_contacts_mutex)
+            .await
+            .unwrap();
 
         let new_mutex = Arc::clone(&manager_mutex);
         let result = contacts::list_contacts_tui(new_mutex).await;
@@ -396,14 +401,22 @@ pub async fn handle_sending_messages(
         if let Ok(event) = rx.recv() {
             match event {
                 EventSend::SendText(recipient, text) => {
-                    if let Result::Err(err_mess) =
-                        send_message_tui(recipient, text, Arc::clone(&manager_mutex), Arc::clone(&current_contacts_mutex)).await
+                    if let Result::Err(err_mess) = send_message_tui(
+                        recipient,
+                        text,
+                        Arc::clone(&manager_mutex),
+                        Arc::clone(&current_contacts_mutex),
+                    )
+                    .await
                     {
                         println!("{:?}", err_mess)
                     }
-                    contacts::sync_contacts_tui(Arc::clone(&manager_mutex), Arc::clone(&current_contacts_mutex))
-                        .await
-                        .unwrap();
+                    contacts::sync_contacts_tui(
+                        Arc::clone(&manager_mutex),
+                        Arc::clone(&current_contacts_mutex),
+                    )
+                    .await
+                    .unwrap();
                     // Need to add error handling
                 }
             }

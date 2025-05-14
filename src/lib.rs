@@ -1,21 +1,23 @@
 use anyhow::{Error, Result};
 use presage::{
-    libsignal_service::prelude::Uuid, manager::{Manager, Registered}, model::{contacts::Contact, identity::OnNewIdentity}
+    libsignal_service::prelude::Uuid,
+    manager::{Manager, Registered},
+    model::{contacts::Contact, identity::OnNewIdentity},
 };
 use presage_store_sled::{MigrationConflictStrategy, SledStore};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
-use std::collections::HashMap;
 
 pub mod app;
 pub mod args;
 pub mod cli;
 pub mod contacts;
 pub mod devices;
+pub mod messages;
 pub mod paths;
 pub mod tui;
 pub mod ui;
-pub mod messages;
 
 pub mod sending {}
 
