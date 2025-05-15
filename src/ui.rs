@@ -14,7 +14,7 @@ use ratatui::{
 use tui_qrcode::{Colors, QrCodeWidget};
 
 use crate::{
-    app::{App, CurrentScreen, LinkingStatus, NetworkStatus},
+    app::{App, CurrentScreen, InputFocus, LinkingStatus, NetworkStatus},
     paths::QRCODE,
 };
 
@@ -96,7 +96,7 @@ fn render_contact_list(frame: &mut Frame, app: &App, area: Rect) {
 
 /// Renders the chat window and input box in the right chunk of the screen
 fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
-    let chat_chunks = Layout::default()
+    let vertical_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(3)])
         .split(area);
@@ -107,17 +107,39 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
             .borders(Borders::ALL),
     );
 
+    let input_area_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Ratio(3, 5), Constraint::Ratio(2, 5)])
+        .split(vertical_chunks[1]);
+
     let input_window = Paragraph::new(app.contacts[app.selected].1.clone())
         .block(Block::default().title("Input").borders(Borders::ALL));
 
-    frame.render_widget(chat_window, chat_chunks[0]);
-    frame.render_widget(input_window, chat_chunks[1]);
+    let attachment_window = Paragraph::new(app.attachment_path.clone()).block(
+        Block::default()
+            .title("Attachment Path")
+            .borders(Borders::ALL),
+    );
+
+    frame.render_widget(chat_window, vertical_chunks[0]);
+    frame.render_widget(input_window, input_area_chunks[0]);
+    frame.render_widget(attachment_window, input_area_chunks[1]);
 
     if let CurrentScreen::Writing = app.current_screen {
-        frame.set_cursor_position((
-            chat_chunks[1].x + app.character_index as u16 + 1,
-            chat_chunks[1].y + 1,
-        ));
+        match app.input_focus {
+            InputFocus::Message => {
+                frame.set_cursor_position((
+                    input_area_chunks[0].x + app.character_index as u16 + 1,
+                    input_area_chunks[0].y + 1,
+                ));
+            }
+            InputFocus::Attachment => {
+                frame.set_cursor_position((
+                    input_area_chunks[1].x + app.attachment_path.len() as u16 + 1,
+                    input_area_chunks[1].y + 1,
+                ));
+            }
+        }
     }
 }
 
@@ -159,9 +181,10 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
                 "(q) to quit | (↑ ↓) to navigate | (→) to select chat | (e) to show more options",
                 Style::default(),
             ),
-            CurrentScreen::Writing => {
-                Span::styled("(q) to exit | (ENTER) to send", Style::default())
-            }
+            CurrentScreen::Writing => Span::styled(
+                "(q) to exit | (ENTER) to send | (TAB) to switch input/attachment",
+                Style::default(),
+            ),
             CurrentScreen::Options => Span::styled("(q) to exit | (e) to select", Style::default()),
 
             _ => Span::default(),
