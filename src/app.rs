@@ -1,5 +1,5 @@
 use crate::contacts::get_contacts_tui;
-use crate::messages::send::send_message_tui;
+use crate::messages::send::{send_attachment_tui, send_message_tui};
 use crate::paths::QRCODE;
 use crate::ui::ui;
 use crate::{
@@ -38,14 +38,23 @@ pub enum LinkingStatus {
     Error(String),
 }
 
+pub enum InputFocus {
+    Message,
+    Attachment,
+}
+
 pub struct App {
     pub contacts: Vec<(String, String)>, // contact_name, input for this contact
     pub selected: usize,
     pub current_screen: CurrentScreen,
     pub linking_status: LinkingStatus,
     pub network_status: NetworkStatus,
+
     pub character_index: usize,
     pub textarea: String,
+    pub attachment_path: String,
+
+    pub input_focus: InputFocus,
 
     pub tx_thread: mpsc::Sender<EventApp>,
     pub rx_tui: mpsc::Receiver<EventApp>,
@@ -69,6 +78,7 @@ pub enum EventApp {
 }
 pub enum EventSend {
     SendText(String, String),
+    SendAttachment(String, String, String),
 }
 
 impl App {
@@ -83,6 +93,8 @@ impl App {
             current_screen: CurrentScreen::LinkingNewDevice,
             textarea: String::new(),
             network_status: NetworkStatus::Connected,
+            attachment_path: String::new(),
+            input_focus: InputFocus::Message,
 
             tx_thread,
             rx_tui,
@@ -187,7 +199,19 @@ impl App {
         if let Some((name, input)) = self.contacts.get_mut(self.selected) {
             if !input.trim().is_empty() {
                 let message = input.clone();
-                tx.send(EventSend::SendText(name.clone(), message)).unwrap();
+
+                if !self.attachment_path.trim().is_empty() {
+                    tx.send(EventSend::SendAttachment(
+                        name.clone(),
+                        message,
+                        self.attachment_path.clone(),
+                    ))
+                    .unwrap();
+                    self.attachment_path.clear();
+                } else {
+                    tx.send(EventSend::SendText(name.clone(), message)).unwrap();
+                }
+
                 input.clear();
                 self.character_index = 0;
             }
@@ -224,9 +248,23 @@ impl App {
             },
             Writing => match key.code {
                 KeyCode::Esc | KeyCode::Left => self.current_screen = Main,
+                KeyCode::Tab => {
+                    self.input_focus = match self.input_focus {
+                        InputFocus::Message => InputFocus::Attachment,
+                        InputFocus::Attachment => InputFocus::Message,
+                    };
+                }
                 KeyCode::Enter => self.submit_message(tx),
-                KeyCode::Char(to_insert) => self.enter_char(to_insert),
-                KeyCode::Backspace => self.delete_char(),
+                KeyCode::Char(to_insert) => match self.input_focus {
+                    InputFocus::Message => self.enter_char(to_insert),
+                    InputFocus::Attachment => self.attachment_path.push(to_insert),
+                },
+                KeyCode::Backspace => match self.input_focus {
+                    InputFocus::Message => self.delete_char(),
+                    InputFocus::Attachment => {
+                        self.attachment_path.pop();
+                    }
+                },
                 _ => {}
             },
             Options => match key.code {
@@ -472,6 +510,43 @@ pub async fn handle_sending_messages(
                                 ));
                             } else {
                                 println!("Error sending message: {:?}", err);
+                            }
+                        }
+                    }
+
+                    let _ = contacts::sync_contacts_tui(
+                        Arc::clone(&manager_mutex),
+                        Arc::clone(&current_contacts_mutex),
+                    )
+                    .await;
+                }
+                EventSend::SendAttachment(recipient, text, attachment_path) => {
+                    match send_attachment_tui(
+                        recipient.clone(),
+                        text.clone(),
+                        attachment_path,
+                        Arc::clone(&manager_mutex),
+                        Arc::clone(&current_contacts_mutex),
+                    )
+                    .await
+                    {
+                        Ok(_) => {
+                            let _ = tx_status
+                                .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                        }
+                        Err(err) => {
+                            if err.to_string().contains("connection")
+                                || err.to_string().contains("network")
+                                || err.to_string().contains("Websocket")
+                                || err.to_string().contains("timeout")
+                            {
+                                let _ = tx_status.send(EventApp::NetworkStatusChanged(
+                                    NetworkStatus::Disconnected(
+                                        "Cannot send: WiFi disconnected".to_string(),
+                                    ),
+                                ));
+                            } else {
+                                println!("Error sending attachment: {:?}", err);
                             }
                         }
                     }
