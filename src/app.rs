@@ -331,7 +331,7 @@ pub async fn init_background_threadss(
     let rx_sending_thread = rx_thread;
     let new_contacts = Arc::clone(&current_contacts_mutex);
     // thread::spawn(move || {
-    let tx_status_clone = tx_thread.clone(); // Clone for passing to sending thread
+    let tx_status_clone = tx_thread.clone();
     thread::Builder::new()
         .name(String::from("sending_thread"))
         .stack_size(1024 * 1024 * 8)
@@ -342,7 +342,13 @@ pub async fn init_background_threadss(
                 .build()
                 .unwrap();
             runtime.block_on(async move {
-                handle_sending_messages(rx_sending_thread, new_manager, new_contacts,  tx_status_clone).await;
+                handle_sending_messages(
+                    rx_sending_thread,
+                    new_manager,
+                    new_contacts,
+                    tx_status_clone,
+                )
+                .await;
             })
         })
         .unwrap();
@@ -435,7 +441,7 @@ pub async fn handle_sending_messages(
     rx: Receiver<EventSend>,
     manager_mutex: AsyncRegisteredManager,
     current_contacts_mutex: AsyncContactsMap,
-    tx_status: mpsc::Sender<EventApp>, // Add parameter for status updates
+    tx_status: mpsc::Sender<EventApp>,
 ) {
     loop {
         if let Ok(event) = rx.recv() {
@@ -470,7 +476,11 @@ pub async fn handle_sending_messages(
                         }
                     }
 
-                    let _ = contacts::sync_contacts_tui(Arc::clone(&manager_mutex), Arc::clone(&current_contacts_mutex)).await;
+                    let _ = contacts::sync_contacts_tui(
+                        Arc::clone(&manager_mutex),
+                        Arc::clone(&current_contacts_mutex),
+                    )
+                    .await;
                 }
             }
         }
