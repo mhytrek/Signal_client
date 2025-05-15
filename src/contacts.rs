@@ -1,45 +1,72 @@
-use crate::create_registered_manager;
+use crate::messages::receive::receiving_loop;
 use crate::AsyncRegisteredManager;
+use crate::{create_registered_manager, AsyncContactsMap};
 use anyhow::Result;
-use futures::Stream;
-use futures::{pin_mut, StreamExt};
+use presage::libsignal_service::prelude::Uuid;
 use presage::manager::Registered;
 use presage::model::contacts::Contact;
-use presage::model::messages::Received;
 use presage::store::ContentsStore;
 use presage::Manager;
 use presage_store_sled::{SledStore, SledStoreError};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
-pub async fn receiving_loop(messages: impl Stream<Item = Received>) {
-    pin_mut!(messages);
-    while let Some(content) = messages.next().await {
-        match content {
-            Received::QueueEmpty => break,
-            Received::Contacts => {}
-            Received::Content(_) => continue,
-        }
-    }
-}
-
-async fn sync_contacts(manager: &mut Manager<SledStore, Registered>) -> Result<()> {
+async fn sync_contacts(
+    manager: &mut Manager<SledStore, Registered>,
+    current_contacts_mutex: AsyncContactsMap,
+) -> Result<()> {
     let messages = manager.receive_messages().await?;
-    receiving_loop(messages).await;
+
+    let new_contacts_mutex = Arc::clone(&current_contacts_mutex);
+    receiving_loop(messages, manager, None, new_contacts_mutex).await?;
     manager.request_contacts().await?;
     let messages = manager.receive_messages().await?;
-    receiving_loop(messages).await;
+    receiving_loop(messages, manager, None, current_contacts_mutex).await?;
     Ok(())
 }
 
 /// Function to sync contacts when CLI is used
 pub async fn sync_contacts_cli() -> Result<()> {
     let mut manager = create_registered_manager().await?;
-    sync_contacts(&mut manager).await
+    let current_contacts_mutex: AsyncContactsMap =
+        Arc::new(Mutex::new(get_contacts(&manager).await?));
+    sync_contacts(&mut manager, current_contacts_mutex).await
 }
 
 /// Function to sync contacts when TUI is used
-pub async fn sync_contacts_tui(manager_mutex: AsyncRegisteredManager) -> Result<()> {
+pub async fn sync_contacts_tui(
+    manager_mutex: AsyncRegisteredManager,
+    current_contacts_mutex: AsyncContactsMap,
+) -> Result<()> {
     let mut manager = manager_mutex.write().await;
-    sync_contacts(&mut manager).await
+    sync_contacts(&mut manager, current_contacts_mutex).await
+}
+
+async fn get_contacts(manager: &Manager<SledStore, Registered>) -> Result<HashMap<Uuid, Contact>> {
+    let contact_vec = list_contacts(manager).await?;
+
+    // No error handling for now, however it'll have to be done
+    let mut contacts_map: HashMap<Uuid, Contact> = HashMap::new();
+    for contact in contact_vec.into_iter().flatten() {
+        let uuid = contact.uuid;
+        contacts_map.insert(uuid, contact);
+    }
+    Ok(contacts_map)
+}
+
+pub async fn get_contacts_cli(
+    manager: &Manager<SledStore, Registered>,
+) -> Result<HashMap<Uuid, Contact>> {
+    // let manager = create_registered_manager().await?;
+    get_contacts(manager).await
+}
+
+pub async fn get_contacts_tui(
+    manager_mutex: AsyncRegisteredManager,
+) -> Result<HashMap<Uuid, Contact>> {
+    let manager = manager_mutex.read().await;
+    get_contacts(&manager).await
 }
 
 async fn list_contacts(
@@ -54,7 +81,7 @@ pub async fn list_contacts_cli() -> Result<Vec<Result<Contact, SledStoreError>>>
     list_contacts(&manager).await
 }
 
-/// Returns iterator over stored contacts, for use in CLI
+/// Returns iterator over stored contacts, for use in TUI
 pub async fn list_contacts_tui(
     manager_mutex: AsyncRegisteredManager,
 ) -> Result<Vec<Result<Contact, SledStoreError>>> {

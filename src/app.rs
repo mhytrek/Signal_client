@@ -1,7 +1,10 @@
+use crate::contacts::get_contacts_tui;
+use crate::messages::send::send_message_tui;
 use crate::paths::QRCODE;
-use crate::sending_text::send_message_tui;
 use crate::ui::ui;
-use crate::{contacts, create_registered_manager, devices, AsyncRegisteredManager};
+use crate::{
+    contacts, create_registered_manager, devices, AsyncContactsMap, AsyncRegisteredManager,
+};
 use anyhow::Result;
 use crossterm::event;
 use crossterm::event::{KeyCode, KeyEventKind};
@@ -13,7 +16,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::Arc;
 use std::{fs, io};
 use tokio::runtime::Builder;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 use std::thread;
 
@@ -274,9 +277,14 @@ pub async fn init_background_threadss(
 ) -> Result<()> {
     let manager: AsyncRegisteredManager = Arc::new(RwLock::new(create_registered_manager().await?));
 
+    let new_manager_mutex = Arc::clone(&manager);
+    let current_contacts_mutex: AsyncContactsMap =
+        Arc::new(Mutex::new(get_contacts_tui(new_manager_mutex).await?));
+
     //spawn thread to sync contacts
     let tx_contacts_events = tx_thread.clone();
     let new_manager = Arc::clone(&manager);
+    let new_contacts = Arc::clone(&current_contacts_mutex);
     thread::Builder::new()
         .name(String::from("contacts_thread"))
         .stack_size(1024 * 1024 * 8)
@@ -287,7 +295,7 @@ pub async fn init_background_threadss(
                 .build()
                 .unwrap();
             runtime.block_on(async move {
-                handle_contacts(tx_contacts_events, new_manager).await;
+                handle_contacts(tx_contacts_events, new_manager, new_contacts).await;
             })
         })
         .unwrap();
@@ -295,6 +303,7 @@ pub async fn init_background_threadss(
     //spawn thread to send messeges
     let new_manager = Arc::clone(&manager);
     let rx_sending_thread = rx_thread;
+    let new_contacts = Arc::clone(&current_contacts_mutex);
     // thread::spawn(move || {
     thread::Builder::new()
         .name(String::from("sending_thread"))
@@ -306,7 +315,7 @@ pub async fn init_background_threadss(
                 .build()
                 .unwrap();
             runtime.block_on(async move {
-                handle_sending_messages(rx_sending_thread, new_manager).await;
+                handle_sending_messages(rx_sending_thread, new_manager, new_contacts).await;
             })
             // let x = rx_thread;
         })
@@ -326,12 +335,19 @@ pub fn handle_key_input_events(tx: mpsc::Sender<EventApp>) {
     }
 }
 
-pub async fn handle_contacts(tx: mpsc::Sender<EventApp>, manager_mutex: AsyncRegisteredManager) {
+pub async fn handle_contacts(
+    tx: mpsc::Sender<EventApp>,
+    manager_mutex: AsyncRegisteredManager,
+    current_contacts_mutex: AsyncContactsMap,
+) {
     let mut previous_contacts: Vec<String> = Vec::new();
 
     loop {
         let new_mutex = Arc::clone(&manager_mutex);
-        contacts::sync_contacts_tui(new_mutex).await.unwrap();
+        let new_contacts_mutex = Arc::clone(&current_contacts_mutex);
+        contacts::sync_contacts_tui(new_mutex, new_contacts_mutex)
+            .await
+            .unwrap();
 
         let new_mutex = Arc::clone(&manager_mutex);
         let result = contacts::list_contacts_tui(new_mutex).await;
@@ -343,13 +359,20 @@ pub async fn handle_contacts(tx: mpsc::Sender<EventApp>, manager_mutex: AsyncReg
 
         let contact_names: Vec<String> = contacts
             .into_iter()
-            .filter_map(|contact| {
-                // let name = contact.ok()?.name.trim().to_string();
-                let name = contact.ok()?.uuid.to_string().trim().to_string();
-                if name.is_empty() {
+            .filter_map(|contact_res| {
+                let contact = contact_res.ok()?;
+                let mut info = contact.name;
+                if info.is_empty() {
+                    if contact.phone_number.is_some() {
+                        info = contact.phone_number.unwrap().to_string();
+                    } else {
+                        info = contact.uuid.to_string();
+                    }
+                }
+                if info.is_empty() {
                     None
                 } else {
-                    Some(name)
+                    Some(info)
                 }
             })
             .collect();
@@ -372,19 +395,28 @@ pub async fn handle_contacts(tx: mpsc::Sender<EventApp>, manager_mutex: AsyncReg
 pub async fn handle_sending_messages(
     rx: Receiver<EventSend>,
     manager_mutex: AsyncRegisteredManager,
+    current_contacts_mutex: AsyncContactsMap,
 ) {
     loop {
         if let Ok(event) = rx.recv() {
             match event {
                 EventSend::SendText(recipient, text) => {
-                    if let Result::Err(err_mess) =
-                        send_message_tui(recipient, text, Arc::clone(&manager_mutex)).await
+                    if let Result::Err(err_mess) = send_message_tui(
+                        recipient,
+                        text,
+                        Arc::clone(&manager_mutex),
+                        Arc::clone(&current_contacts_mutex),
+                    )
+                    .await
                     {
                         println!("{:?}", err_mess)
                     }
-                    contacts::sync_contacts_tui(Arc::clone(&manager_mutex))
-                        .await
-                        .unwrap();
+                    contacts::sync_contacts_tui(
+                        Arc::clone(&manager_mutex),
+                        Arc::clone(&current_contacts_mutex),
+                    )
+                    .await
+                    .unwrap();
                     // Need to add error handling
                 }
             }
