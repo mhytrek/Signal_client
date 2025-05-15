@@ -17,10 +17,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
-use std::{
-    str::FromStr,
-    time::{SystemTime, UNIX_EPOCH},
-};
 
 /// finds contact uuid from string that can be contact_name or contact phone_number
 pub async fn find_uuid(
@@ -136,7 +132,6 @@ async fn create_attachment(attachment_path: String) -> Result<(AttachmentSpec, V
     let path: PathBuf = fs::canonicalize(&attachment_path)
         .map_err(|_| anyhow::anyhow!("Failed to resolve path: {}", attachment_path))?;
 
-    // Check if the path exists and is a file
     if !path.exists() {
         return Err(anyhow::anyhow!(
             "Attachment file not found: {}",
@@ -151,7 +146,6 @@ async fn create_attachment(attachment_path: String) -> Result<(AttachmentSpec, V
         ));
     }
 
-    // Read attachment content
     let file_data = fs::read(&path)?;
     let file_name = path
         .file_name()
@@ -159,7 +153,6 @@ async fn create_attachment(attachment_path: String) -> Result<(AttachmentSpec, V
         .to_string_lossy()
         .to_string();
 
-    // Create attachment spec
     let attachment_spec = AttachmentSpec {
         content_type: mime_guess::from_path(&path)
             .first()
@@ -185,17 +178,15 @@ async fn send_attachment(
     recipient: String,
     text_message: String,
     attachment_path: String,
+    current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
     let recipient_address = get_address(recipient, manager).await?;
 
-    // Create and upload attachment
     let attachment_spec = create_attachment(attachment_path).await?;
 
-    // Put the attachment spec into a vector, as upload_attachments expects Vec<(AttachmentSpec, Vec<u8>)>
     let attachment_specs = vec![attachment_spec];
 
-    // Upload attachment and get pointer
     let attachments: Result<Vec<_>, _> = manager
         .upload_attachments(attachment_specs)
         .await?
@@ -208,17 +199,12 @@ async fn send_attachment(
         .next()
         .ok_or_else(|| anyhow::anyhow!("Failed to get attachment pointer"))?;
 
-    // Create data message
     let mut data_message = create_data_message(text_message, timestamp)?;
-
-    // Add attachment to data message - DataMessage.attachments is Option<Vec<AttachmentPointer>>
     data_message.attachments = vec![attachment_pointer];
 
-    // Receive pending messages
     let messages = manager.receive_messages().await?;
-    receiving_loop(messages).await;
+    receiving_loop(messages, manager, None, current_contacts_mutex).await?;
 
-    // Send message with attachment
     send(manager, recipient_address, data_message, timestamp).await?;
 
     Ok(())
@@ -230,9 +216,17 @@ pub async fn send_attachment_tui(
     text_message: String,
     attachment_path: String,
     manager_mutex: AsyncRegisteredManager,
+    current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
     let mut manager = manager_mutex.write().await;
-    send_attachment(&mut manager, recipient, text_message, attachment_path).await
+    send_attachment(
+        &mut manager,
+        recipient,
+        text_message,
+        attachment_path,
+        current_contacts_mutex,
+    )
+    .await
 }
 
 /// sends attachment to recipient ( phone number or name ), for usage with CLI
@@ -242,5 +236,14 @@ pub async fn send_attachment_cli(
     attachment_path: String,
 ) -> Result<()> {
     let mut manager = create_registered_manager().await?;
-    send_attachment(&mut manager, recipient, text_message, attachment_path).await
+    let current_contacts_mutex: AsyncContactsMap =
+        Arc::new(Mutex::new(get_contacts_cli(&manager).await?));
+    send_attachment(
+        &mut manager,
+        recipient,
+        text_message,
+        attachment_path,
+        current_contacts_mutex,
+    )
+    .await
 }
