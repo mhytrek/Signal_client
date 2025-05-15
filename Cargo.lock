@@ -3195,6 +3195,7 @@ dependencies = [
  "curve25519-dalek",
  "futures",
  "image",
+ "mime_guess",
  "presage",
  "presage-store-sled",
  "qr2term",

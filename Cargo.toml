@@ -20,6 +20,7 @@ ratatui-image = "5.0.0"
 image = "0.25"
 tui-qrcode = "0.1.1"
 qrcode = "0.14.1"
+mime_guess = "2.0.5"
 
 [patch.crates-io]
 curve25519-dalek = { git = 'https://github.com/signalapp/curve25519-dalek', tag = 'signal-curve25519-4.1.3' }

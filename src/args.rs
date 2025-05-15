@@ -1,5 +1,4 @@
 use clap::{Args, Parser, Subcommand};
-use presage::proto::story_message::Attachment;
 
 #[derive(Parser)]
 pub struct Cli {
