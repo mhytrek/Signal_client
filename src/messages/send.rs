@@ -2,15 +2,18 @@ use crate::contacts::get_contacts_cli;
 use crate::messages::receive::receiving_loop;
 use crate::{create_registered_manager, AsyncContactsMap, AsyncRegisteredManager};
 use anyhow::Result;
-use std::path::{PathBuf};
+use mime_guess::mime::APPLICATION_OCTET_STREAM;
 use presage::libsignal_service::prelude::Uuid;
 use presage::libsignal_service::protocol::ServiceId;
+use presage::libsignal_service::sender::AttachmentSpec;
 use presage::manager::Registered;
 use presage::model::contacts::Contact;
 use presage::proto::DataMessage;
 use presage::store::ContentsStore;
 use presage::Manager;
 use presage_store_sled::{SledStore, SledStoreError};
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
@@ -18,9 +21,6 @@ use std::{
     str::FromStr,
     time::{SystemTime, UNIX_EPOCH},
 };
-use std::fs;
-use mime_guess::mime::APPLICATION_OCTET_STREAM;
-use presage::libsignal_service::sender::AttachmentSpec;
 
 /// finds contact uuid from string that can be contact_name or contact phone_number
 pub async fn find_uuid(
@@ -138,16 +138,23 @@ async fn create_attachment(attachment_path: String) -> Result<(AttachmentSpec, V
 
     // Check if the path exists and is a file
     if !path.exists() {
-        return Err(anyhow::anyhow!("Attachment file not found: {}", path.display()));
+        return Err(anyhow::anyhow!(
+            "Attachment file not found: {}",
+            path.display()
+        ));
     }
 
     if !path.is_file() {
-        return Err(anyhow::anyhow!("Attachment path is not a file: {}", path.display()));
+        return Err(anyhow::anyhow!(
+            "Attachment path is not a file: {}",
+            path.display()
+        ));
     }
 
     // Read attachment content
     let file_data = fs::read(&path)?;
-    let file_name = path.file_name()
+    let file_name = path
+        .file_name()
         .ok_or_else(|| anyhow::anyhow!("Invalid file name for path: {}", path.display()))?
         .to_string_lossy()
         .to_string();
@@ -172,13 +179,12 @@ async fn create_attachment(attachment_path: String) -> Result<(AttachmentSpec, V
     Ok((attachment_spec, file_data))
 }
 
-
 /// Send message with attachment
 async fn send_attachment(
     manager: &mut Manager<SledStore, Registered>,
     recipient: String,
     text_message: String,
-    attachment_path: String
+    attachment_path: String,
 ) -> Result<()> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
     let recipient_address = get_address(recipient, manager).await?;
@@ -233,7 +239,7 @@ pub async fn send_attachment_tui(
 pub async fn send_attachment_cli(
     recipient: String,
     text_message: String,
-    attachment_path: String
+    attachment_path: String,
 ) -> Result<()> {
     let mut manager = create_registered_manager().await?;
     send_attachment(&mut manager, recipient, text_message, attachment_path).await
