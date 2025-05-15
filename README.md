@@ -88,6 +88,21 @@ Sends a text message.
 cargo run send-message --recipient "recipient_uuid" "Hello, this is a test message!"
 ```
 
+### **list-message**
+List messages from user
+For all messages chose time=0
+
+```bash
+cargo run send-message --recipient "recipient_uuid" time
+```
+
+### **receive**
+Receive messages (prints new messages)
+
+```bash
+cargo run receive
+```
+
 
 ### **help**
 Prints this help message or details for specific subcommands.

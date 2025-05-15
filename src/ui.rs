@@ -76,7 +76,9 @@ fn render_contact_list(frame: &mut Frame, app: &App, area: Rect) {
         .map(|(i, (name, _id))| {
             let mut style = Style::default();
             if i == app.selected {
-                style = style.add_modifier(Modifier::BOLD);
+                style = style
+                    .add_modifier(Modifier::BOLD)
+                    .add_modifier(Modifier::UNDERLINED);
             }
             ListItem::new(name.clone()).style(style)
         })
