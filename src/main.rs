@@ -19,6 +19,9 @@ async fn main() -> Result<()> {
         }
         Command::ListMessages(args) => cli::print_messages(args.recipient, args.from).await?,
         Command::Receive => cli::print_received_message().await?,
+        Command::SendAttachment(args) => {
+            sending_text::send_attachment_cli(args.recipient, args.text_message, args.attachment_path).await?
+        }
     }
 
     Ok(())

@@ -1,4 +1,5 @@
 use clap::{Args, Parser, Subcommand};
+use presage::proto::story_message::Attachment;
 
 #[derive(Parser)]
 pub struct Cli {
@@ -18,6 +19,8 @@ pub enum Command {
     RunApp,
     /// Send text message
     SendMessage(SendMessageArgs),
+    /// Send attachment
+    SendAttachment(SendAttachmentArgs),
     /// Prints messages from given point in time
     ListMessages(ListMessagesArgs),
     /// Prints received messeges
@@ -45,4 +48,13 @@ pub struct ListMessagesArgs {
     #[arg(short, long)]
     pub recipient: String,
     pub from: String,
+}
+
+#[derive(Args)]
+pub struct SendAttachmentArgs {
+    /// Name of recipient
+    #[arg(short, long)]
+    pub recipient: String,
+    pub text_message: String,
+    pub attachment_path: String,
 }
