@@ -51,9 +51,11 @@ pub struct ListMessagesArgs {
 
 #[derive(Args)]
 pub struct SendAttachmentArgs {
-    /// Name of recipient
+    /// Uuid of the contact that the message should be send to
     #[arg(short, long)]
     pub recipient: String,
+    /// Content of the message
     pub text_message: String,
+    /// Full path to attachment
     pub attachment_path: String,
 }
