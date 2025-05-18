@@ -5,9 +5,7 @@ use crate::{
 };
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use presage::{
-    model::contacts::Contact,
-};
+use presage::model::contacts::Contact;
 
 fn print_contact(contact: &Contact) {
     println!("Name: {}", contact.name);
@@ -27,24 +25,29 @@ pub async fn print_contacts() -> Result<()> {
     Ok(())
 }
 
-fn print_message(message:&MessageDto){
+fn print_message(message: &MessageDto) {
     let millis = message.timestamp;
     let secs = (millis / 1000) as i64;
-    let datetime:DateTime<Utc> = DateTime::from_timestamp(secs, 0)
-        .expect("Invalid timestamp"); 
-                        
-    match message.sender{
-        true => {
-            println!("[{}] Me -> {}", datetime.format("%Y-%m-%d %H:%M:%S"), message.text);  
-        }
-        false =>{
-            println!("[{}] Them <- {}", datetime.format("%Y-%m-%d %H:%M:%S"), message.text);  
+    let datetime: DateTime<Utc> = DateTime::from_timestamp(secs, 0).expect("Invalid timestamp");
 
+    match message.sender {
+        true => {
+            println!(
+                "[{}] Me -> {}",
+                datetime.format("%Y-%m-%d %H:%M:%S"),
+                message.text
+            );
+        }
+        false => {
+            println!(
+                "[{}] Them <- {}",
+                datetime.format("%Y-%m-%d %H:%M:%S"),
+                message.text
+            );
         }
     }
 }
 pub async fn print_messages(recipient: String, from: String) -> Result<()> {
-
     let messages = list_messages_cli(recipient, from).await?;
     for message in messages {
         print_message(&message);
@@ -53,7 +56,6 @@ pub async fn print_messages(recipient: String, from: String) -> Result<()> {
 }
 
 pub async fn print_received_message() -> Result<()> {
-
     let messages = receive_messages_cli().await?;
     for message in messages {
         print_message(&message);

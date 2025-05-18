@@ -7,7 +7,14 @@ use chrono::{DateTime, Utc};
 use qrcode::QrCode;
 use ratatui::layout::Alignment;
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Margin, Rect}, style::{Color, Modifier, Style}, text::{Line, Span, Text}, widgets::{Block, BorderType, Borders, List, ListItem, ListState, Padding, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap}, Frame
+    layout::{Constraint, Direction, Layout, Margin, Rect},
+    style::{Color, Modifier, Style},
+    text::{Line, Span, Text},
+    widgets::{
+        Block, BorderType, Borders, List, ListItem, ListState, Padding, Paragraph, Scrollbar,
+        ScrollbarOrientation, ScrollbarState, Wrap,
+    },
+    Frame,
 };
 use tui_qrcode::{Colors, QrCodeWidget};
 
@@ -71,7 +78,7 @@ fn render_contact_list(frame: &mut Frame, app: &App, area: Rect) {
         .contacts
         .iter()
         .enumerate()
-        .map(|(i, (_,name, _id))| {
+        .map(|(i, (_, name, _id))| {
             let mut style = Style::default();
             if i == app.contact_selected {
                 style = style
@@ -114,27 +121,29 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(3)])
         .split(area);
 
-        let messages: Vec<ListItem> = match &app.contact_messages.get(&app.contacts[app.contact_selected].0) {
-            Some(msgs) => msgs
-                .iter()
-                .map(| msg| {
-                    let mut style = Style::default();
-                    if msg.sender {
-                        style = style
-                            .add_modifier(Modifier::BOLD)
-                    }
-        
-                    let millis = msg.timestamp;
-                    let secs = (millis / 1000) as i64;
-                    let datetime:DateTime<Utc> = DateTime::from_timestamp(secs, 0)
-                        .expect("Invalid timestamp"); 
-                                        
-                    let content = format!("[{}] {}", datetime.format("%Y-%m-%d %H:%M:%S"), msg.text);                    
-                    ListItem::new(content).style(style)
-                })
-                .collect(),
-            None => vec![],
-        };
+    let messages: Vec<ListItem> = match &app
+        .contact_messages
+        .get(&app.contacts[app.contact_selected].0)
+    {
+        Some(msgs) => msgs
+            .iter()
+            .map(|msg| {
+                let mut style = Style::default();
+                if msg.sender {
+                    style = style.add_modifier(Modifier::BOLD)
+                }
+
+                let millis = msg.timestamp;
+                let secs = (millis / 1000) as i64;
+                let datetime: DateTime<Utc> =
+                    DateTime::from_timestamp(secs, 0).expect("Invalid timestamp");
+
+                let content = format!("[{}] {}", datetime.format("%Y-%m-%d %H:%M:%S"), msg.text);
+                ListItem::new(content).style(style)
+            })
+            .collect(),
+        None => vec![],
+    };
 
     let chat_window = List::new(messages.clone()).block(
         Block::default()
