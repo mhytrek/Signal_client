@@ -4,12 +4,14 @@ use std::sync::Arc;
 use anyhow::Result;
 use futures::Stream;
 use futures::{pin_mut, StreamExt};
+use presage::libsignal_service::content:: ContentBody;
+use presage::proto::{sync_message::Sent, DataMessage, SyncMessage};
 use presage::libsignal_service::prelude::Content;
 use presage::libsignal_service::prelude::Uuid;
 use presage::manager::Manager;
 use presage::manager::Registered;
 use presage::model::messages::Received;
-use presage::store::ContentsStore;
+use presage::store::{ContentExt, ContentsStore};
 use presage::store::Thread;
 use presage_store_sled::{SledStore, SledStoreError};
 use tokio::sync::Mutex;
@@ -18,6 +20,13 @@ use crate::contacts::get_contacts_cli;
 use crate::create_registered_manager;
 use crate::AsyncContactsMap;
 use crate::AsyncRegisteredManager;
+
+pub struct MessageDto{
+    pub uuid:Uuid,
+    pub timestamp: u64,
+    pub text: String,
+    pub sender:bool,
+}
 
 async fn loop_no_contents(messages: impl Stream<Item = Received>) {
     pin_mut!(messages);
@@ -73,28 +82,140 @@ async fn list_messages(
         .collect())
 }
 
+///format Content to a MessageDto or returns None
+pub fn format_message(content: &Content)->Option<MessageDto>{
+    let timestamp: u64 = content.timestamp();
+    let uuid = content.metadata.sender.raw_uuid();
+    let mut sender = false;
+    let text: Option<String> = match &content.body {
+        ContentBody::NullMessage(_) => Some("[NULL] <null message>".to_string()),
+        ContentBody::DataMessage(data_message) => match data_message {
+            DataMessage {
+                body: Some(body), ..
+            } => Some(
+                body.to_string()
+            ),
+            DataMessage {
+                flags: Some(flag), ..
+            } => Some(format!("[FLAG] Data message (flag: {})", flag)),
+
+            _ => None,
+        },
+        ContentBody::SynchronizeMessage(sync_message) => match sync_message {
+            SyncMessage {
+                sent:
+                    Some(Sent {
+                        message: Some(message),
+                        ..
+                    }),
+                ..
+            } => {
+                sender = true;
+                match message {
+                DataMessage {
+                    body: Some(body), ..
+                } => Some(
+                    body.to_string()
+                ),
+
+                DataMessage {
+                    flags: Some(flag), ..
+                } => Some(format!("[FLAG] Synced data message (flag: {})", flag)),
+
+                _ => None,
+            }},
+            _ => None,
+        },
+        ContentBody::CallMessage(_) => Some("[CALL]".to_string()),
+        ContentBody::ReceiptMessage(_) => None,
+        // ContentBody::TypingMessage(_) => Some("Typing...".to_string()),
+        ContentBody::TypingMessage(_) => None,
+        ContentBody::StoryMessage(_) => Some("[STORY] <story message>".to_string()),
+        ContentBody::PniSignatureMessage(_) => None,
+        ContentBody::EditMessage(_) => Some("[EDIT] <edit message>".to_string()),
+    };
+    if let Some(text) = text{
+    return Some(MessageDto { uuid, timestamp, text, sender })
+    }
+    else{
+        return None;
+    }
+}
+
 /// Returns iterator over stored messeges from certain time for given contact uuid, for use in TUI
 pub async fn list_messages_tui(
     recipient: String,
     from: String,
     manager_mutex: AsyncRegisteredManager,
-) -> Result<Vec<Result<Content, SledStoreError>>> {
+) -> Result<Vec<MessageDto>> {
     let manager = manager_mutex.read().await;
-    list_messages(&manager, recipient, from).await
+
+    let messages = list_messages(&manager, recipient, from).await?;
+
+    let mut result = Vec::new();
+
+    for message in messages {
+        if let Ok(content) = message {
+            if let Some(formatted_message) = format_message(&content) {
+                result.push(formatted_message);
+            }
+        }
+    }
+    Ok(result)
+}
+
+/// Function to receive messages for TUI interface
+pub async fn receive_messages_tui(
+    manager_mutex: AsyncRegisteredManager,
+    current_contacts_mutex: AsyncContactsMap,
+) -> Result<Vec<MessageDto>> {
+    let mut manager = manager_mutex.write().await;
+
+
+    let messages = manager.receive_messages().await?;
+    let mut contents = Vec::new();
+
+    receiving_loop(
+        messages,
+        &mut manager,
+        Some(&mut contents),
+        current_contacts_mutex,
+    )
+    .await?;
+
+    let mut result = Vec::new();
+
+    for content in contents {
+        if let Some(formatted_message) = format_message(&content) {
+            result.push(formatted_message);
+        }
+    }
+
+    Ok(result)
 }
 
 /// Returns iterator over stored messeges from certain time for given contact uuid, for use in CLI
 pub async fn list_messages_cli(
     recipient: String,
     from: String,
-) -> Result<Vec<Result<Content, SledStoreError>>> {
+) -> Result<Vec<MessageDto>> {
     let manager = create_registered_manager().await?;
-    list_messages(&manager, recipient, from).await
-    // print!("{:?}", mess);
+    let messages = list_messages(&manager, recipient, from).await?;
+
+    let mut result = Vec::new();
+
+    for message in messages {
+        if let Ok(content) = message {
+            if let Some(formatted_message) = format_message(&content) {
+                result.push(formatted_message);
+            }
+        }
+    }
+    Ok(result)
 }
 
 /// Function to receive messages for CLI interface
-pub async fn receive_messages_cli() -> Result<Vec<Content>> {
+pub async fn receive_messages_cli() -> Result<Vec<MessageDto>> {
     let mut manager = create_registered_manager().await?;
     let current_contacts_mutex: AsyncContactsMap =
         Arc::new(Mutex::new(get_contacts_cli(&manager).await?));
@@ -109,8 +230,17 @@ pub async fn receive_messages_cli() -> Result<Vec<Content>> {
     )
     .await?;
 
-    Ok(contents)
-}
+    let mut result = Vec::new();
+
+    for content in contents {
+        if let Some(formatted_message) = format_message(&content) {
+            result.push(formatted_message);
+        }
+    }
+
+    Ok(result)}
+
+
 
 async fn check_contacts(
     manager: &mut Manager<SledStore, Registered>,

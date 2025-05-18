@@ -3,14 +3,11 @@ use std::{
     path::Path,
 };
 
+use chrono::{DateTime, Utc};
 use qrcode::QrCode;
 use ratatui::layout::Alignment;
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span, Text},
-    widgets::{Block, BorderType, Borders, List, ListItem, Padding, Paragraph, Wrap},
-    Frame,
+    layout::{Constraint, Direction, Layout, Margin, Rect}, style::{Color, Modifier, Style}, text::{Line, Span, Text}, widgets::{Block, BorderType, Borders, List, ListItem, ListState, Padding, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap}, Frame
 };
 use tui_qrcode::{Colors, QrCodeWidget};
 
@@ -74,9 +71,9 @@ fn render_contact_list(frame: &mut Frame, app: &App, area: Rect) {
         .contacts
         .iter()
         .enumerate()
-        .map(|(i, (name, _id))| {
+        .map(|(i, (_,name, _id))| {
             let mut style = Style::default();
-            if i == app.selected {
+            if i == app.contact_selected {
                 style = style
                     .add_modifier(Modifier::BOLD)
                     .add_modifier(Modifier::UNDERLINED);
@@ -85,6 +82,10 @@ fn render_contact_list(frame: &mut Frame, app: &App, area: Rect) {
         })
         .collect();
 
+    let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
+
+    let mut scrollbar_state = ScrollbarState::new(list_items.len()).position(app.contact_selected);
+
     let chat_list_widget = List::new(list_items).block(
         Block::default()
             .padding(Padding::new(1, 1, 1, 1))
@@ -92,7 +93,18 @@ fn render_contact_list(frame: &mut Frame, app: &App, area: Rect) {
             .borders(Borders::ALL),
     );
 
-    frame.render_widget(chat_list_widget, area);
+    let mut list_state = ListState::default();
+    list_state.select(Some(app.contact_selected));
+
+    frame.render_stateful_widget(chat_list_widget, area, &mut list_state);
+    frame.render_stateful_widget(
+        scrollbar,
+        area.inner(Margin {
+            vertical: 1,
+            horizontal: 0,
+        }),
+        &mut scrollbar_state,
+    );
 }
 
 /// Renders the chat window and input box in the right chunk of the screen
@@ -102,9 +114,31 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(3)])
         .split(area);
 
-    let chat_window = Paragraph::new("Tu będzie chat :p").block(
+        let messages: Vec<ListItem> = match &app.contact_messages.get(&app.contacts[app.contact_selected].0) {
+            Some(msgs) => msgs
+                .iter()
+                .map(| msg| {
+                    let mut style = Style::default();
+                    if msg.sender {
+                        style = style
+                            .add_modifier(Modifier::BOLD)
+                    }
+        
+                    let millis = msg.timestamp;
+                    let secs = (millis / 1000) as i64;
+                    let datetime:DateTime<Utc> = DateTime::from_timestamp(secs, 0)
+                        .expect("Invalid timestamp"); 
+                                        
+                    let content = format!("[{}] {}", datetime.format("%Y-%m-%d %H:%M:%S"), msg.text);                    
+                    ListItem::new(content).style(style)
+                })
+                .collect(),
+            None => vec![],
+        };
+
+    let chat_window = List::new(messages.clone()).block(
         Block::default()
-            .title(app.contacts[app.selected].0.clone())
+            .title(app.contacts[app.contact_selected].1.clone())
             .borders(Borders::ALL),
     );
 
@@ -113,7 +147,7 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
         .constraints([Constraint::Ratio(3, 5), Constraint::Ratio(2, 5)])
         .split(vertical_chunks[1]);
 
-    let input_window = Paragraph::new(app.contacts[app.selected].1.clone())
+    let input_window = Paragraph::new(app.contacts[app.contact_selected].2.clone())
         .block(Block::default().title("Input").borders(Borders::ALL));
 
     let attachment_window = Paragraph::new(app.attachment_path.clone()).block(
@@ -122,9 +156,27 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
             .borders(Borders::ALL),
     );
 
-    frame.render_widget(chat_window, vertical_chunks[0]);
+
+    
+    let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
+
+    let mut scrollbar_state = ScrollbarState::new(messages.len()).position(app.message_selected);
+
+
+    let mut list_state = ListState::default();
+    list_state.select(Some(app.message_selected));
+
+    frame.render_stateful_widget(chat_window, vertical_chunks[0],&mut list_state);
     frame.render_widget(input_window, input_area_chunks[0]);
     frame.render_widget(attachment_window, input_area_chunks[1]);
+    frame.render_stateful_widget(
+        scrollbar,
+        vertical_chunks[0].inner(Margin {
+            vertical: 1,
+            horizontal: 0,
+        }),
+        &mut scrollbar_state,
+    );
 
     if let CurrentScreen::Writing = app.current_screen {
         match app.input_focus {
