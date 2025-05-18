@@ -4,15 +4,15 @@ use std::sync::Arc;
 use anyhow::Result;
 use futures::Stream;
 use futures::{pin_mut, StreamExt};
-use presage::libsignal_service::content:: ContentBody;
-use presage::proto::{sync_message::Sent, DataMessage, SyncMessage};
+use presage::libsignal_service::content::ContentBody;
 use presage::libsignal_service::prelude::Content;
 use presage::libsignal_service::prelude::Uuid;
 use presage::manager::Manager;
 use presage::manager::Registered;
 use presage::model::messages::Received;
-use presage::store::{ContentExt, ContentsStore};
+use presage::proto::{sync_message::Sent, DataMessage, SyncMessage};
 use presage::store::Thread;
+use presage::store::{ContentExt, ContentsStore};
 use presage_store_sled::{SledStore, SledStoreError};
 use tokio::sync::Mutex;
 
@@ -21,11 +21,11 @@ use crate::create_registered_manager;
 use crate::AsyncContactsMap;
 use crate::AsyncRegisteredManager;
 
-pub struct MessageDto{
-    pub uuid:Uuid,
+pub struct MessageDto {
+    pub uuid: Uuid,
     pub timestamp: u64,
     pub text: String,
-    pub sender:bool,
+    pub sender: bool,
 }
 
 async fn loop_no_contents(messages: impl Stream<Item = Received>) {
@@ -83,7 +83,7 @@ async fn list_messages(
 }
 
 ///format Content to a MessageDto or returns None
-pub fn format_message(content: &Content)->Option<MessageDto>{
+pub fn format_message(content: &Content) -> Option<MessageDto> {
     let timestamp: u64 = content.timestamp();
     let uuid = content.metadata.sender.raw_uuid();
     let mut sender = false;
@@ -92,9 +92,7 @@ pub fn format_message(content: &Content)->Option<MessageDto>{
         ContentBody::DataMessage(data_message) => match data_message {
             DataMessage {
                 body: Some(body), ..
-            } => Some(
-                body.to_string()
-            ),
+            } => Some(body.to_string()),
             DataMessage {
                 flags: Some(flag), ..
             } => Some(format!("[FLAG] Data message (flag: {})", flag)),
@@ -112,18 +110,17 @@ pub fn format_message(content: &Content)->Option<MessageDto>{
             } => {
                 sender = true;
                 match message {
-                DataMessage {
-                    body: Some(body), ..
-                } => Some(
-                    body.to_string()
-                ),
+                    DataMessage {
+                        body: Some(body), ..
+                    } => Some(body.to_string()),
 
-                DataMessage {
-                    flags: Some(flag), ..
-                } => Some(format!("[FLAG] Synced data message (flag: {})", flag)),
+                    DataMessage {
+                        flags: Some(flag), ..
+                    } => Some(format!("[FLAG] Synced data message (flag: {})", flag)),
 
-                _ => None,
-            }},
+                    _ => None,
+                }
+            }
             _ => None,
         },
         ContentBody::CallMessage(_) => Some("[CALL]".to_string()),
@@ -134,12 +131,12 @@ pub fn format_message(content: &Content)->Option<MessageDto>{
         ContentBody::PniSignatureMessage(_) => None,
         ContentBody::EditMessage(_) => Some("[EDIT] <edit message>".to_string()),
     };
-    if let Some(text) = text{
-    return Some(MessageDto { uuid, timestamp, text, sender })
-    }
-    else{
-        return None;
-    }
+    text.map(|text| MessageDto {
+        uuid,
+        timestamp,
+        text,
+        sender,
+    })
 }
 
 /// Returns iterator over stored messeges from certain time for given contact uuid, for use in TUI
@@ -171,7 +168,6 @@ pub async fn receive_messages_tui(
 ) -> Result<Vec<MessageDto>> {
     let mut manager = manager_mutex.write().await;
 
-
     let messages = manager.receive_messages().await?;
     let mut contents = Vec::new();
 
@@ -195,10 +191,7 @@ pub async fn receive_messages_tui(
 }
 
 /// Returns iterator over stored messeges from certain time for given contact uuid, for use in CLI
-pub async fn list_messages_cli(
-    recipient: String,
-    from: String,
-) -> Result<Vec<MessageDto>> {
+pub async fn list_messages_cli(recipient: String, from: String) -> Result<Vec<MessageDto>> {
     let manager = create_registered_manager().await?;
     let messages = list_messages(&manager, recipient, from).await?;
 
@@ -238,9 +231,8 @@ pub async fn receive_messages_cli() -> Result<Vec<MessageDto>> {
         }
     }
 
-    Ok(result)}
-
-
+    Ok(result)
+}
 
 async fn check_contacts(
     manager: &mut Manager<SledStore, Registered>,

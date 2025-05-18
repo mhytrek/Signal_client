@@ -14,7 +14,7 @@ use presage::libsignal_service::Profile;
 use presage::libsignal_service::prelude::Uuid;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
-use std::collections:: HashMap;
+use std::collections::HashMap;
 use std::io::Stderr;
 use std::path::Path;
 use std::str::FromStr;
@@ -51,7 +51,7 @@ pub enum InputFocus {
 }
 
 pub struct App {
-    pub contacts: Vec<(String,String, String)>, // contact_uuid, contact_name, input for this contact
+    pub contacts: Vec<(String, String, String)>, // contact_uuid, contact_name, input for this contact
 
     pub contact_selected: usize,
     pub message_selected: usize,
@@ -69,7 +69,7 @@ pub struct App {
     pub profile: Option<Profile>,
     pub contact_messages: HashMap<String,Vec<MessageDto>>,
 
-    pub manager:Option<AsyncRegisteredManager>,
+    pub manager: Option<AsyncRegisteredManager>,
 
     pub tx_thread: mpsc::Sender<EventApp>,
     pub rx_tui: mpsc::Receiver<EventApp>,
@@ -86,7 +86,7 @@ pub enum NetworkStatus {
 
 pub enum EventApp {
     KeyInput(event::KeyEvent),
-    ContactsList(Vec<(String,String)>),
+    ContactsList(Vec<(String, String)>),
     LinkingFinished(bool),
     LinkingError(String),
     NetworkStatusChanged(NetworkStatus),
@@ -118,7 +118,7 @@ impl App {
 
             profile: None,
 
-            manager:None,
+            manager: None,
 
             tx_thread,
             rx_tui,
@@ -133,17 +133,22 @@ impl App {
     ) -> io::Result<bool> {
         if self.linking_status == LinkingStatus::Linked {
             if let Some(rx) = self.rx_thread.take() {
-                let new_manager:AsyncRegisteredManager = match create_registered_manager().await {
+                let new_manager: AsyncRegisteredManager = match create_registered_manager().await {
                     Ok(manager) => Arc::new(RwLock::new(manager)),
                     Err(_) => {
-                        return Err(io::Error::new(io::ErrorKind::Other, "Failed to create manager"));
+                        return Err(io::Error::new(
+                            io::ErrorKind::Other,
+                            "Failed to create manager",
+                        ));
                     }
                 };
                 let new_manager_mutex = Arc::clone(&new_manager);
 
                 self.manager = Some(new_manager);
 
-                if let Err(e) = init_background_threads(self.tx_thread.clone(), rx,new_manager_mutex).await {
+                if let Err(e) =
+                    init_background_threads(self.tx_thread.clone(), rx, new_manager_mutex).await
+                {
                     eprintln!("Failed to init threads: {:?}", e);
                 }
             }
@@ -175,64 +180,61 @@ impl App {
     async fn handle_event(&mut self, event: EventApp, tx: &Sender<EventSend>) -> io::Result<bool> {
         match event {
             EventApp::KeyInput(key) => {
-                                if key.kind == KeyEventKind::Release {
-                                    return Ok(false);
-                                }
-                                self.handle_key_event(key, tx)
-                            }
+                if key.kind == KeyEventKind::Release {
+                    return Ok(false);
+                }
+                self.handle_key_event(key, tx)
+            }
             EventApp::NetworkStatusChanged(status) => {
-                                self.network_status = status;
-                                Ok(false)
-                            }
+                self.network_status = status;
+                Ok(false)
+            }
             EventApp::LinkingError(error_msg) => {
-                                self.linking_status = LinkingStatus::Error(error_msg);
-                                Ok(false)
-                            }
+                self.linking_status = LinkingStatus::Error(error_msg);
+                Ok(false)
+            }
             EventApp::ContactsList(contacts) => {
-                                if self.current_screen == CurrentScreen::Syncing {
-                                    self.get_messages(contacts.clone());
-                                }
-                                self.contacts = contacts
-                                    .into_iter()
-                                    .map(|(uuid,name)| (uuid,name, String::new()))
-                                    .collect();
-                                Ok(false)
-                            }
+                if self.current_screen == CurrentScreen::Syncing {
+                    self.get_messages(contacts.clone());
+                }
+                self.contacts = contacts
+                    .into_iter()
+                    .map(|(uuid, name)| (uuid, name, String::new()))
+                    .collect();
+                Ok(false)
+            }
             EventApp::LinkingFinished(result) => {
-                                match result {
-                                    true => {
-                                        self.linking_status = LinkingStatus::Linked;
-                                        if let Some(rx) = self.rx_thread.take() {
-                                            let new_manager:AsyncRegisteredManager = match create_registered_manager().await {
-                                                Ok(manager) => Arc::new(RwLock::new(manager)),
-                                                Err(_) => {
-                                                    return Err(io::Error::new(io::ErrorKind::Other, "Failed to create manager"));
-                                                }
-                                            };
-                                            let new_manager_mutex = Arc::clone(&new_manager);
-                    
-                                            self.manager = Some(new_manager);
-                    
-                                            if let Err(e) = init_background_threads(self.tx_thread.clone(), rx,new_manager_mutex).await {
-                                                eprintln!("Failed to init threads: {:?}", e);
-                                            }
-                                        }
-                                        self.current_screen = CurrentScreen::Syncing;
+                match result {
+                    true => {
+                        self.linking_status = LinkingStatus::Linked;
+                        if let Some(rx) = self.rx_thread.take() {
+                            let new_manager: AsyncRegisteredManager =
+                                match create_registered_manager().await {
+                                    Ok(manager) => Arc::new(RwLock::new(manager)),
+                                    Err(_) => {
+                                        return Err(io::Error::new(
+                                            io::ErrorKind::Other,
+                                            "Failed to create manager",
+                                        ));
                                     }
-                                    false => self.linking_status = LinkingStatus::Unlinked,
-                                }
-                                Ok(false)
+                                };
+                            let new_manager_mutex = Arc::clone(&new_manager);
+
+                            self.manager = Some(new_manager);
+
+                            if let Err(e) = init_background_threads(
+                                self.tx_thread.clone(),
+                                rx,
+                                new_manager_mutex,
+                            )
+                            .await
+                            {
+                                eprintln!("Failed to init threads: {:?}", e);
                             }
-            EventApp::GetMessageHistory(messeges_map) => {
-                        if self.current_screen == CurrentScreen::Syncing {
-                            self.current_screen = CurrentScreen::Main;
                         }
-                        self.contact_messages = messeges_map;
-                        Ok(false)
-                    },
-            EventApp::ReceiveMessage(messages_map) => {
-                for (uuid,messages) in messages_map {
-                    self.contact_messages.entry(uuid).or_default().extend(messages);
+                        self.current_screen = CurrentScreen::Syncing;
+                    }
+                    false => self.linking_status = LinkingStatus::Unlinked,
                 }
                 Ok(false)
             },
@@ -240,19 +242,36 @@ impl App {
                 self.profile = Some(profile);
                 Ok(false)
             },
+            
+            EventApp::GetMessageHistory(messeges_map) => {
+                if self.current_screen == CurrentScreen::Syncing {
+                    self.current_screen = CurrentScreen::Main;
+                }
+                self.contact_messages = messeges_map;
+                Ok(false)
+            }
+            EventApp::ReceiveMessage(messages_map) => {
+                for (uuid, messages) in messages_map {
+                    self.contact_messages
+                        .entry(uuid)
+                        .or_default()
+                        .extend(messages);
+                }
+                Ok(false)
             }
         }
+    }
     
 
     fn enter_char(&mut self, new_char: char) {
-        if let Some((_,_, input)) = self.contacts.get_mut(self.contact_selected) {
+        if let Some((_, _, input)) = self.contacts.get_mut(self.contact_selected) {
             input.push(new_char);
             self.character_index += 1;
         }
     }
 
     fn delete_char(&mut self) {
-        if let Some((_,_, input)) = self.contacts.get_mut(self.contact_selected) {
+        if let Some((_, _, input)) = self.contacts.get_mut(self.contact_selected) {
             if self.character_index > 0 {
                 input.pop();
                 self.character_index -= 1;
@@ -281,20 +300,31 @@ impl App {
                 }
 
                 self.character_index = 0;
-                let uuid_raw = Uuid::from_str(&uuid).expect("contact does not exist");
-                let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).expect("cannot make timestamp").as_millis() as u64;
-                self.contact_messages.entry(uuid.clone()).or_default().push(MessageDto { uuid:uuid_raw, timestamp, text:input.clone(), sender: true });
+                let uuid_raw = Uuid::from_str(uuid).expect("contact does not exist");
+                let timestamp = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .expect("cannot make timestamp")
+                    .as_millis() as u64;
+                self.contact_messages
+                    .entry(uuid.clone())
+                    .or_default()
+                    .push(MessageDto {
+                        uuid: uuid_raw,
+                        timestamp,
+                        text: input.clone(),
+                        sender: true,
+                    });
                 input.clear();
 
+            }
         }
     }
-}
 
-    fn get_messages(&mut self,contacts: Vec<(String,String)>){
 
+    fn get_messages(&mut self, contacts: Vec<(String, String)>) {
         //spawn thread to get messages
         let tx_get_messages_event = self.tx_thread.clone();
-        let new_manager_mutex:AsyncRegisteredManager = Arc::clone(&self.manager.clone().unwrap());
+        let new_manager_mutex: AsyncRegisteredManager = Arc::clone(&self.manager.clone().unwrap());
         let contacts_uuids = contacts.iter().map(|(uuid, _)| uuid.clone()).collect();
 
         thread::Builder::new()
@@ -310,15 +340,12 @@ impl App {
                     handle_getting_messages(
                         tx_get_messages_event,
                         contacts_uuids,
-                        new_manager_mutex
+                        new_manager_mutex,
                     )
                     .await;
                 })
             })
             .unwrap();
-
-
-        
     }
 
     fn handle_key_event(
@@ -330,13 +357,15 @@ impl App {
         match self.current_screen {
             Main => match key.code {
                 KeyCode::Right | KeyCode::Char('d') => {
-
-                    self.message_selected= match self.contact_messages.get(&self.contacts[self.contact_selected].0) {
+                    self.message_selected = match self
+                        .contact_messages
+                        .get(&self.contacts[self.contact_selected].0)
+                    {
                         Some(msgs) => msgs.len().max(0),
                         None => 0,
                     };
                     self.current_screen = Writing;
-                },
+                }
                 KeyCode::Char('q') | KeyCode::Esc => self.current_screen = Exiting,
                 KeyCode::Char('e') => self.current_screen = Options,
                 KeyCode::Down | KeyCode::Char('s') => {
@@ -381,7 +410,7 @@ impl App {
                         Some(msgs) => msgs.len(),
                         None => 0,
                     };
-                    
+
                     if self.message_selected < last_message - 1 {
                         self.message_selected += 1;
                     }
@@ -464,9 +493,8 @@ impl App {
 pub async fn init_background_threads(
     tx_thread: mpsc::Sender<EventApp>,
     rx_thread: mpsc::Receiver<EventSend>,
-    manager:AsyncRegisteredManager,
+    manager: AsyncRegisteredManager,
 ) -> Result<()> {
-
     let new_manager_mutex = Arc::clone(&manager);
     let current_contacts_mutex: AsyncContactsMap =
         Arc::new(Mutex::new(get_contacts_tui(new_manager_mutex).await?));
@@ -560,7 +588,6 @@ pub async fn init_background_threads(
     Ok(())
 }
 
-
 pub fn handle_key_input_events(tx: mpsc::Sender<EventApp>) {
     loop {
         if let Ok(event::Event::Key(key_event)) = crossterm::event::read() {
@@ -577,7 +604,7 @@ pub async fn handle_contacts(
     manager_mutex: AsyncRegisteredManager,
     current_contacts_mutex: AsyncContactsMap,
 ) {
-    let mut previous_contacts: Vec<(String,String)> = Vec::new();
+    let mut previous_contacts: Vec<(String, String)> = Vec::new();
 
     loop {
         let new_mutex = Arc::clone(&manager_mutex);
@@ -607,21 +634,21 @@ pub async fn handle_contacts(
             Err(_) => continue,
         };
 
-        let contact_names: Vec<(String,String)> = contacts
+        let contact_names: Vec<(String, String)> = contacts
             .into_iter()
             .filter_map(|contact_res| {
                 let contact = contact_res.ok()?;
 
                 let uuid_str = contact.uuid.to_string();
-        
+
                 let display_name = if !contact.name.is_empty() {
                     contact.name
                 } else if let Some(phone) = contact.phone_number {
                     phone.to_string()
                 } else {
-                    uuid_str.clone() 
+                    uuid_str.clone()
                 };
-        
+
                 Some((uuid_str, display_name))
             })
             .collect();
@@ -645,35 +672,29 @@ pub async fn handle_receiving_new_messages(
     tx: mpsc::Sender<EventApp>,
     manager_mutex: AsyncRegisteredManager,
     current_contacts_mutex: AsyncContactsMap,
-
 ) {
-
     loop {
         let new_contacts_mutex = Arc::clone(&current_contacts_mutex);
 
         let new_mutex = Arc::clone(&manager_mutex);
-        let result = receive::receive_messages_tui(new_mutex,new_contacts_mutex).await;
+        let result = receive::receive_messages_tui(new_mutex, new_contacts_mutex).await;
 
         let messages = match result {
             Ok(list) => list,
             Err(_) => continue,
         };
-        
+
         if !messages.is_empty() {
             let mut message_map: HashMap<String, Vec<MessageDto>> = HashMap::new();
-        
+
             for msg in messages {
                 let key = msg.uuid.to_string();
                 message_map.entry(key).or_default().push(msg);
             }
 
-            if tx
-            .send(EventApp::ReceiveMessage(message_map))
-            .is_err()
-            {
+            if tx.send(EventApp::ReceiveMessage(message_map)).is_err() {
                 break;
             }
-
         }
     }
 }
@@ -765,25 +786,23 @@ pub async fn handle_sending_messages(
     }
 }
 
-pub async fn handle_getting_messages(tx: mpsc::Sender<EventApp>,contacts: Vec<String>,manager:AsyncRegisteredManager) {
-
+pub async fn handle_getting_messages(
+    tx: mpsc::Sender<EventApp>,
+    contacts: Vec<String>,
+    manager: AsyncRegisteredManager,
+) {
     let mut messages_hashmap = HashMap::new();
-    for contact in contacts{
+    for contact in contacts {
         let new_mutex = Arc::clone(&manager);
         let result = list_messages_tui(contact.clone(), "0".to_string(), new_mutex).await;
-        let messages = match result {
-            Ok(messages) => messages,
-            Err(_) => vec![],
-        };
+        let messages = result.unwrap_or_default();
         messages_hashmap.insert(contact.clone(), messages);
     }
 
     if tx
-    .send(EventApp::GetMessageHistory(messages_hashmap))
-    .is_err()
-    {
-        return ;}
-
+        .send(EventApp::GetMessageHistory(messages_hashmap))
+        .is_err()
+    {}
 }
 
 pub async fn handle_linking_device(tx: mpsc::Sender<EventApp>, device_name: String) {
