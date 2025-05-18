@@ -1,6 +1,7 @@
 use crate::contacts::get_contacts_tui;
 use crate::messages::send::{send_attachment_tui, send_message_tui};
 use crate::paths::QRCODE;
+use crate::profile::get_profile_tui;
 use crate::ui::ui;
 use crate::{
     contacts, create_registered_manager, devices, AsyncContactsMap, AsyncRegisteredManager,
@@ -8,6 +9,7 @@ use crate::{
 use anyhow::Result;
 use crossterm::event;
 use crossterm::event::{KeyCode, KeyEventKind};
+use presage::libsignal_service::Profile;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io::Stderr;
@@ -56,6 +58,8 @@ pub struct App {
 
     pub input_focus: InputFocus,
 
+    pub profile: Option<Profile>,
+
     pub tx_thread: mpsc::Sender<EventApp>,
     pub rx_tui: mpsc::Receiver<EventApp>,
 
@@ -75,6 +79,7 @@ pub enum EventApp {
     LinkingFinished(bool),
     LinkingError(String),
     NetworkStatusChanged(NetworkStatus),
+    ProfileReceived(Profile),
 }
 pub enum EventSend {
     SendText(String, String),
@@ -95,6 +100,8 @@ impl App {
             network_status: NetworkStatus::Connected,
             attachment_path: String::new(),
             input_focus: InputFocus::Message,
+
+            profile: None,
 
             tx_thread,
             rx_tui,
@@ -175,6 +182,10 @@ impl App {
                     }
                     false => self.linking_status = LinkingStatus::Unlinked,
                 }
+                Ok(false)
+            }
+            EventApp::ProfileReceived(profile) => {
+                self.profile = Some(profile);
                 Ok(false)
             }
         }
@@ -393,6 +404,27 @@ pub async fn init_background_threadss(
         })
         .unwrap();
 
+    // Add profile fetching
+    let profile_manager = Arc::clone(&manager);
+    let tx_profile = tx_thread.clone();
+    thread::Builder::new()
+        .name(String::from("profile_thread"))
+        .stack_size(1024 * 1024 * 8)
+        .spawn(move || {
+            let runtime = Builder::new_multi_thread()
+                .thread_name("profile_runtime")
+                .enable_all()
+                .build()
+                .unwrap();
+            runtime.block_on(async move {
+                if let Ok(profile) = get_profile_tui(Arc::from(profile_manager)).await {
+                    let _ = tx_profile.send(EventApp::ProfileReceived(profile));
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(100)).await;
+            })
+        })
+        .unwrap();
+
     Ok(())
 }
 
@@ -473,7 +505,7 @@ pub async fn handle_contacts(
             previous_contacts = contact_names;
         }
 
-        tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(200)).await;
     }
 }
 

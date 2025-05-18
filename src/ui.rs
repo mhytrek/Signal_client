@@ -4,6 +4,7 @@ use std::{
 };
 
 use qrcode::QrCode;
+use ratatui::layout::Alignment;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -41,7 +42,7 @@ pub fn ui(frame: &mut Frame, app: &App) {
             render_footer(frame, app, chunks[1]);
         }
         CurrentScreen::Options => {
-            render_options(frame);
+            render_options(frame, app);
             render_footer(frame, app, chunks[1]);
         }
         CurrentScreen::Exiting => {
@@ -236,16 +237,63 @@ fn render_qrcode(frame: &mut Frame, area: Rect) {
     }
 }
 
-/// Renders the options screen
-fn render_options(frame: &mut Frame) {
+/// Renders the enhanced options screen with improved layout
+fn render_options(frame: &mut Frame, app: &App) {
     let popup_block = Block::default()
+        .title("Options")
         .borders(Borders::ALL)
         .border_type(BorderType::Double);
 
-    let exit_paragraph = Paragraph::new("lista opcji....")
+    let mut options_text = String::new();
+
+    options_text.push_str("PROFILE:\n");
+
+    if let Some(profile) = &app.profile {
+        options_text.push_str("  Name               : ");
+        options_text.push_str(
+            profile
+                .name
+                .as_ref()
+                .map_or("Not set", |n| n.given_name.as_str()),
+        );
+        options_text.push('\n');
+
+        options_text.push_str("  About              : ");
+        options_text.push_str(profile.about.as_ref().map_or("Not set", String::as_str));
+        options_text.push('\n');
+
+        options_text.push_str("  Emoji              : ");
+        options_text.push_str(
+            profile
+                .about_emoji
+                .as_ref()
+                .map_or("Not set", String::as_str),
+        );
+        options_text.push('\n');
+
+        options_text.push_str("  Avatar             : ");
+        options_text.push_str(if profile.avatar.is_some() {
+            "Set"
+        } else {
+            "Not set"
+        });
+        options_text.push('\n');
+
+        options_text.push_str("  Unrestricted Access: ");
+        options_text.push_str(if profile.unrestricted_unidentified_access {
+            "Enabled"
+        } else {
+            "Disabled"
+        });
+        options_text.push_str("\n\n");
+    } else {
+        options_text.push_str("  Profile data not loaded...\n\n");
+    }
+
+    let exit_paragraph = Paragraph::new(options_text)
         .block(popup_block)
-        .centered()
-        .wrap(Wrap { trim: false });
+        .wrap(Wrap { trim: true })
+        .alignment(Alignment::Left);
 
     let area = centered_rect(60, 80, frame.area());
 

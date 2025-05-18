@@ -19,6 +19,8 @@ pub mod paths;
 pub mod tui;
 pub mod ui;
 
+pub mod profile;
+
 pub mod sending {}
 
 pub type AsyncRegisteredManager = Arc<RwLock<Manager<SledStore, Registered>>>;
