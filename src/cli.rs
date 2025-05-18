@@ -1,6 +1,7 @@
 use crate::{
     contacts::list_contacts_cli,
     messages::receive::{list_messages_cli, receive_messages_cli},
+    profile::get_profile_cli,
 };
 use anyhow::Result;
 use presage::{
@@ -105,5 +106,37 @@ pub async fn print_received_message() -> Result<()> {
     for message in messages {
         print_message(&message);
     }
+    Ok(())
+}
+
+pub async fn print_profile() -> Result<()> {
+    let profile = get_profile_cli().await?;
+
+    println!("Profile:");
+    if let Some(name) = &profile.name {
+        println!("Name: {}", name);
+    } else {
+        println!("Name: N/A");
+    }
+    if let Some(about) = &profile.about {
+        println!("About: {}", about);
+    } else {
+        println!("About: N/A");
+    }
+    if let Some(about_emoji) = &profile.about_emoji {
+        println!("About Emoji: {}", about_emoji);
+    } else {
+        println!("About Emoji: N/A");
+    }
+    if let Some(avatar) = &profile.avatar {
+        println!("Avatar: {}", avatar);
+    } else {
+        println!("Avatar: N/A");
+    }
+    println!(
+        "Unrestricted Unidentified Access: {}",
+        profile.unrestricted_unidentified_access
+    );
+
     Ok(())
 }

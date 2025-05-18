@@ -19,6 +19,7 @@ async fn main() -> Result<()> {
         }
         Command::ListMessages(args) => cli::print_messages(args.recipient, args.from).await?,
         Command::Receive => cli::print_received_message().await?,
+        Command::GetProfile => cli::print_profile().await?,
         Command::SendAttachment(args) => {
             messages::send::send_attachment_cli(
                 args.recipient,

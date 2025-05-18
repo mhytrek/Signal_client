@@ -24,6 +24,8 @@ pub enum Command {
     ListMessages(ListMessagesArgs),
     /// Prints received messeges
     Receive,
+    /// Prints profile info
+    GetProfile,
 }
 
 #[derive(Args)]

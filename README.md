@@ -110,6 +110,13 @@ Receive messages (prints new messages)
 cargo run receive
 ```
 
+### **get-profile**
+Get profile info
+
+```bash
+cargo run get-profile
+```
+
 
 ### **help**
 Prints this help message or details for specific subcommands.
