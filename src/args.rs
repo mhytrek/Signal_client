@@ -22,7 +22,7 @@ pub enum Command {
     SendAttachment(SendAttachmentArgs),
     /// Prints messages from given point in time
     ListMessages(ListMessagesArgs),
-    /// Prints received messeges
+    /// Prints the messages received from the last synchronization
     Receive,
     /// Prints profile info
     GetProfile,
@@ -46,8 +46,10 @@ pub struct SendMessageArgs {
 
 #[derive(Args)]
 pub struct ListMessagesArgs {
+    /// Uuid of the contact that the message history should be shown
     #[arg(short, long)]
     pub recipient: String,
+    /// The timestamp from which messages start being displayed
     pub from: String,
 }
 
