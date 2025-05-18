@@ -55,6 +55,7 @@ pub struct SendAttachmentArgs {
     #[arg(short, long)]
     pub recipient: String,
     /// Content of the message
+    #[arg(short, long, default_value_t = String::from(""))]
     pub text_message: String,
     /// Full path to attachment
     pub attachment_path: String,

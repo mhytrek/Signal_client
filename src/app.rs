@@ -197,24 +197,26 @@ impl App {
     }
     fn submit_message(&mut self, tx: &Sender<EventSend>) {
         if let Some((name, input)) = self.contacts.get_mut(self.selected) {
-            if !input.trim().is_empty() {
-                let message = input.clone();
+            let message = if input.trim().is_empty() {
+                "".to_string()
+            } else {
+                input.clone()
+            };
 
-                if !self.attachment_path.trim().is_empty() {
-                    tx.send(EventSend::SendAttachment(
-                        name.clone(),
-                        message,
-                        self.attachment_path.clone(),
-                    ))
-                    .unwrap();
-                    self.attachment_path.clear();
-                } else {
-                    tx.send(EventSend::SendText(name.clone(), message)).unwrap();
-                }
-
-                input.clear();
-                self.character_index = 0;
+            if !self.attachment_path.trim().is_empty() {
+                tx.send(EventSend::SendAttachment(
+                    name.clone(),
+                    message,
+                    self.attachment_path.clone(),
+                ))
+                .unwrap();
+                self.attachment_path.clear();
+            } else if !message.is_empty() {
+                tx.send(EventSend::SendText(name.clone(), message)).unwrap();
             }
+
+            input.clear();
+            self.character_index = 0;
         }
     }
 
