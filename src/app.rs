@@ -1,6 +1,6 @@
 use crate::contacts::get_contacts_tui;
-use crate::messages::send::{send_attachment_tui, send_message_tui};
 use crate::messages::receive::{self, list_messages_tui, MessageDto};
+use crate::messages::send::{send_attachment_tui, send_message_tui};
 use crate::paths::QRCODE;
 use crate::profile::get_profile_tui;
 use crate::ui::ui;
@@ -10,8 +10,8 @@ use crate::{
 use anyhow::Result;
 use crossterm::event;
 use crossterm::event::{KeyCode, KeyEventKind};
-use presage::libsignal_service::Profile;
 use presage::libsignal_service::prelude::Uuid;
+use presage::libsignal_service::Profile;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::collections::HashMap;
@@ -67,7 +67,7 @@ pub struct App {
     pub input_focus: InputFocus,
 
     pub profile: Option<Profile>,
-    pub contact_messages: HashMap<String,Vec<MessageDto>>,
+    pub contact_messages: HashMap<String, Vec<MessageDto>>,
 
     pub manager: Option<AsyncRegisteredManager>,
 
@@ -91,8 +91,8 @@ pub enum EventApp {
     LinkingError(String),
     NetworkStatusChanged(NetworkStatus),
     ProfileReceived(Profile),
-    GetMessageHistory(HashMap<String,Vec<MessageDto>>),
-    ReceiveMessage(HashMap<String,Vec<MessageDto>>)
+    GetMessageHistory(HashMap<String, Vec<MessageDto>>),
+    ReceiveMessage(HashMap<String, Vec<MessageDto>>),
 }
 pub enum EventSend {
     SendText(String, String),
@@ -237,12 +237,12 @@ impl App {
                     false => self.linking_status = LinkingStatus::Unlinked,
                 }
                 Ok(false)
-            },
+            }
             EventApp::ProfileReceived(profile) => {
                 self.profile = Some(profile);
                 Ok(false)
-            },
-            
+            }
+
             EventApp::GetMessageHistory(messeges_map) => {
                 if self.current_screen == CurrentScreen::Syncing {
                     self.current_screen = CurrentScreen::Main;
@@ -261,7 +261,6 @@ impl App {
             }
         }
     }
-    
 
     fn enter_char(&mut self, new_char: char) {
         if let Some((_, _, input)) = self.contacts.get_mut(self.contact_selected) {
@@ -279,8 +278,8 @@ impl App {
         }
     }
     fn submit_message(&mut self, tx: &Sender<EventSend>) {
-        if let Some((uuid,name, input)) = self.contacts.get_mut(self.contact_selected) {
-                if !input.trim().is_empty() {
+        if let Some((uuid, name, input)) = self.contacts.get_mut(self.contact_selected) {
+            if !input.trim().is_empty() {
                 let message = if input.trim().is_empty() {
                     "".to_string()
                 } else {
@@ -315,11 +314,9 @@ impl App {
                         sender: true,
                     });
                 input.clear();
-
             }
         }
     }
-
 
     fn get_messages(&mut self, contacts: Vec<(String, String)>) {
         //spawn thread to get messages
@@ -405,8 +402,11 @@ impl App {
                     }
                 },
 
-                KeyCode::Down  => {
-                    let last_message= match self.contact_messages.get(&self.contacts[self.contact_selected].0) {
+                KeyCode::Down => {
+                    let last_message = match self
+                        .contact_messages
+                        .get(&self.contacts[self.contact_selected].0)
+                    {
                         Some(msgs) => msgs.len(),
                         None => 0,
                     };

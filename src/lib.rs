@@ -16,9 +16,9 @@ pub mod contacts;
 pub mod devices;
 pub mod messages;
 pub mod paths;
+pub mod profile;
 pub mod tui;
 pub mod ui;
-pub mod profile;
 
 pub mod sending {}
 

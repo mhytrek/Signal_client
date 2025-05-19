@@ -151,11 +151,9 @@ pub async fn list_messages_tui(
 
     let mut result = Vec::new();
 
-    for message in messages {
-        if let Ok(content) = message {
-            if let Some(formatted_message) = format_message(&content) {
-                result.push(formatted_message);
-            }
+    for message in messages.into_iter().flatten() {
+        if let Some(formatted_message) = format_message(&message) {
+            result.push(formatted_message);
         }
     }
     Ok(result)
@@ -197,11 +195,9 @@ pub async fn list_messages_cli(recipient: String, from: String) -> Result<Vec<Me
 
     let mut result = Vec::new();
 
-    for message in messages {
-        if let Ok(content) = message {
-            if let Some(formatted_message) = format_message(&content) {
-                result.push(formatted_message);
-            }
+    for message in messages.into_iter().flatten() {
+        if let Some(formatted_message) = format_message(&message) {
+            result.push(formatted_message);
         }
     }
     Ok(result)
