@@ -165,17 +165,14 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
             .borders(Borders::ALL),
     );
 
-
-    
     let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
 
     let mut scrollbar_state = ScrollbarState::new(messages.len()).position(app.message_selected);
 
-
     let mut list_state = ListState::default();
     list_state.select(Some(app.message_selected));
 
-    frame.render_stateful_widget(chat_window, vertical_chunks[0],&mut list_state);
+    frame.render_stateful_widget(chat_window, vertical_chunks[0], &mut list_state);
     frame.render_widget(input_window, input_area_chunks[0]);
     frame.render_widget(attachment_window, input_area_chunks[1]);
     frame.render_stateful_widget(

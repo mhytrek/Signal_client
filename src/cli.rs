@@ -1,7 +1,7 @@
 use crate::{
     contacts::list_contacts_cli,
-    profile::get_profile_cli,
     messages::receive::{list_messages_cli, receive_messages_cli, MessageDto},
+    profile::get_profile_cli,
 };
 use anyhow::Result;
 use chrono::{DateTime, Utc};
