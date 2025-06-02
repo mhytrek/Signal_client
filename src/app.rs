@@ -63,6 +63,7 @@ pub struct App {
     pub character_index: usize,
     pub textarea: String,
     pub attachment_path: String,
+    pub attachment_error: Option<String>,
 
     pub input_focus: InputFocus,
 
@@ -114,6 +115,7 @@ impl App {
             contact_messages: HashMap::new(),
             network_status: NetworkStatus::Connected,
             attachment_path: String::new(),
+            attachment_error: None,
             input_focus: InputFocus::Message,
 
             profile: None,
@@ -277,25 +279,44 @@ impl App {
             }
         }
     }
-    fn submit_message(&mut self, tx: &Sender<EventSend>) {
-        if let Some((uuid, name, input)) = self.contacts.get_mut(self.contact_selected) {
-            if !input.trim().is_empty() {
-                let message = if input.trim().is_empty() {
-                    "".to_string()
-                } else {
-                    input.clone()
-                };
 
-                if !self.attachment_path.trim().is_empty() {
+    fn validate_attachment_path(&mut self) {
+        if self.attachment_path.trim().is_empty() {
+            self.attachment_error = None;
+        } else if !Path::new(&self.attachment_path).exists() {
+            self.attachment_error = Some("File does not exist".to_string());
+        } else if !Path::new(&self.attachment_path).is_file() {
+            self.attachment_error = Some("Path is not a file".to_string());
+        } else {
+            self.attachment_error = None;
+        }
+    }
+
+    fn submit_message(&mut self, tx: &Sender<EventSend>) {
+        let has_attachment = !self.attachment_path.trim().is_empty();
+        if has_attachment {
+            self.validate_attachment_path();
+            if self.attachment_error.is_some() {
+                return;
+            }
+        }
+        if let Some((uuid, name, input)) = self.contacts.get_mut(self.contact_selected) {
+            let message_text = input.trim().to_string();
+            let has_text = !message_text.is_empty();
+
+            if has_text || has_attachment {
+                if has_attachment {
                     tx.send(EventSend::SendAttachment(
                         name.clone(),
-                        message,
+                        message_text.clone(),
                         self.attachment_path.clone(),
                     ))
                     .unwrap();
                     self.attachment_path.clear();
-                } else if !message.is_empty() {
-                    tx.send(EventSend::SendText(name.clone(), message)).unwrap();
+                    self.attachment_error = None;
+                } else {
+                    tx.send(EventSend::SendText(name.clone(), message_text.clone()))
+                        .unwrap();
                 }
 
                 self.character_index = 0;
@@ -304,15 +325,25 @@ impl App {
                     .duration_since(UNIX_EPOCH)
                     .expect("cannot make timestamp")
                     .as_millis() as u64;
+
+                let display_text = if has_text && has_attachment {
+                    format!("{} [with attachment]", message_text)
+                } else if has_attachment {
+                    "[attachment]".to_string()
+                } else {
+                    message_text
+                };
+
                 self.contact_messages
                     .entry(uuid.clone())
                     .or_default()
                     .push(MessageDto {
                         uuid: uuid_raw,
                         timestamp,
-                        text: input.clone(),
+                        text: display_text,
                         sender: true,
                     });
+
                 input.clear();
             }
         }
@@ -393,12 +424,16 @@ impl App {
                 KeyCode::Enter => self.submit_message(tx),
                 KeyCode::Char(to_insert) => match self.input_focus {
                     InputFocus::Message => self.enter_char(to_insert),
-                    InputFocus::Attachment => self.attachment_path.push(to_insert),
+                    InputFocus::Attachment => {
+                        self.attachment_path.push(to_insert);
+                        self.validate_attachment_path();
+                    }
                 },
                 KeyCode::Backspace => match self.input_focus {
                     InputFocus::Message => self.delete_char(),
                     InputFocus::Attachment => {
                         self.attachment_path.pop();
+                        self.validate_attachment_path();
                     }
                 },
 
@@ -411,7 +446,7 @@ impl App {
                         None => 0,
                     };
 
-                    if self.message_selected < last_message - 1 {
+                    if last_message > 0 && self.message_selected < last_message - 1 {
                         self.message_selected += 1;
                     }
                 }

@@ -159,11 +159,28 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
     let input_window = Paragraph::new(app.contacts[app.contact_selected].2.clone())
         .block(Block::default().title("Input").borders(Borders::ALL));
 
-    let attachment_window = Paragraph::new(app.attachment_path.clone()).block(
-        Block::default()
-            .title("Attachment Path")
-            .borders(Borders::ALL),
-    );
+    let attachment_title = match &app.attachment_error {
+        Some(error) => format!("Attachment Path - ERROR: {}", error),
+        None => "Attachment Path".to_string(),
+    };
+
+    let attachment_style = match &app.attachment_error {
+        Some(_) => Style::default().fg(Color::Red),
+        None => Style::default(),
+    };
+
+    let attachment_border_style = match &app.attachment_error {
+        Some(_) => Style::default().fg(Color::Red),
+        None => Style::default(),
+    };
+
+    let attachment_window =
+        Paragraph::new(Text::styled(app.attachment_path.clone(), attachment_style)).block(
+            Block::default()
+                .title(attachment_title)
+                .borders(Borders::ALL)
+                .border_style(attachment_border_style),
+        );
 
     let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
 
@@ -240,10 +257,19 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
                 "(q) to quit | (↑ ↓) to navigate | (→) to select chat | (e) to show more options",
                 Style::default(),
             ),
-            CurrentScreen::Writing => Span::styled(
-                "(q) to exit | (ENTER) to send | (TAB) to switch input/attachment",
-                Style::default(),
-            ),
+            CurrentScreen::Writing => {
+                if app.attachment_error.is_some() {
+                    Span::styled(
+                        "(q) to exit | (ENTER) to send | (TAB) to switch input/attachment | Fix attachment path to send",
+                        Style::default().fg(Color::Yellow),
+                    )
+                } else {
+                    Span::styled(
+                        "(q) to exit | (ENTER) to send | (TAB) to switch input/attachment",
+                        Style::default(),
+                    )
+                }
+            }
             CurrentScreen::Options => Span::styled("(q) to exit | (e) to select", Style::default()),
 
             _ => Span::default(),
