@@ -8,7 +8,7 @@ use crate::{
     contacts, create_registered_manager, devices, AsyncContactsMap, AsyncRegisteredManager,
 };
 use anyhow::Result;
-use crossterm::event;
+use crossterm::event::{self, Event};
 use crossterm::event::{KeyCode, KeyEventKind};
 use presage::libsignal_service::prelude::Uuid;
 use presage::libsignal_service::Profile;
@@ -94,6 +94,8 @@ pub enum EventApp {
     ProfileReceived(Profile),
     GetMessageHistory(HashMap<String, Vec<MessageDto>>),
     ReceiveMessage(HashMap<String, Vec<MessageDto>>),
+    QrCodeGenerated,
+    Resize(u16,u16)
 }
 pub enum EventSend {
     SendText(String, String),
@@ -165,15 +167,9 @@ impl App {
         loop {
             terminal.draw(|f| ui(f, self))?;
 
-            match self.rx_tui.try_recv() {
-                Ok(event) => {
-                    if self.handle_event(event, &self.tx_tui.clone()).await? {
-                        return Ok(true);
-                    }
-                }
-                Err(std::sync::mpsc::TryRecvError::Empty) => {}
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                    return Ok(false);
+            if let Ok(event) = self.rx_tui.recv() {
+                if self.handle_event(event, &self.tx_tui.clone()).await? {
+                    return Ok(true);
                 }
             }
         }
@@ -182,85 +178,86 @@ impl App {
     async fn handle_event(&mut self, event: EventApp, tx: &Sender<EventSend>) -> io::Result<bool> {
         match event {
             EventApp::KeyInput(key) => {
-                if key.kind == KeyEventKind::Release {
-                    return Ok(false);
-                }
-                self.handle_key_event(key, tx)
-            }
-            EventApp::NetworkStatusChanged(status) => {
-                self.network_status = status;
-                Ok(false)
-            }
-            EventApp::LinkingError(error_msg) => {
-                self.linking_status = LinkingStatus::Error(error_msg);
-                Ok(false)
-            }
-            EventApp::ContactsList(contacts) => {
-                if self.current_screen == CurrentScreen::Syncing {
-                    self.get_messages(contacts.clone());
-                }
-                self.contacts = contacts
-                    .into_iter()
-                    .map(|(uuid, name)| (uuid, name, String::new()))
-                    .collect();
-                Ok(false)
-            }
-            EventApp::LinkingFinished(result) => {
-                match result {
-                    true => {
-                        self.linking_status = LinkingStatus::Linked;
-                        if let Some(rx) = self.rx_thread.take() {
-                            let new_manager: AsyncRegisteredManager =
-                                match create_registered_manager().await {
-                                    Ok(manager) => Arc::new(RwLock::new(manager)),
-                                    Err(_) => {
-                                        return Err(io::Error::new(
-                                            io::ErrorKind::Other,
-                                            "Failed to create manager",
-                                        ));
-                                    }
-                                };
-                            let new_manager_mutex = Arc::clone(&new_manager);
-
-                            self.manager = Some(new_manager);
-
-                            if let Err(e) = init_background_threads(
-                                self.tx_thread.clone(),
-                                rx,
-                                new_manager_mutex,
-                            )
-                            .await
-                            {
-                                eprintln!("Failed to init threads: {:?}", e);
+                                if key.kind == KeyEventKind::Release {
+                                    return Ok(false);
+                                }
+                                self.handle_key_event(key, tx)
                             }
-                        }
-                        self.current_screen = CurrentScreen::Syncing;
-                    }
-                    false => self.linking_status = LinkingStatus::Unlinked,
-                }
-                Ok(false)
-            }
-            EventApp::ProfileReceived(profile) => {
-                self.profile = Some(profile);
-                Ok(false)
-            }
+            EventApp::NetworkStatusChanged(status) => {
+                                self.network_status = status;
+                                Ok(false)
+                            }
+            EventApp::LinkingError(error_msg) => {
+                                self.linking_status = LinkingStatus::Error(error_msg);
+                                Ok(false)
+                            }
+            EventApp::ContactsList(contacts) => {
+                                if self.current_screen == CurrentScreen::Syncing {
+                                    self.get_messages(contacts.clone());
+                                }
+                                self.contacts = contacts
+                                    .into_iter()
+                                    .map(|(uuid, name)| (uuid, name, String::new()))
+                                    .collect();
+                                Ok(false)
+                            }
+            EventApp::LinkingFinished(result) => {
+                                match result {
+                                    true => {
+                                        self.linking_status = LinkingStatus::Linked;
+                                        if let Some(rx) = self.rx_thread.take() {
+                                            let new_manager: AsyncRegisteredManager =
+                                                match create_registered_manager().await {
+                                                    Ok(manager) => Arc::new(RwLock::new(manager)),
+                                                    Err(_) => {
+                                                        return Err(io::Error::new(
+                                                            io::ErrorKind::Other,
+                                                            "Failed to create manager",
+                                                        ));
+                                                    }
+                                                };
+                                            let new_manager_mutex = Arc::clone(&new_manager);
 
+                                            self.manager = Some(new_manager);
+
+                                            if let Err(e) = init_background_threads(
+                                                self.tx_thread.clone(),
+                                                rx,
+                                                new_manager_mutex,
+                                            )
+                                            .await
+                                            {
+                                                eprintln!("Failed to init threads: {:?}", e);
+                                            }
+                                        }
+                                        self.current_screen = CurrentScreen::Syncing;
+                                    }
+                                    false => self.linking_status = LinkingStatus::Unlinked,
+                                }
+                                Ok(false)
+                            }
+            EventApp::ProfileReceived(profile) => {
+                                self.profile = Some(profile);
+                                Ok(false)
+                            }
             EventApp::GetMessageHistory(messeges_map) => {
-                if self.current_screen == CurrentScreen::Syncing {
-                    self.current_screen = CurrentScreen::Main;
-                }
-                self.contact_messages = messeges_map;
-                Ok(false)
-            }
+                                if self.current_screen == CurrentScreen::Syncing {
+                                    self.current_screen = CurrentScreen::Main;
+                                }
+                                self.contact_messages = messeges_map;
+                                Ok(false)
+                            }
             EventApp::ReceiveMessage(messages_map) => {
-                for (uuid, messages) in messages_map {
-                    self.contact_messages
-                        .entry(uuid)
-                        .or_default()
-                        .extend(messages);
-                }
-                Ok(false)
-            }
+                                for (uuid, messages) in messages_map {
+                                    self.contact_messages
+                                        .entry(uuid)
+                                        .or_default()
+                                        .extend(messages);
+                                }
+                                Ok(false)
+                            }
+            EventApp::QrCodeGenerated => Ok(false),
+            EventApp::Resize(_, _) => Ok(false),
         }
     }
 
@@ -472,6 +469,12 @@ impl App {
                                         fs::remove_file(QRCODE)?;
                                     }
 
+                                    //spawn thread to check if the qr was generated
+                                    let tx_key_events = self.tx_thread.clone();
+                                    thread::spawn(move || {
+                                        handle_checking_qr_code(tx_key_events);
+                                    });
+
                                     //spawn thread to link device
                                     let device_name = self.textarea.clone();
                                     let tx_link_device_event = self.tx_thread.clone();
@@ -625,10 +628,21 @@ pub async fn init_background_threads(
 
 pub fn handle_key_input_events(tx: mpsc::Sender<EventApp>) {
     loop {
-        if let Ok(event::Event::Key(key_event)) = crossterm::event::read() {
-            if tx.send(EventApp::KeyInput(key_event)).is_err() {
-                eprintln!("Failed to send key event");
-                break;
+        if let Ok(event) = event::read() {
+            match event {
+                Event::Key(key_event) => {
+                    if tx.send(EventApp::KeyInput(key_event)).is_err() {
+                        eprintln!("Failed to send key event");
+                        break;
+                    }
+                }
+                Event::Resize(cols, rows) => {
+                    if tx.send(EventApp::Resize(cols, rows)).is_err() {
+                        eprintln!("Failed to send resize event");
+                        break;
+                    }
+                }
+                _ => {}
             }
         }
     }
@@ -863,6 +877,17 @@ pub async fn handle_linking_device(tx: mpsc::Sender<EventApp>, device_name: Stri
             if tx.send(EventApp::LinkingError(error_msg)).is_err() {
                 eprintln!("Failed to send linking error");
             }
+        }
+    }
+}
+
+pub fn handle_checking_qr_code(tx:mpsc::Sender<EventApp>){
+    loop{
+        if Path::new(QRCODE).exists() {
+            if tx.send(EventApp::QrCodeGenerated).is_err() {
+                eprintln!("Failed to send QrCodeGenerated event");
+            }
+            break;
         }
     }
 }
