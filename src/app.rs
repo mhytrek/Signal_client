@@ -161,7 +161,7 @@ impl App {
 
         let tx_key_events = self.tx_thread.clone();
         thread::spawn(move || {
-            handle_key_input_events(tx_key_events);
+            handle_input_events(tx_key_events);
         });
 
         loop {
@@ -626,7 +626,7 @@ pub async fn init_background_threads(
     Ok(())
 }
 
-pub fn handle_key_input_events(tx: mpsc::Sender<EventApp>) {
+pub fn handle_input_events(tx: mpsc::Sender<EventApp>) {
     loop {
         if let Ok(event) = event::read() {
             match event {
