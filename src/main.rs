@@ -28,6 +28,7 @@ async fn main() -> Result<()> {
             )
             .await?
         }
+        Command::ListGroups => cli::print_groups().await?,
     }
 
     Ok(())

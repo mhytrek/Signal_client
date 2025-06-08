@@ -10,20 +10,31 @@ pub struct Cli {
 pub enum Command {
     /// Link this device to your signal account
     LinkDevice(LinkDeviceArgs),
+
     /// Synchronizes contacts with primary device
     SyncContacts,
+
     /// Prints locally stored contacts
     ListContacts,
+
+    /// Prints locally stored groups
+    ListGroups,
+
     /// Displays a prototype of a layout with example data
     RunApp,
+
     /// Send text message
     SendMessage(SendMessageArgs),
+
     /// Send attachment
     SendAttachment(SendAttachmentArgs),
+
     /// Prints messages from given point in time
     ListMessages(ListMessagesArgs),
+
     /// Prints the messages received from the last synchronization
     Receive,
+
     /// Prints profile info
     GetProfile,
 }
