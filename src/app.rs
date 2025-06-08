@@ -1,6 +1,6 @@
 use crate::contacts::get_contacts_tui;
 use crate::messages::receive::{self, list_messages_tui, MessageDto};
-use crate::messages::send::{send_attachment_tui, send_message_tui};
+use crate::messages::send::contacts::{send_attachment_to_contact_tui, send_message_to_contact_tui};
 use crate::paths::QRCODE;
 use crate::profile::get_profile_tui;
 use crate::ui::ui;
@@ -814,7 +814,7 @@ pub async fn handle_background_events(
         if let Ok(event) = rx.recv() {
             match event {
                 EventSend::SendText(recipient, text) => {
-                    match send_message_tui(
+                    match send_message_to_contact_tui(
                         recipient.clone(),
                         text.clone(),
                         Arc::clone(&manager_mutex),
@@ -846,7 +846,7 @@ pub async fn handle_background_events(
                     .await;
                 }
                 EventSend::SendAttachment(recipient, text, attachment_path) => {
-                    match send_attachment_tui(
+                    match send_attachment_to_contact_tui(
                         recipient.clone(),
                         text.clone(),
                         attachment_path,
