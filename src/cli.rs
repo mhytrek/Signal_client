@@ -1,11 +1,13 @@
 use crate::{
     contacts::list_contacts_cli,
     messages::receive::{list_messages_cli, receive_messages_cli, MessageDto},
-    profile::get_profile_cli,
+    profile::{get_profile_cli, get_my_profile_avatar_cli},
 };
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use presage::model::contacts::Contact;
+use image::{load_from_memory};
+use viuer::Config;
 
 fn print_contact(contact: &Contact) {
     println!("Name: {}", contact.name);
@@ -82,15 +84,54 @@ pub async fn print_profile() -> Result<()> {
     } else {
         println!("About Emoji: N/A");
     }
-    if let Some(avatar) = &profile.avatar {
-        println!("Avatar: {}", avatar);
-    } else {
-        println!("Avatar: N/A");
-    }
+
     println!(
         "Unrestricted Unidentified Access: {}",
         profile.unrestricted_unidentified_access
     );
+
+    println!("\nAvatar:");
+    match get_my_profile_avatar_cli().await {
+        Ok(Some(avatar_data)) => {
+            println!("Avatar size: {} bytes", avatar_data.len());
+
+            match display_avatar_color(&avatar_data) {
+                Ok(_) => println!("Avatar displayed above"),
+                Err(e) => {
+                    println!("Could not display avatar in terminal: {}", e);
+                    println!("Avatar data available but display failed");
+                }
+            }
+        }
+        Ok(None) => {
+            println!("No avatar set");
+        }
+        Err(e) => {
+            println!("Error retrieving avatar: {}", e);
+        }
+    }
+
+    Ok(())
+}
+
+fn display_avatar_color(image_data: &[u8]) -> Result<()> {
+    // Zapisz tymczasowo do pliku (viuer wymaga pliku)
+    let temp_path = "/tmp/avatar_temp.jpg";
+    std::fs::write(temp_path, image_data)?;
+
+    // Konfiguracja viuer
+    let config = Config {
+        width: Some(40),      // Szerokość w znakach
+        height: Some(20),     // Wysokość w znakach
+        absolute_offset: false,
+        ..Default::default()
+    };
+
+    // Wyświetl obraz
+    viuer::print_from_file(temp_path, &config)?;
+
+    // Usuń tymczasowy plik
+    std::fs::remove_file(temp_path).ok();
 
     Ok(())
 }
