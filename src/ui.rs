@@ -121,6 +121,7 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(3)])
         .split(area);
 
+
     let messages: Vec<ListItem> = match &app
         .contact_messages
         .get(&app.contacts[app.contact_selected].0)
@@ -129,7 +130,7 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
             .iter()
             .map(|msg| {
                 let mut style = Style::default();
-                if msg.sender {
+                if app.contacts[app.contact_selected].0 != msg.uuid.to_string() {
                     style = style.add_modifier(Modifier::BOLD)
                 }
 
