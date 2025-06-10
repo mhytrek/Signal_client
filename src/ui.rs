@@ -3,7 +3,7 @@ use std::{
     path::Path,
 };
 
-use chrono::{DateTime, Utc,Local};
+use chrono::{DateTime, Local, Utc};
 use qrcode::QrCode;
 use ratatui::layout::Alignment;
 use ratatui::{
@@ -121,7 +121,6 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(3)])
         .split(area);
 
-
     let messages: Vec<ListItem> = match &app
         .contact_messages
         .get(&app.contacts[app.contact_selected].0)
@@ -136,11 +135,16 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
 
                 let millis = msg.timestamp;
                 let secs = (millis / 1000) as i64;
-                let datetime_utc: DateTime<Utc> = DateTime::from_timestamp(secs, 0).expect("Invalid timestamp");
+                let datetime_utc: DateTime<Utc> =
+                    DateTime::from_timestamp(secs, 0).expect("Invalid timestamp");
 
                 let datetime_local = datetime_utc.with_timezone(&Local);
 
-                let content = format!("[{}] {}", datetime_local.format("%Y-%m-%d %H:%M:%S"), msg.text);
+                let content = format!(
+                    "[{}] {}",
+                    datetime_local.format("%Y-%m-%d %H:%M:%S"),
+                    msg.text
+                );
                 ListItem::new(content).style(style)
             })
             .collect(),

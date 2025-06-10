@@ -97,7 +97,7 @@ pub enum EventApp {
 pub enum EventSend {
     SendText(String, String),
     SendAttachment(String, String, String),
-    GetMessagesForContact(String)
+    GetMessagesForContact(String),
 }
 
 impl App {
@@ -244,12 +244,12 @@ impl App {
                 }
                 self.contact_messages = messeges_map;
                 self.message_selected = match self
-                .contact_messages
-                .get(&self.contacts[self.contact_selected].0)
-            {
-                Some(msgs) => msgs.len().max(0),
-                None => 0,
-            };
+                    .contact_messages
+                    .get(&self.contacts[self.contact_selected].0)
+                {
+                    Some(msgs) => msgs.len().max(0),
+                    None => 0,
+                };
                 Ok(false)
             }
             EventApp::ReceiveMessage => {
@@ -259,7 +259,6 @@ impl App {
             EventApp::QrCodeGenerated => Ok(false),
             EventApp::Resize(_, _) => Ok(false),
         }
-
     }
 
     fn enter_char(&mut self, new_char: char) {
@@ -325,10 +324,12 @@ impl App {
     }
 
     fn synchronize_messages_for_selected_contact(&mut self) {
-        self.tx_tui.send(EventSend::GetMessagesForContact(self.contacts[self.contact_selected].0.clone()))
-        .unwrap();
+        self.tx_tui
+            .send(EventSend::GetMessagesForContact(
+                self.contacts[self.contact_selected].0.clone(),
+            ))
+            .unwrap();
     }
-
 
     fn handle_key_event(
         &mut self,
@@ -375,7 +376,7 @@ impl App {
                 KeyCode::Enter => {
                     self.submit_message(tx);
                     self.synchronize_messages_for_selected_contact();
-                },
+                }
                 KeyCode::Char(to_insert) => match self.input_focus {
                     InputFocus::Message => self.enter_char(to_insert),
                     InputFocus::Attachment => {
@@ -483,7 +484,6 @@ impl App {
         Ok(false)
     }
 }
-
 
 fn is_connection_error(e: &Error) -> bool {
     let msg = e.to_string().to_lowercase();
@@ -609,8 +609,7 @@ pub async fn handle_synchronization(
                 list
             }
             Err(e) => {
-                if is_connection_error(&e)
-                {
+                if is_connection_error(&e) {
                     let _ = tx.send(EventApp::NetworkStatusChanged(NetworkStatus::Disconnected(
                         "Cannot receive pending messages: WiFi disconnected".to_string(),
                     )));
@@ -657,16 +656,8 @@ pub async fn handle_synchronization(
             previous_contacts = contact_names;
         }
 
-
-        if !messages.is_empty(){
-            if tx
-            .send(EventApp::ReceiveMessage)
-            .is_err()
-        {}
-        }
-
+        if !messages.is_empty() && tx.send(EventApp::ReceiveMessage).is_err() {}
     }
-
 }
 
 // pub async fn handle_contacts(
@@ -738,8 +729,6 @@ pub async fn handle_synchronization(
 //     }
 // }
 
-
-
 pub async fn handle_background_events(
     rx: Receiver<EventSend>,
     manager_mutex: AsyncRegisteredManager,
@@ -763,8 +752,7 @@ pub async fn handle_background_events(
                                 .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
                         }
                         Err(e) => {
-                            if is_connection_error(&e)
-                            {
+                            if is_connection_error(&e) {
                                 let _ = tx_status.send(EventApp::NetworkStatusChanged(
                                     NetworkStatus::Disconnected(
                                         "Cannot send: WiFi disconnected".to_string(),
@@ -797,8 +785,7 @@ pub async fn handle_background_events(
                                 .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
                         }
                         Err(e) => {
-                            if is_connection_error(&e)
-                            {
+                            if is_connection_error(&e) {
                                 let _ = tx_status.send(EventApp::NetworkStatusChanged(
                                     NetworkStatus::Disconnected(
                                         "Cannot send: WiFi disconnected".to_string(),
@@ -816,48 +803,46 @@ pub async fn handle_background_events(
                     )
                     .await;
                 }
-                EventSend::GetMessagesForContact(uuid_str) => {    
-
+                EventSend::GetMessagesForContact(uuid_str) => {
                     let mut messages_hashmap = HashMap::new();
 
                     let new_mutex = Arc::clone(&manager_mutex);
-                    let result = list_messages_tui(uuid_str.clone(), "0".to_string(), new_mutex).await;
+                    let result =
+                        list_messages_tui(uuid_str.clone(), "0".to_string(), new_mutex).await;
                     let messages = match result {
                         Ok(list) => {
-                            let _ = tx_status.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                            let _ = tx_status
+                                .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
                             list
                         }
                         Err(e) => {
-                            if is_connection_error(&e)
-                            {
-                                let _ = tx_status.send(EventApp::NetworkStatusChanged(NetworkStatus::Disconnected(
-                                    "Cannot get messages from store: WiFi disconnected".to_string(),
-                                )));
+                            if is_connection_error(&e) {
+                                let _ = tx_status.send(EventApp::NetworkStatusChanged(
+                                    NetworkStatus::Disconnected(
+                                        "Cannot get messages from store: WiFi disconnected"
+                                            .to_string(),
+                                    ),
+                                ));
                             }
                             Vec::new()
                         }
                     };
 
-                    if !messages.is_empty(){
+                    if !messages.is_empty() {
                         messages_hashmap.insert(uuid_str.clone(), messages);
                     }
-                
-                
+
                     if tx_status
-                    .send(EventApp::GetMessageHistory(messages_hashmap))
-                    .is_err() {
-                    }
-                },
+                        .send(EventApp::GetMessageHistory(messages_hashmap))
+                        .is_err()
+                    {}
+                }
             }
         }
     }
 }
 
-
-pub async fn handle_linking_device(
-    tx: mpsc::Sender<EventApp>,
-     device_name: String
-    ) {
+pub async fn handle_linking_device(tx: mpsc::Sender<EventApp>, device_name: String) {
     let result = devices::link_new_device_tui(device_name).await;
 
     match result {
