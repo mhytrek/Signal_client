@@ -89,7 +89,7 @@ pub enum EventApp {
     LinkingError(String),
     NetworkStatusChanged(NetworkStatus),
     ProfileReceived(Profile),
-    GetMessageHistory(HashMap<String, Vec<MessageDto>>),
+    GetMessageHistory(String, Vec<MessageDto>),
     ReceiveMessage,
     QrCodeGenerated,
     Resize(u16, u16),
@@ -238,11 +238,8 @@ impl App {
                 self.profile = Some(profile);
                 Ok(false)
             }
-            EventApp::GetMessageHistory(messeges_map) => {
-                if self.current_screen == CurrentScreen::Syncing {
-                    self.current_screen = CurrentScreen::Main;
-                }
-                self.contact_messages = messeges_map;
+            EventApp::GetMessageHistory(uuid_str,messages) => {
+                self.contact_messages.insert(uuid_str, messages);
                 self.message_selected = match self
                     .contact_messages
                     .get(&self.contacts[self.contact_selected].0)
@@ -804,7 +801,6 @@ pub async fn handle_background_events(
                     .await;
                 }
                 EventSend::GetMessagesForContact(uuid_str) => {
-                    let mut messages_hashmap = HashMap::new();
 
                     let new_mutex = Arc::clone(&manager_mutex);
                     let result =
@@ -829,13 +825,12 @@ pub async fn handle_background_events(
                     };
 
                     if !messages.is_empty() {
-                        messages_hashmap.insert(uuid_str.clone(), messages);
-                    }
-
-                    if tx_status
-                        .send(EventApp::GetMessageHistory(messages_hashmap))
+                        if tx_status
+                        .send(EventApp::GetMessageHistory(uuid_str.clone(), messages))
                         .is_err()
                     {}
+                }
+
                 }
             }
         }
