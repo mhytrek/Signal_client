@@ -192,9 +192,9 @@ impl App {
                 Ok(false)
             }
             EventApp::ContactsList(contacts) => {
-                if self.current_screen == CurrentScreen::Syncing {
-                    self.get_messages(contacts.clone());
-                }
+                // if self.current_screen == CurrentScreen::Syncing {
+                //     self.get_messages(contacts.clone());
+                // }
                 self.contacts = contacts
                     .into_iter()
                     .map(|(uuid, name)| (uuid, name, String::new()))
@@ -248,6 +248,9 @@ impl App {
                 Ok(false)
             }
             EventApp::ReceiveMessage(messages_map) => {
+                if self.current_screen == CurrentScreen::Syncing {
+                    self.current_screen = CurrentScreen::Main;
+                }
                 for (uuid, messages) in messages_map {
                     self.contact_messages
                         .entry(uuid)
@@ -259,6 +262,7 @@ impl App {
             EventApp::QrCodeGenerated => Ok(false),
             EventApp::Resize(_, _) => Ok(false),
         }
+
     }
 
     fn enter_char(&mut self, new_char: char) {
@@ -317,61 +321,61 @@ impl App {
                 }
 
                 self.character_index = 0;
-                let uuid_raw = Uuid::from_str(uuid).expect("contact does not exist");
-                let timestamp = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .expect("cannot make timestamp")
-                    .as_millis() as u64;
+                // let uuid_raw = Uuid::from_str(uuid).expect("contact does not exist");
+                // let timestamp = SystemTime::now()
+                //     .duration_since(UNIX_EPOCH)
+                //     .expect("cannot make timestamp")
+                //     .as_millis() as u64;
 
-                let display_text = if has_text && has_attachment {
-                    format!("{} [with attachment]", message_text)
-                } else if has_attachment {
-                    "[attachment]".to_string()
-                } else {
-                    message_text
-                };
+                // let display_text = if has_text && has_attachment {
+                //     format!("{} [with attachment]", message_text)
+                // } else if has_attachment {
+                //     "[attachment]".to_string()
+                // } else {
+                //     message_text
+                // };
 
-                self.contact_messages
-                    .entry(uuid.clone())
-                    .or_default()
-                    .push(MessageDto {
-                        uuid: uuid_raw,
-                        timestamp,
-                        text: display_text,
-                        sender: true,
-                    });
+                // self.contact_messages
+                //     .entry(uuid.clone())
+                //     .or_default()
+                //     .push(MessageDto {
+                //         uuid: uuid_raw,
+                //         timestamp,
+                //         text: display_text,
+                //         sender: true,
+                //     });
 
                 input.clear();
             }
         }
     }
 
-    fn get_messages(&mut self, contacts: Vec<(String, String)>) {
-        //spawn thread to get messages
-        let tx_get_messages_event = self.tx_thread.clone();
-        let new_manager_mutex: AsyncRegisteredManager = Arc::clone(&self.manager.clone().unwrap());
-        let contacts_uuids = contacts.iter().map(|(uuid, _)| uuid.clone()).collect();
+    // fn get_messages(&mut self, contacts: Vec<(String, String)>) {
+    //     //spawn thread to get messages
+    //     let tx_get_messages_event = self.tx_thread.clone();
+    //     let new_manager_mutex: AsyncRegisteredManager = Arc::clone(&self.manager.clone().unwrap());
+    //     let contacts_uuids = contacts.iter().map(|(uuid, _)| uuid.clone()).collect();
 
-        thread::Builder::new()
-            .name(String::from("getting_messages_thread"))
-            .stack_size(1024 * 1024 * 8)
-            .spawn(move || {
-                let runtime = Builder::new_multi_thread()
-                    .thread_name("getting_messages_runtime")
-                    .enable_all()
-                    .build()
-                    .unwrap();
-                runtime.block_on(async move {
-                    handle_getting_messages(
-                        tx_get_messages_event,
-                        contacts_uuids,
-                        new_manager_mutex,
-                    )
-                    .await;
-                })
-            })
-            .unwrap();
-    }
+    //     thread::Builder::new()
+    //         .name(String::from("getting_messages_thread"))
+    //         .stack_size(1024 * 1024 * 8)
+    //         .spawn(move || {
+    //             let runtime = Builder::new_multi_thread()
+    //                 .thread_name("getting_messages_runtime")
+    //                 .enable_all()
+    //                 .build()
+    //                 .unwrap();
+    //             runtime.block_on(async move {
+    //                 handle_getting_messages_history(
+    //                     tx_get_messages_event,
+    //                     contacts_uuids,
+    //                     new_manager_mutex,
+    //                 )
+    //                 .await;
+    //             })
+    //         })
+    //         .unwrap();
+    // }
 
     fn handle_key_event(
         &mut self,
@@ -537,21 +541,21 @@ pub async fn init_background_threads(
     let current_contacts_mutex: AsyncContactsMap =
         Arc::new(Mutex::new(get_contacts_tui(new_manager_mutex).await?));
 
-    //spawn thread to sync contacts
+    //spawn thread to sync contacts and messeges
     let tx_contacts_events = tx_thread.clone();
     let new_manager = Arc::clone(&manager);
     let new_contacts = Arc::clone(&current_contacts_mutex);
     thread::Builder::new()
-        .name(String::from("contacts_thread"))
+        .name(String::from("synchronization_thread"))
         .stack_size(1024 * 1024 * 8)
         .spawn(move || {
             let runtime = Builder::new_multi_thread()
-                .thread_name("contacts_runtime")
+                .thread_name("synchronization_runtime")
                 .enable_all()
                 .build()
                 .unwrap();
             runtime.block_on(async move {
-                handle_contacts(tx_contacts_events, new_manager, new_contacts).await;
+                handle_synchronization(tx_contacts_events, new_manager, new_contacts).await;
             })
         })
         .unwrap();
@@ -605,23 +609,23 @@ pub async fn init_background_threads(
         .unwrap();
 
     //spawn thread to receive new messages
-    let tx_receive_events = tx_thread.clone();
-    let new_manager = Arc::clone(&manager);
-    let new_contacts = Arc::clone(&current_contacts_mutex);
-    thread::Builder::new()
-        .name(String::from("receive_thread"))
-        .stack_size(1024 * 1024 * 8)
-        .spawn(move || {
-            let runtime = Builder::new_multi_thread()
-                .thread_name("receive_runtime")
-                .enable_all()
-                .build()
-                .unwrap();
-            runtime.block_on(async move {
-                handle_receiving_new_messages(tx_receive_events, new_manager, new_contacts).await;
-            })
-        })
-        .unwrap();
+    // let tx_receive_events = tx_thread.clone();
+    // let new_manager = Arc::clone(&manager);
+    // let new_contacts = Arc::clone(&current_contacts_mutex);
+    // thread::Builder::new()
+    //     .name(String::from("receive_thread"))
+    //     .stack_size(1024 * 1024 * 8)
+    //     .spawn(move || {
+    //         let runtime = Builder::new_multi_thread()
+    //             .thread_name("receive_runtime")
+    //             .enable_all()
+    //             .build()
+    //             .unwrap();
+    //         runtime.block_on(async move {
+    //             handle_receiving_new_messages(tx_receive_events, new_manager, new_contacts).await;
+    //         })
+    //     })
+    //     .unwrap();
 
     Ok(())
 }
@@ -646,6 +650,100 @@ pub fn handle_input_events(tx: mpsc::Sender<EventApp>) {
             }
         }
     }
+}
+
+pub async fn handle_synchronization(
+    tx: mpsc::Sender<EventApp>,
+    manager_mutex: AsyncRegisteredManager,
+    current_contacts_mutex: AsyncContactsMap,
+) {
+    let mut previous_contacts: Vec<(String, String)> = Vec::new();
+    let mut last_synchronization: u64 = 0;
+    loop {
+        let new_mutex = Arc::clone(&manager_mutex);
+        let new_contacts_mutex = Arc::clone(&current_contacts_mutex);
+        match contacts::sync_contacts_tui(new_mutex, new_contacts_mutex).await {
+            Ok(_) => {
+                let _ = tx.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+            }
+            Err(e) => {
+                if e.to_string().contains("connection")
+                    || e.to_string().contains("network")
+                    || e.to_string().contains("Websocket")
+                    || e.to_string().contains("timeout")
+                {
+                    let _ = tx.send(EventApp::NetworkStatusChanged(NetworkStatus::Disconnected(
+                        "WiFi connection lost".to_string(),
+                    )));
+                }
+            }
+        };
+
+        let new_mutex = Arc::clone(&manager_mutex);
+        let result = contacts::list_contacts_tui(new_mutex).await;
+
+        let contacts = match result {
+            Ok(list) => list,
+            Err(_) => continue,
+        };
+
+        let contact_names: Vec<(String, String)> = contacts
+            .into_iter()
+            .filter_map(|contact_res| {
+                let contact = contact_res.ok()?;
+
+                let uuid_str = contact.uuid.to_string();
+
+                let display_name = if !contact.name.is_empty() {
+                    contact.name
+                } else if let Some(phone) = contact.phone_number {
+                    phone.to_string()
+                } else {
+                    uuid_str.clone()
+                };
+
+                Some((uuid_str, display_name))
+            })
+            .collect();
+
+        if contact_names != previous_contacts {
+            if tx
+                .send(EventApp::ContactsList(contact_names.clone()))
+                .is_err()
+            {
+                break;
+            }
+
+            previous_contacts = contact_names;
+        }
+
+        let mut messages_hashmap = HashMap::new();
+        for (uuid_str,_display_name) in &previous_contacts {
+            let new_mutex = Arc::clone(&manager_mutex);
+            let result = list_messages_tui(uuid_str.clone(), "0".to_string(), new_mutex).await;
+            let messages = result.unwrap_or_default();
+            if !messages.is_empty(){
+                messages_hashmap.insert(uuid_str.clone(), messages);
+            }
+        }
+
+        // let timestamp = SystemTime::now()
+        //     .duration_since(UNIX_EPOCH)
+        //     .expect("cannot make timestamp")
+        //     .as_millis() as u64;
+
+
+        if last_synchronization ==0 || !messages_hashmap.is_empty(){
+            if tx
+            .send(EventApp::GetMessageHistory(messages_hashmap))
+            .is_err()
+        {}
+        }
+
+        // last_synchronization = timestamp;
+
+    }
+
 }
 
 pub async fn handle_contacts(
@@ -835,7 +933,7 @@ pub async fn handle_sending_messages(
     }
 }
 
-pub async fn handle_getting_messages(
+pub async fn handle_getting_messages_history(
     tx: mpsc::Sender<EventApp>,
     contacts: Vec<String>,
     manager: AsyncRegisteredManager,
