@@ -17,6 +17,11 @@ use ratatui::{
     Frame,
 };
 use tui_qrcode::{Colors, QrCodeWidget};
+use ratatui_image::{
+    Image, Resize, StatefulImage,
+    picker::Picker,
+    protocol::{Protocol, StatefulProtocol},
+};
 
 use crate::{
     app::{App, CurrentScreen, InputFocus, LinkingStatus, NetworkStatus},
@@ -334,6 +339,38 @@ fn render_qrcode(frame: &mut Frame, area: Rect) {
     }
 }
 
+/// renders avatar image
+fn render_avatar(frame: &mut Frame, app: &App, area: Rect) {
+    let temp_path = "/tmp/avatar_temp.png";
+    if let Some(avatar_data) = &app.avatar_cache {
+        let avatar_block = Block::default()
+            .title("Avatar")
+            .borders(Borders::ALL);
+
+        let avatar_display = format!("Avatar loaded\n({} bytes)", avatar_data.len());
+
+        let mut picker = Picker::from_fontsize((8, 12));
+        let dyn_img = image::ImageReader::open(temp_path)?.decode()?;
+        let image = picker.new_resize_protocol(dyn_img);
+
+        let avatar_paragraph = Paragraph::new(image)
+            .block(avatar_block)
+            .wrap(Wrap { trim: true })
+            .style(Style::default().fg(Color::Green));
+
+        frame.render_widget(avatar_paragraph, area);
+    } else {
+        let placeholder_block = Block::default()
+            .title("Avatar")
+            .borders(Borders::ALL);
+        let placeholder_paragraph = Paragraph::new("No Avatar\nAvailable")
+            .block(placeholder_block)
+            .centered()
+            .style(Style::default().fg(Color::Gray));
+        frame.render_widget(placeholder_paragraph, area);
+    }
+}
+
 /// Renders the enhanced options screen with improved layout
 fn render_options(frame: &mut Frame, app: &App) {
     let popup_block = Block::default()
@@ -342,6 +379,18 @@ fn render_options(frame: &mut Frame, app: &App) {
         .border_type(BorderType::Double);
 
     let mut options_text = String::new();
+    let main_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Length(20), Constraint::Min(1)])
+        .split(centered_rect(80, 80, frame.area()));
+
+    // Avatar po lewej
+    render_avatar(frame, app, main_layout[0]);
+
+    // Profil po prawej
+    let profile_block = Block::default()
+        .title("Profile Information")
+        .borders(Borders::ALL);
 
     options_text.push_str("PROFILE:\n");
 
@@ -369,7 +418,7 @@ fn render_options(frame: &mut Frame, app: &App) {
         options_text.push('\n');
 
         options_text.push_str("  Avatar             : ");
-        options_text.push_str(if profile.avatar.is_some() {
+        options_text.push_str(if app.avatar_cache != None {
             "Set"
         } else {
             "Not set"

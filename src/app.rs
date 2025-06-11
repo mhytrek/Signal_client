@@ -65,6 +65,7 @@ pub struct App {
     pub input_focus: InputFocus,
 
     pub profile: Option<Profile>,
+    pub avatar_cache: Option<Vec<u8>>,
     pub contact_messages: HashMap<String, Vec<MessageDto>>,
 
     pub manager: Option<AsyncRegisteredManager>,
@@ -88,7 +89,10 @@ pub enum EventApp {
     LinkingFinished(bool),
     LinkingError(String),
     NetworkStatusChanged(NetworkStatus),
+
     ProfileReceived(Profile),
+    AvatarReceived(Vec<u8>),
+
     GetMessageHistory(String, Vec<MessageDto>),
     ReceiveMessage,
     QrCodeGenerated,
@@ -119,6 +123,7 @@ impl App {
             input_focus: InputFocus::Message,
 
             profile: None,
+            avatar_cache: None,
 
             manager: None,
 
@@ -230,6 +235,11 @@ impl App {
             }
             EventApp::ProfileReceived(profile) => {
                 self.profile = Some(profile);
+
+                Ok(false)
+            }
+            EventApp::AvatarReceived(avatar_data) => {
+                self.avatar_cache = Some(avatar_data);
                 Ok(false)
             }
             EventApp::GetMessageHistory(uuid_str, messages) => {
@@ -539,7 +549,8 @@ pub async fn init_background_threads(
         .unwrap();
 
     // Add profile fetching
-    let profile_manager = Arc::clone(&manager);
+    let profile_manager_1 = Arc::clone(&manager);
+    let profile_manager_2 = Arc::clone(&manager);
     let tx_profile = tx_thread.clone();
     thread::Builder::new()
         .name(String::from("profile_thread"))
@@ -551,8 +562,11 @@ pub async fn init_background_threads(
                 .build()
                 .unwrap();
             runtime.block_on(async move {
-                if let Ok(profile) = get_profile_tui(Arc::from(profile_manager)).await {
+                if let Ok(profile) = get_profile_tui(Arc::from(profile_manager_1)).await {
                     let _ = tx_profile.send(EventApp::ProfileReceived(profile));
+                }
+                if let Ok(Some(avatar_data)) = crate::profile::get_my_profile_avatar_tui(Arc::from(profile_manager_2)).await {
+                    let _ = tx_profile.send(EventApp::AvatarReceived(avatar_data));
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(100)).await;
             })
