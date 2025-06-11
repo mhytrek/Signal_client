@@ -129,9 +129,6 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
             .iter()
             .map(|msg| {
                 let mut style = Style::default();
-                if app.contacts[app.contact_selected].0 != msg.uuid.to_string() {
-                    style = style.add_modifier(Modifier::BOLD)
-                }
 
                 let millis = msg.timestamp;
                 let secs = (millis / 1000) as i64;
@@ -145,7 +142,13 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
                     datetime_local.format("%Y-%m-%d %H:%M:%S"),
                     msg.text
                 );
-                ListItem::new(content).style(style)
+
+                if app.contacts[app.contact_selected].0 != msg.uuid.to_string() {
+                    style = style.add_modifier(Modifier::BOLD);
+                    ListItem::new(Line::from(format!(" {}", content)).style(style).right_aligned())
+                } else {
+                    ListItem::new(Line::from(format!("{} ", content)).style(style))
+                }
             })
             .collect(),
         None => vec![],
