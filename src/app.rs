@@ -238,7 +238,7 @@ impl App {
                 self.profile = Some(profile);
                 Ok(false)
             }
-            EventApp::GetMessageHistory(uuid_str,messages) => {
+            EventApp::GetMessageHistory(uuid_str, messages) => {
                 self.contact_messages.insert(uuid_str, messages);
                 self.message_selected = match self
                     .contact_messages
@@ -801,7 +801,6 @@ pub async fn handle_background_events(
                     .await;
                 }
                 EventSend::GetMessagesForContact(uuid_str) => {
-
                     let new_mutex = Arc::clone(&manager_mutex);
                     let result =
                         list_messages_tui(uuid_str.clone(), "0".to_string(), new_mutex).await;
@@ -824,13 +823,11 @@ pub async fn handle_background_events(
                         }
                     };
 
-                    if !messages.is_empty() {
-                        if tx_status
-                        .send(EventApp::GetMessageHistory(uuid_str.clone(), messages))
-                        .is_err()
+                    if !messages.is_empty()
+                        && tx_status
+                            .send(EventApp::GetMessageHistory(uuid_str.clone(), messages))
+                            .is_err()
                     {}
-                }
-
                 }
             }
         }

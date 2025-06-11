@@ -145,7 +145,11 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
 
                 if app.contacts[app.contact_selected].0 != msg.uuid.to_string() {
                     style = style.add_modifier(Modifier::BOLD);
-                    ListItem::new(Line::from(format!(" {}", content)).style(style).right_aligned())
+                    ListItem::new(
+                        Line::from(format!(" {}", content))
+                            .style(style)
+                            .right_aligned(),
+                    )
                 } else {
                     ListItem::new(Line::from(format!("{} ", content)).style(style))
                 }
