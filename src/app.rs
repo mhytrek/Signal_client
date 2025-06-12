@@ -138,10 +138,7 @@ impl App {
                 let new_manager: AsyncRegisteredManager = match create_registered_manager().await {
                     Ok(manager) => Arc::new(RwLock::new(manager)),
                     Err(_) => {
-                        return Err(io::Error::new(
-                            io::ErrorKind::Other,
-                            "Failed to create manager",
-                        ));
+                        return Err(io::Error::other("Failed to create manager"));
                     }
                 };
                 let new_manager_mutex = Arc::clone(&new_manager);
