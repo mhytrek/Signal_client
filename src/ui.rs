@@ -462,7 +462,8 @@ fn render_options(frame: &mut Frame, app: &mut App) {
         .border_type(BorderType::Double)
         .border_style(Style::default().fg(app.config.get_primary_color()));
 
-    let config_options = [format!(
+    let config_options = [
+        format!(
             "Color Mode: {}",
             if app.config.color_mode {
                 "Colorful"
@@ -477,7 +478,8 @@ fn render_options(frame: &mut Frame, app: &mut App) {
             } else {
                 "Disabled"
             }
-        )];
+        ),
+    ];
 
     let config_items: Vec<ListItem> = config_options
         .iter()

@@ -8,14 +8,14 @@ use crate::{
     config::Config, contacts, create_registered_manager, devices, AsyncContactsMap,
     AsyncRegisteredManager,
 };
-use ratatui_image::{picker::Picker};
-use ratatui_image::protocol::StatefulProtocol;
 use anyhow::{Error, Result};
 use crossterm::event::{self, Event, KeyModifiers};
 use crossterm::event::{KeyCode, KeyEventKind};
 use presage::libsignal_service::Profile;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
+use ratatui_image::picker::Picker;
+use ratatui_image::protocol::StatefulProtocol;
 use std::collections::HashMap;
 use std::io::Stderr;
 use std::path::Path;
