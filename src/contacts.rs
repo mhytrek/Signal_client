@@ -19,10 +19,10 @@ async fn sync_contacts(
     let messages = manager.receive_messages().await?;
 
     let new_contacts_mutex = Arc::clone(&current_contacts_mutex);
-    receiving_loop(messages, manager, None, new_contacts_mutex).await?;
+    receiving_loop(messages, manager, None, Some(new_contacts_mutex)).await?;
     manager.request_contacts().await?;
     let messages = manager.receive_messages().await?;
-    receiving_loop(messages, manager, None, current_contacts_mutex).await?;
+    receiving_loop(messages, manager, None, Some(current_contacts_mutex)).await?;
     Ok(())
 }
 

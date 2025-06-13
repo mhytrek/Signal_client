@@ -1,4 +1,6 @@
-use presage::{libsignal_service::zkgroup::GroupMasterKeyBytes, manager::Registered, model::groups::Group, Manager};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use presage::{libsignal_service::zkgroup::GroupMasterKeyBytes, manager::Registered, model::groups::Group, proto::DataMessage, Manager};
 use presage_store_sled::{SledStore, SledStoreError};
 use presage::store::ContentsStore;
 use anyhow::Result;
@@ -38,16 +40,15 @@ async fn send_message(
     manager: &mut Manager<SledStore, Registered>,
     recipient: String,
     text_message: String,
-    current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
     let destination_group = find_master_key(recipient, manager).await?;
     let data_message = create_data_message(text_message, timestamp)?;
 
     let messages = manager.receive_messages().await?;
-    receiving_loop(messages, manager, None, current_contacts_mutex).await?;
+    receiving_loop(messages, manager, None, None).await?;
 
-    send(manager, recipient_address, data_message, timestamp).await?;
+    send(manager, destination_group, data_message, timestamp).await?;
 
     Ok(())
 }

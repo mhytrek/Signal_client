@@ -71,7 +71,7 @@ async fn send_message(
     let data_message = create_data_message(text_message, timestamp)?;
 
     let messages = manager.receive_messages().await?;
-    receiving_loop(messages, manager, None, current_contacts_mutex).await?;
+    receiving_loop(messages, manager, None, Some(current_contacts_mutex)).await?;
 
     send(manager, recipient_address, data_message, timestamp).await?;
 
@@ -142,7 +142,7 @@ async fn send_attachment(
     data_message.attachments = vec![attachment_pointer];
 
     let messages = manager.receive_messages().await?;
-    receiving_loop(messages, manager, None, current_contacts_mutex).await?;
+    receiving_loop(messages, manager, None, Some(current_contacts_mutex)).await?;
 
     send(manager, recipient_address, data_message, timestamp).await?;
 

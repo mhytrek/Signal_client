@@ -57,13 +57,17 @@ pub async fn receiving_loop(
     messages: impl Stream<Item = Received>,
     manager: &mut Manager<SledStore, Registered>,
     contents_optional: Option<&mut Vec<Content>>,
-    current_contacts_mutex: AsyncContactsMap,
+    current_contacts_mutex_option: Option<AsyncContactsMap>,
 ) -> Result<()> {
     match contents_optional {
         Some(contents) => loop_with_contents(messages, contents).await,
         None => loop_no_contents(messages).await,
     };
-    check_contacts(manager, current_contacts_mutex).await
+
+    if let Some(current_contacts_mutex) = current_contacts_mutex_option {
+        check_contacts(manager, current_contacts_mutex).await?;
+    }
+    Ok(())
 }
 
 async fn list_messages(
@@ -173,7 +177,7 @@ pub async fn receive_messages_tui(
         messages,
         &mut manager,
         Some(&mut contents),
-        current_contacts_mutex,
+        Some(current_contacts_mutex),
     )
     .await?;
 
@@ -215,7 +219,7 @@ pub async fn receive_messages_cli() -> Result<Vec<MessageDto>> {
         messages,
         &mut manager,
         Some(&mut contents),
-        current_contacts_mutex,
+        Some(current_contacts_mutex),
     )
     .await?;
 
