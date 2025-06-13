@@ -6,7 +6,7 @@ use crate::{
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use presage::model::contacts::Contact;
-use viuer::Config;
+use viuer::{print_from_file, Config};
 
 fn print_contact(contact: &Contact) {
     println!("Name: {}", contact.name);
@@ -122,7 +122,7 @@ fn display_avatar_color(image_data: &[u8]) -> Result<()> {
         ..Default::default()
     };
 
-    viuer::print_from_file(temp_path, &config)?;
+    print_from_file(temp_path, &config)?;
 
     std::fs::remove_file(temp_path).ok();
 

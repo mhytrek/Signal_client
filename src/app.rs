@@ -7,6 +7,8 @@ use crate::ui::ui;
 use crate::{
     contacts, create_registered_manager, devices, AsyncContactsMap, AsyncRegisteredManager,
 };
+use ratatui_image::{Image, StatefulImage, picker::Picker, Resize};
+use ratatui_image::protocol::StatefulProtocol;
 use anyhow::{Error, Result};
 use crossterm::event::{self, Event, KeyModifiers};
 use crossterm::event::{KeyCode, KeyEventKind};
@@ -23,6 +25,7 @@ use tokio::runtime::Builder;
 use tokio::sync::{Mutex, RwLock};
 
 use std::thread;
+use image::ImageFormat;
 
 #[derive(PartialEq)]
 pub enum CurrentScreen {
@@ -65,7 +68,11 @@ pub struct App {
     pub input_focus: InputFocus,
 
     pub profile: Option<Profile>,
+
     pub avatar_cache: Option<Vec<u8>>,
+    pub picker: Option<Picker>,
+    pub avatar_image: Option<StatefulProtocol>,
+
     pub contact_messages: HashMap<String, Vec<MessageDto>>,
 
     pub manager: Option<AsyncRegisteredManager>,
@@ -108,6 +115,7 @@ impl App {
     pub fn new(linking_status: LinkingStatus) -> App {
         let (tx_thread, rx_tui) = mpsc::channel();
         let (tx_tui, rx_thread) = mpsc::channel();
+        let picker = Picker::from_query_stdio().ok();
         App {
             linking_status,
             contacts: vec![],
@@ -124,6 +132,8 @@ impl App {
 
             profile: None,
             avatar_cache: None,
+            picker,
+            avatar_image: None,
 
             manager: None,
 
@@ -170,6 +180,23 @@ impl App {
             if let Ok(event) = self.rx_tui.recv() {
                 if self.handle_event(event, &self.tx_tui.clone()).await? {
                     return Ok(true);
+                }
+            }
+        }
+    }
+
+    pub fn load_avatar(&mut self) {
+        if let (Some(avatar_data), Some(picker)) = (&self.avatar_cache, &mut self.picker) {
+            match image::load_from_memory(avatar_data) {
+                Ok(dynamic_image) => {
+                    self.avatar_image = Some(picker.new_resize_protocol(dynamic_image));
+                }
+                Err(_) => {
+                    if let Ok(dynamic_image) = image::load_from_memory_with_format(avatar_data, ImageFormat::Png) {
+                        self.avatar_image = Some(picker.new_resize_protocol(dynamic_image));
+                    } else if let Ok(dynamic_image) = image::load_from_memory_with_format(avatar_data, ImageFormat::Jpeg) {
+                        self.avatar_image = Some(picker.new_resize_protocol(dynamic_image));
+                    }
                 }
             }
         }

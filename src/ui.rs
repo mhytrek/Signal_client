@@ -17,11 +17,8 @@ use ratatui::{
     Frame,
 };
 use tui_qrcode::{Colors, QrCodeWidget};
-use ratatui_image::{
-    Image, Resize, StatefulImage,
-    picker::Picker,
-    protocol::{Protocol, StatefulProtocol},
-};
+use ratatui_image::{StatefulImage, Resize};
+
 
 use crate::{
     app::{App, CurrentScreen, InputFocus, LinkingStatus, NetworkStatus},
@@ -29,7 +26,7 @@ use crate::{
 };
 
 /// Main UI rendering function.
-pub fn ui(frame: &mut Frame, app: &App) {
+pub fn ui(frame: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(3)])
@@ -51,7 +48,7 @@ pub fn ui(frame: &mut Frame, app: &App) {
             render_footer(frame, app, chunks[1]);
         }
         CurrentScreen::Options => {
-            render_options(frame, app);
+            render_options(frame, app);  // app jest już &mut
             render_footer(frame, app, chunks[1]);
         }
         CurrentScreen::Exiting => {
@@ -340,59 +337,58 @@ fn render_qrcode(frame: &mut Frame, area: Rect) {
 }
 
 /// renders avatar image
-fn render_avatar(frame: &mut Frame, app: &App, area: Rect) {
-    let temp_path = "/tmp/avatar_temp.png";
-    if let Some(avatar_data) = &app.avatar_cache {
-        let avatar_block = Block::default()
-            .title("Avatar")
-            .borders(Borders::ALL);
+fn render_avatar(frame: &mut Frame, app: &mut App, area: Rect) {
+    let avatar_block = Block::default()
+        .title("Avatar")
+        .borders(Borders::ALL)
+        .border_type(BorderType::Double);
 
-        let avatar_display = format!("Avatar loaded\n({} bytes)", avatar_data.len());
+    let inner_area = avatar_block.inner(area);
 
-        let mut picker = Picker::from_fontsize((8, 12));
-        let dyn_img = image::ImageReader::open(temp_path)?.decode()?;
-        let image = picker.new_resize_protocol(dyn_img);
-
-        let avatar_paragraph = Paragraph::new(image)
-            .block(avatar_block)
-            .wrap(Wrap { trim: true })
-            .style(Style::default().fg(Color::Green));
-
-        frame.render_widget(avatar_paragraph, area);
+    if let Some(avatar_image) = app.avatar_image.as_mut() {
+        frame.render_stateful_widget(
+            StatefulImage::new().resize(Resize::Fit(None)),
+            inner_area,
+            avatar_image,
+        );
     } else {
-        let placeholder_block = Block::default()
-            .title("Avatar")
-            .borders(Borders::ALL);
-        let placeholder_paragraph = Paragraph::new("No Avatar\nAvailable")
-            .block(placeholder_block)
-            .centered()
+        let placeholder_text = if app.avatar_cache.is_some() {
+            "Loading avatar..."
+        } else {
+            "No avatar set"
+        };
+
+        let placeholder = Paragraph::new(placeholder_text)
+            .alignment(Alignment::Center)
             .style(Style::default().fg(Color::Gray));
-        frame.render_widget(placeholder_paragraph, area);
+
+        frame.render_widget(placeholder, inner_area);
     }
+
+    frame.render_widget(avatar_block, area);
 }
 
+
 /// Renders the enhanced options screen with improved layout
-fn render_options(frame: &mut Frame, app: &App) {
-    let popup_block = Block::default()
-        .title("Options")
+fn render_options(frame: &mut Frame, app: &mut App) {  // Zmiana: &mut App
+    let main_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Length(30), Constraint::Min(1)])
+        .split(centered_rect(90, 90, frame.area()));
+
+    if app.avatar_cache.is_some() && app.avatar_image.is_none() {
+        app.load_avatar();
+    }
+
+    render_avatar(frame, app, main_layout[0]);
+
+    let profile_block = Block::default()
+        .title("Profile Information")
         .borders(Borders::ALL)
         .border_type(BorderType::Double);
 
     let mut options_text = String::new();
-    let main_layout = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(20), Constraint::Min(1)])
-        .split(centered_rect(80, 80, frame.area()));
-
-    // Avatar po lewej
-    render_avatar(frame, app, main_layout[0]);
-
-    // Profil po prawej
-    let profile_block = Block::default()
-        .title("Profile Information")
-        .borders(Borders::ALL);
-
-    options_text.push_str("PROFILE:\n");
+    options_text.push_str("PROFILE:\n\n");
 
     if let Some(profile) = &app.profile {
         options_text.push_str("  Name               : ");
@@ -418,7 +414,7 @@ fn render_options(frame: &mut Frame, app: &App) {
         options_text.push('\n');
 
         options_text.push_str("  Avatar             : ");
-        options_text.push_str(if app.avatar_cache != None {
+        options_text.push_str(if app.avatar_cache.is_some() {
             "Set"
         } else {
             "Not set"
@@ -436,14 +432,17 @@ fn render_options(frame: &mut Frame, app: &App) {
         options_text.push_str("  Profile data not loaded...\n\n");
     }
 
-    let exit_paragraph = Paragraph::new(options_text)
-        .block(popup_block)
+    options_text.push_str("CONTROLS:\n");
+    options_text.push_str("  (q) - Exit options\n");
+    options_text.push_str("  (e) - Select option\n");
+
+    let profile_paragraph = Paragraph::new(options_text)
+        .block(profile_block)
         .wrap(Wrap { trim: true })
-        .alignment(Alignment::Left);
+        .alignment(Alignment::Left)
+        .style(Style::default().fg(Color::White));
 
-    let area = centered_rect(60, 80, frame.area());
-
-    frame.render_widget(exit_paragraph, area);
+    frame.render_widget(profile_paragraph, main_layout[1]);
 }
 
 /// Creates a rectangular area centered within the given Rect
