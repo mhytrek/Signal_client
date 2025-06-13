@@ -68,7 +68,7 @@ pub fn ui(frame: &mut Frame, app: &mut App) {
             }
         },
         CurrentScreen::Syncing => {
-            render_popup(frame, frame.area(), "Syncing contacts and messeges...");
+            render_popup(frame, frame.area(), "Syncing contacts and messages...");
         }
     }
 }
@@ -80,25 +80,26 @@ fn render_contact_list(frame: &mut Frame, app: &App, area: Rect) {
         .iter()
         .enumerate()
         .map(|(i, (_, name, _id))| {
-            let mut style = Style::default();
+            let mut style = Style::default().fg(app.config.get_primary_color());
             if i == app.contact_selected {
                 style = style
                     .add_modifier(Modifier::BOLD)
-                    .add_modifier(Modifier::UNDERLINED);
+                    .add_modifier(Modifier::UNDERLINED)
+                    .fg(app.config.get_accent_color());
             }
             ListItem::new(name.clone()).style(style)
         })
         .collect();
 
     let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
-
     let mut scrollbar_state = ScrollbarState::new(list_items.len()).position(app.contact_selected);
 
     let chat_list_widget = List::new(list_items).block(
         Block::default()
             .padding(Padding::new(1, 1, 1, 1))
             .title("Chats")
-            .borders(Borders::ALL),
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(app.config.get_primary_color())),
     );
 
     let mut list_state = ListState::default();
@@ -254,7 +255,7 @@ fn render_popup(frame: &mut Frame, area: Rect, text: &str) {
 fn render_paragraph(frame: &mut Frame, area: Rect, text: &str) {
     let block = Block::default().borders(Borders::ALL);
 
-    let styled_text = Text::styled(text, Style::default().fg(Color::White));
+    let styled_text = Text::styled(text, Style::default().fg(Color::default()));
 
     let paragraph = Paragraph::new(styled_text)
         .block(block)
@@ -268,39 +269,48 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     let current_keys_hint = {
         match app.current_screen {
             CurrentScreen::Main => Span::styled(
-                "(q) to quit | (↑ ↓) to navigate | (→) to select chat | (e) to show more options",
-                Style::default(),
+                "(q) to quit | (↑ ↓) to navigate | (→) to select chat | (e) for options",
+                Style::default().fg(app.config.get_primary_color()),
             ),
             CurrentScreen::Writing => {
                 if app.attachment_error.is_some() {
                     Span::styled(
                         "(q) to exit | (ENTER) to send | (TAB) to switch input/attachment | Fix attachment path to send",
-                        Style::default().fg(Color::Yellow),
+                        Style::default().fg(app.config.get_error_color()),
                     )
                 } else {
                     Span::styled(
                         "(q) to exit | (ENTER) to send | (TAB) to switch input/attachment",
-                        Style::default(),
+                        Style::default().fg(app.config.get_primary_color()),
                     )
                 }
             }
-            CurrentScreen::Options => Span::styled("(q) to exit | (e) to select", Style::default()),
-
+            CurrentScreen::Options => Span::styled(
+                "(q) to exit | (↑ ↓) to navigate | (ENTER/SPACE) to toggle option",
+                Style::default().fg(app.config.get_primary_color()),
+            ),
             _ => Span::default(),
         }
     };
 
     let network_status = match &app.network_status {
-        NetworkStatus::Connected => Span::styled("⚡ Online", Style::default().fg(Color::Green)),
-        NetworkStatus::Disconnected(msg) => {
-            Span::styled(format!("⚠ {}", msg), Style::default().fg(Color::Red))
-        }
+        NetworkStatus::Connected => Span::styled(
+            "⚡ Online",
+            Style::default().fg(app.config.get_success_color()),
+        ),
+        NetworkStatus::Disconnected(msg) => Span::styled(
+            format!("⚠ {}", msg),
+            Style::default().fg(app.config.get_error_color()),
+        ),
     };
 
     let footer_text = Line::from(vec![current_keys_hint, Span::raw(" | "), network_status]);
 
-    let key_notes_footer =
-        Paragraph::new(footer_text).block(Block::default().borders(Borders::ALL));
+    let key_notes_footer = Paragraph::new(footer_text).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(app.config.get_primary_color())),
+    );
 
     frame.render_widget(key_notes_footer, area);
 }
@@ -366,27 +376,28 @@ fn render_avatar(frame: &mut Frame, app: &mut App, area: Rect) {
         ])
         .split(centered_layout[1]);
 
-    if let Some(avatar_image) = app.avatar_image.as_mut() {
-        frame.render_stateful_widget(
-            StatefulImage::new().resize(Resize::Fit(None)),
-            centered_area[1],
-            avatar_image,
-        );
-    } else {
-        let placeholder_text = if app.avatar_cache.is_some() {
-            "Loading avatar..."
+    if app.config.show_images {
+        if let Some(avatar_image) = app.avatar_image.as_mut() {
+            frame.render_stateful_widget(
+                StatefulImage::new().resize(Resize::Fit(None)),
+                centered_area[1],
+                avatar_image,
+            );
         } else {
-            "No avatar set"
-        };
+            let placeholder_text = if app.avatar_cache.is_some() {
+                "Loading avatar..."
+            } else {
+                "No avatar set"
+            };
 
-        let placeholder = Paragraph::new(placeholder_text)
-            .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::Gray));
+            let placeholder = Paragraph::new(placeholder_text)
+                .alignment(Alignment::Center)
+                .style(Style::default().fg(Color::Gray));
 
-        frame.render_widget(placeholder, centered_area[1]);
+            frame.render_widget(placeholder, centered_area[1]);
+        }
+        frame.render_widget(avatar_block, area);
     }
-
-    frame.render_widget(avatar_block, area);
 
     let profile_block = Block::default()
         .title("Profile Data")
@@ -423,39 +434,74 @@ fn render_avatar(frame: &mut Frame, app: &mut App, area: Rect) {
         .block(profile_block)
         .wrap(Wrap { trim: true })
         .alignment(Alignment::Left)
-        .style(Style::default().fg(Color::White));
+        .style(Style::default().fg(Color::default()));
 
-    frame.render_widget(profile_paragraph, layout[1]);
+    if app.config.show_images {
+        frame.render_widget(profile_paragraph, layout[1]);
+    } else {
+        frame.render_widget(profile_paragraph, area);
+    }
 }
 
 /// Renders the enhanced options screen with improved layout
 fn render_options(frame: &mut Frame, app: &mut App) {
     let main_layout = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(30), Constraint::Min(1)])
-        .split(centered_rect(80, 80, frame.area()));
+        .constraints([Constraint::Length(40), Constraint::Min(1)])
+        .split(centered_rect(90, 80, frame.area()));
 
     if app.avatar_cache.is_some() && app.avatar_image.is_none() {
         app.load_avatar();
     }
-
     render_avatar(frame, app, main_layout[0]);
 
-    let profile_block = Block::default()
-        .title("Options")
+    // Configuration options panel
+    let config_block = Block::default()
+        .title("Configuration")
         .borders(Borders::ALL)
-        .border_type(BorderType::Double);
+        .border_type(BorderType::Double)
+        .border_style(Style::default().fg(app.config.get_primary_color()));
 
-    let mut options_text = String::new();
-    options_text.push_str("PROFILE:\n\n");
+    let config_options = [format!(
+            "Color Mode: {}",
+            if app.config.color_mode {
+                "Colorful"
+            } else {
+                "Black & White"
+            }
+        ),
+        format!(
+            "Show Images: {}",
+            if app.config.show_images {
+                "Enabled"
+            } else {
+                "Disabled"
+            }
+        )];
 
-    let profile_paragraph = Paragraph::new(options_text)
-        .block(profile_block)
-        .wrap(Wrap { trim: true })
-        .alignment(Alignment::Left)
-        .style(Style::default().fg(Color::White));
+    let config_items: Vec<ListItem> = config_options
+        .iter()
+        .enumerate()
+        .map(|(i, option)| {
+            let mut style = Style::default().fg(app.config.get_primary_color());
+            if i == app.config_selected {
+                style = style
+                    .add_modifier(Modifier::BOLD)
+                    .add_modifier(Modifier::REVERSED)
+                    .fg(app.config.get_accent_color());
+            }
+            ListItem::new(option.clone()).style(style)
+        })
+        .collect();
 
-    frame.render_widget(profile_paragraph, main_layout[1]);
+    let config_list = List::new(config_items)
+        .block(config_block)
+        .highlight_style(Style::default().add_modifier(Modifier::BOLD));
+
+    let mut list_state = ListState::default();
+    list_state.select(Some(app.config_selected));
+
+    frame.render_stateful_widget(config_list, main_layout[1], &mut list_state);
 }
 
 /// Creates a rectangular area centered within the given Rect

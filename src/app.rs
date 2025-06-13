@@ -5,7 +5,8 @@ use crate::paths::QRCODE;
 use crate::profile::get_profile_tui;
 use crate::ui::ui;
 use crate::{
-    contacts, create_registered_manager, devices, AsyncContactsMap, AsyncRegisteredManager,
+    config::Config, contacts, create_registered_manager, devices, AsyncContactsMap,
+    AsyncRegisteredManager,
 };
 use ratatui_image::{picker::Picker};
 use ratatui_image::protocol::StatefulProtocol;
@@ -75,6 +76,9 @@ pub struct App {
 
     pub contact_messages: HashMap<String, Vec<MessageDto>>,
 
+    pub config: Config,
+    pub config_selected: usize,
+
     pub manager: Option<AsyncRegisteredManager>,
 
     pub tx_thread: mpsc::Sender<EventApp>,
@@ -134,6 +138,9 @@ impl App {
             avatar_cache: None,
             picker,
             avatar_image: None,
+
+            config: Config::load(),
+            config_selected: 0,
 
             manager: None,
 
@@ -446,6 +453,36 @@ impl App {
             },
             Options => match key.code {
                 KeyCode::Esc | KeyCode::Char('q') => self.current_screen = Main,
+                KeyCode::Up | KeyCode::Char('w') => {
+                    if self.config_selected > 0 {
+                        self.config_selected -= 1;
+                    }
+                }
+                KeyCode::Down | KeyCode::Char('s') => {
+                    if self.config_selected < 1 {
+                        self.config_selected += 1;
+                    }
+                }
+                KeyCode::Enter | KeyCode::Char(' ') => match self.config_selected {
+                    0 => {
+                        self.config.toggle_color_mode();
+                        if let Err(e) = self.config.save() {
+                            eprintln!("Failed to save config: {:?}", e);
+                        }
+                    }
+                    1 => {
+                        self.config.toggle_show_images();
+                        if let Err(e) = self.config.save() {
+                            eprintln!("Failed to save config: {:?}", e);
+                        }
+                        if !self.config.show_images {
+                            self.avatar_image = None;
+                        } else if self.avatar_cache.is_some() {
+                            self.load_avatar();
+                        }
+                    }
+                    _ => {}
+                },
                 _ => {}
             },
             LinkingNewDevice => {
