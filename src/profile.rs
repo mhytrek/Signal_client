@@ -22,14 +22,19 @@ pub async fn get_my_profile_avatar_cli() -> Result<Option<Vec<u8>>> {
     let whoami = manager.whoami().await?;
     let uuid = whoami.aci;
 
-    match manager.retrieve_profile_avatar_by_uuid(uuid, profile_key).await {
+    match manager
+        .retrieve_profile_avatar_by_uuid(uuid, profile_key)
+        .await
+    {
         Ok(Some(avatar_bytes)) => Ok(Some(avatar_bytes.to_vec())),
         Ok(None) => Ok(None),
         Err(e) => Err(anyhow::Error::new(e)),
     }
 }
 
-pub async fn get_my_profile_avatar_tui(manager_mutex: Arc<AsyncRegisteredManager>) -> Result<Option<Vec<u8>>> {
+pub async fn get_my_profile_avatar_tui(
+    manager_mutex: Arc<AsyncRegisteredManager>,
+) -> Result<Option<Vec<u8>>> {
     let mut manager = manager_mutex.write().await;
 
     let registration_data = manager.registration_data();
@@ -38,7 +43,10 @@ pub async fn get_my_profile_avatar_tui(manager_mutex: Arc<AsyncRegisteredManager
     let whoami = manager.whoami().await?;
     let uuid = whoami.aci;
 
-    match manager.retrieve_profile_avatar_by_uuid(uuid, profile_key).await {
+    match manager
+        .retrieve_profile_avatar_by_uuid(uuid, profile_key)
+        .await
+    {
         Ok(Some(avatar_bytes)) => Ok(Some(avatar_bytes.to_vec())),
         Ok(None) => Ok(None),
         Err(e) => Err(anyhow::Error::new(e)),

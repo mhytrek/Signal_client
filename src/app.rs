@@ -7,7 +7,7 @@ use crate::ui::ui;
 use crate::{
     contacts, create_registered_manager, devices, AsyncContactsMap, AsyncRegisteredManager,
 };
-use ratatui_image::{Image, StatefulImage, picker::Picker, Resize};
+use ratatui_image::{picker::Picker};
 use ratatui_image::protocol::StatefulProtocol;
 use anyhow::{Error, Result};
 use crossterm::event::{self, Event, KeyModifiers};
@@ -24,8 +24,8 @@ use std::{fs, io};
 use tokio::runtime::Builder;
 use tokio::sync::{Mutex, RwLock};
 
-use std::thread;
 use image::ImageFormat;
+use std::thread;
 
 #[derive(PartialEq)]
 pub enum CurrentScreen {
@@ -192,9 +192,13 @@ impl App {
                     self.avatar_image = Some(picker.new_resize_protocol(dynamic_image));
                 }
                 Err(_) => {
-                    if let Ok(dynamic_image) = image::load_from_memory_with_format(avatar_data, ImageFormat::Png) {
+                    if let Ok(dynamic_image) =
+                        image::load_from_memory_with_format(avatar_data, ImageFormat::Png)
+                    {
                         self.avatar_image = Some(picker.new_resize_protocol(dynamic_image));
-                    } else if let Ok(dynamic_image) = image::load_from_memory_with_format(avatar_data, ImageFormat::Jpeg) {
+                    } else if let Ok(dynamic_image) =
+                        image::load_from_memory_with_format(avatar_data, ImageFormat::Jpeg)
+                    {
                         self.avatar_image = Some(picker.new_resize_protocol(dynamic_image));
                     }
                 }
@@ -592,7 +596,9 @@ pub async fn init_background_threads(
                 if let Ok(profile) = get_profile_tui(Arc::from(profile_manager_1)).await {
                     let _ = tx_profile.send(EventApp::ProfileReceived(profile));
                 }
-                if let Ok(Some(avatar_data)) = crate::profile::get_my_profile_avatar_tui(Arc::from(profile_manager_2)).await {
+                if let Ok(Some(avatar_data)) =
+                    crate::profile::get_my_profile_avatar_tui(Arc::from(profile_manager_2)).await
+                {
                     let _ = tx_profile.send(EventApp::AvatarReceived(avatar_data));
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(100)).await;

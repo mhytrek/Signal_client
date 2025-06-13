@@ -1,7 +1,7 @@
 use crate::{
     contacts::list_contacts_cli,
     messages::receive::{list_messages_cli, receive_messages_cli, MessageDto},
-    profile::{get_profile_cli, get_my_profile_avatar_cli},
+    profile::{get_my_profile_avatar_cli, get_profile_cli},
 };
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -91,15 +91,12 @@ pub async fn print_profile() -> Result<()> {
 
     println!("\nAvatar:");
     match get_my_profile_avatar_cli().await {
-        Ok(Some(avatar_data)) => {
-
-            match display_avatar_color(&avatar_data) {
-                Ok(_) => println!("\n"),
-                Err(e) => {
-                    println!("Could not display avatar in terminal: {}", e);
-                }
+        Ok(Some(avatar_data)) => match display_avatar_color(&avatar_data) {
+            Ok(_) => println!("\n"),
+            Err(e) => {
+                println!("Could not display avatar in terminal: {}", e);
             }
-        }
+        },
         Ok(None) => {
             println!("No avatar set");
         }
@@ -116,8 +113,8 @@ fn display_avatar_color(image_data: &[u8]) -> Result<()> {
     std::fs::write(temp_path, image_data)?;
 
     let config = Config {
-        width: Some(100),
-        height: Some(50),
+        width: Some(30),
+        height: Some(30),
         absolute_offset: false,
         ..Default::default()
     };

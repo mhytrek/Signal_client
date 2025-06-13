@@ -16,9 +16,8 @@ use ratatui::{
     },
     Frame,
 };
+use ratatui_image::{Resize, StatefulImage};
 use tui_qrcode::{Colors, QrCodeWidget};
-use ratatui_image::{StatefulImage, Resize};
-
 
 use crate::{
     app::{App, CurrentScreen, InputFocus, LinkingStatus, NetworkStatus},
@@ -48,7 +47,7 @@ pub fn ui(frame: &mut Frame, app: &mut App) {
             render_footer(frame, app, chunks[1]);
         }
         CurrentScreen::Options => {
-            render_options(frame, app);  // app jest już &mut
+            render_options(frame, app); // app jest już &mut
             render_footer(frame, app, chunks[1]);
         }
         CurrentScreen::Exiting => {
@@ -338,17 +337,39 @@ fn render_qrcode(frame: &mut Frame, area: Rect) {
 
 /// renders avatar image
 fn render_avatar(frame: &mut Frame, app: &mut App, area: Rect) {
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(15), Constraint::Min(1)])
+        .split(area);
+
     let avatar_block = Block::default()
         .title("Avatar")
         .borders(Borders::ALL)
         .border_type(BorderType::Double);
 
-    let inner_area = avatar_block.inner(area);
+    let avatar_area = avatar_block.inner(layout[0]);
+
+    let centered_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage(5),
+            Constraint::Length(30),
+            Constraint::Percentage(5),
+        ])
+        .split(avatar_area);
+    let centered_area = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(5),
+            Constraint::Length(30),
+            Constraint::Percentage(5),
+        ])
+        .split(centered_layout[1]);
 
     if let Some(avatar_image) = app.avatar_image.as_mut() {
         frame.render_stateful_widget(
             StatefulImage::new().resize(Resize::Fit(None)),
-            inner_area,
+            centered_area[1],
             avatar_image,
         );
     } else {
@@ -362,19 +383,57 @@ fn render_avatar(frame: &mut Frame, app: &mut App, area: Rect) {
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::Gray));
 
-        frame.render_widget(placeholder, inner_area);
+        frame.render_widget(placeholder, centered_area[1]);
     }
 
     frame.render_widget(avatar_block, area);
+
+    let profile_block = Block::default()
+        .title("Profile Data")
+        .borders(Borders::ALL)
+        .border_type(BorderType::Double);
+
+    let mut profile_text = String::new();
+    if let Some(profile) = &app.profile {
+        profile_text.push_str(&format!(
+            "\n NAME:            {}\n\
+          \n ABOUT:           {}\n\
+          \n EMOJI:           {}\n\
+          \n AVATAR:          {}\n\n",
+            profile
+                .name
+                .as_ref()
+                .map_or("Not set", |n| n.given_name.as_str()),
+            profile.about.as_ref().map_or("Not set", String::as_str),
+            profile
+                .about_emoji
+                .as_ref()
+                .map_or("Not set", String::as_str),
+            if app.avatar_cache.is_some() {
+                "Set"
+            } else {
+                "Not set"
+            },
+        ));
+    } else {
+        profile_text.push_str("Profile data not loaded...");
+    }
+
+    let profile_paragraph = Paragraph::new(profile_text)
+        .block(profile_block)
+        .wrap(Wrap { trim: true })
+        .alignment(Alignment::Left)
+        .style(Style::default().fg(Color::White));
+
+    frame.render_widget(profile_paragraph, layout[1]);
 }
 
-
 /// Renders the enhanced options screen with improved layout
-fn render_options(frame: &mut Frame, app: &mut App) {  // Zmiana: &mut App
+fn render_options(frame: &mut Frame, app: &mut App) {
     let main_layout = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Length(30), Constraint::Min(1)])
-        .split(centered_rect(90, 90, frame.area()));
+        .split(centered_rect(80, 80, frame.area()));
 
     if app.avatar_cache.is_some() && app.avatar_image.is_none() {
         app.load_avatar();
@@ -383,58 +442,12 @@ fn render_options(frame: &mut Frame, app: &mut App) {  // Zmiana: &mut App
     render_avatar(frame, app, main_layout[0]);
 
     let profile_block = Block::default()
-        .title("Profile Information")
+        .title("Options")
         .borders(Borders::ALL)
         .border_type(BorderType::Double);
 
     let mut options_text = String::new();
     options_text.push_str("PROFILE:\n\n");
-
-    if let Some(profile) = &app.profile {
-        options_text.push_str("  Name               : ");
-        options_text.push_str(
-            profile
-                .name
-                .as_ref()
-                .map_or("Not set", |n| n.given_name.as_str()),
-        );
-        options_text.push('\n');
-
-        options_text.push_str("  About              : ");
-        options_text.push_str(profile.about.as_ref().map_or("Not set", String::as_str));
-        options_text.push('\n');
-
-        options_text.push_str("  Emoji              : ");
-        options_text.push_str(
-            profile
-                .about_emoji
-                .as_ref()
-                .map_or("Not set", String::as_str),
-        );
-        options_text.push('\n');
-
-        options_text.push_str("  Avatar             : ");
-        options_text.push_str(if app.avatar_cache.is_some() {
-            "Set"
-        } else {
-            "Not set"
-        });
-        options_text.push('\n');
-
-        options_text.push_str("  Unrestricted Access: ");
-        options_text.push_str(if profile.unrestricted_unidentified_access {
-            "Enabled"
-        } else {
-            "Disabled"
-        });
-        options_text.push_str("\n\n");
-    } else {
-        options_text.push_str("  Profile data not loaded...\n\n");
-    }
-
-    options_text.push_str("CONTROLS:\n");
-    options_text.push_str("  (q) - Exit options\n");
-    options_text.push_str("  (e) - Select option\n");
 
     let profile_paragraph = Paragraph::new(options_text)
         .block(profile_block)
