@@ -1,11 +1,12 @@
 use crate::{
     contacts::list_contacts_cli,
     messages::receive::{list_messages_cli, receive_messages_cli, MessageDto},
-    profile::get_profile_cli,
+    profile::{get_my_profile_avatar_cli, get_profile_cli},
 };
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use presage::model::contacts::Contact;
+use viuer::{print_from_file, Config};
 
 fn print_contact(contact: &Contact) {
     println!("Name: {}", contact.name);
@@ -82,15 +83,45 @@ pub async fn print_profile() -> Result<()> {
     } else {
         println!("About Emoji: N/A");
     }
-    if let Some(avatar) = &profile.avatar {
-        println!("Avatar: {}", avatar);
-    } else {
-        println!("Avatar: N/A");
-    }
+
     println!(
         "Unrestricted Unidentified Access: {}",
         profile.unrestricted_unidentified_access
     );
+
+    println!("\nAvatar:");
+    match get_my_profile_avatar_cli().await {
+        Ok(Some(avatar_data)) => match display_avatar_color(&avatar_data) {
+            Ok(_) => println!("\n"),
+            Err(e) => {
+                println!("Could not display avatar in terminal: {}", e);
+            }
+        },
+        Ok(None) => {
+            println!("No avatar set");
+        }
+        Err(e) => {
+            println!("Error retrieving avatar: {}", e);
+        }
+    }
+
+    Ok(())
+}
+
+fn display_avatar_color(image_data: &[u8]) -> Result<()> {
+    let temp_path = "/tmp/avatar_temp.jpg";
+    std::fs::write(temp_path, image_data)?;
+
+    let config = Config {
+        width: Some(30),
+        height: Some(30),
+        absolute_offset: false,
+        ..Default::default()
+    };
+
+    print_from_file(temp_path, &config)?;
+
+    std::fs::remove_file(temp_path).ok();
 
     Ok(())
 }

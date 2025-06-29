@@ -21,7 +21,10 @@ image = "0.25"
 tui-qrcode = "0.1.1"
 qrcode = "0.14.1"
 mime_guess = "2.0.5"
-chrono = "0.4.41"
+chrono = "0.4.40"
+viuer = { version = "0.9.0", features = ["print-file"] }
+dirs = "6.0.0"
+serde = { version = "1.0.219", features = ["derive"] }
 
 [patch.crates-io]
 curve25519-dalek = { git = 'https://github.com/signalapp/curve25519-dalek', tag = 'signal-curve25519-4.1.3' }

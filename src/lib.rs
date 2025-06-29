@@ -12,6 +12,7 @@ use tokio::sync::{Mutex, RwLock};
 pub mod app;
 pub mod args;
 pub mod cli;
+pub mod config;
 pub mod contacts;
 pub mod devices;
 pub mod messages;

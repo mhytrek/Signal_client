@@ -5,7 +5,8 @@ use crate::paths::QRCODE;
 use crate::profile::get_profile_tui;
 use crate::ui::ui;
 use crate::{
-    contacts, create_registered_manager, devices, AsyncContactsMap, AsyncRegisteredManager,
+    config::Config, contacts, create_registered_manager, devices, AsyncContactsMap,
+    AsyncRegisteredManager,
 };
 use anyhow::{Error, Result};
 use crossterm::event::{self, Event, KeyModifiers};
@@ -13,6 +14,8 @@ use crossterm::event::{KeyCode, KeyEventKind};
 use presage::libsignal_service::Profile;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
+use ratatui_image::picker::Picker;
+use ratatui_image::protocol::StatefulProtocol;
 use std::collections::HashMap;
 use std::io::Stderr;
 use std::path::Path;
@@ -22,6 +25,7 @@ use std::{fs, io};
 use tokio::runtime::Builder;
 use tokio::sync::{Mutex, RwLock};
 
+use image::ImageFormat;
 use std::thread;
 
 #[derive(PartialEq)]
@@ -65,7 +69,15 @@ pub struct App {
     pub input_focus: InputFocus,
 
     pub profile: Option<Profile>,
+
+    pub avatar_cache: Option<Vec<u8>>,
+    pub picker: Option<Picker>,
+    pub avatar_image: Option<StatefulProtocol>,
+
     pub contact_messages: HashMap<String, Vec<MessageDto>>,
+
+    pub config: Config,
+    pub config_selected: usize,
 
     pub manager: Option<AsyncRegisteredManager>,
 
@@ -88,7 +100,10 @@ pub enum EventApp {
     LinkingFinished(bool),
     LinkingError(String),
     NetworkStatusChanged(NetworkStatus),
+
     ProfileReceived(Profile),
+    AvatarReceived(Vec<u8>),
+
     GetMessageHistory(String, Vec<MessageDto>),
     ReceiveMessage,
     QrCodeGenerated,
@@ -104,6 +119,7 @@ impl App {
     pub fn new(linking_status: LinkingStatus) -> App {
         let (tx_thread, rx_tui) = mpsc::channel();
         let (tx_tui, rx_thread) = mpsc::channel();
+        let picker = Picker::from_query_stdio().ok();
         App {
             linking_status,
             contacts: vec![],
@@ -119,6 +135,12 @@ impl App {
             input_focus: InputFocus::Message,
 
             profile: None,
+            avatar_cache: None,
+            picker,
+            avatar_image: None,
+
+            config: Config::load(),
+            config_selected: 0,
 
             manager: None,
 
@@ -165,6 +187,27 @@ impl App {
             if let Ok(event) = self.rx_tui.recv() {
                 if self.handle_event(event, &self.tx_tui.clone()).await? {
                     return Ok(true);
+                }
+            }
+        }
+    }
+
+    pub fn load_avatar(&mut self) {
+        if let (Some(avatar_data), Some(picker)) = (&self.avatar_cache, &mut self.picker) {
+            match image::load_from_memory(avatar_data) {
+                Ok(dynamic_image) => {
+                    self.avatar_image = Some(picker.new_resize_protocol(dynamic_image));
+                }
+                Err(_) => {
+                    if let Ok(dynamic_image) =
+                        image::load_from_memory_with_format(avatar_data, ImageFormat::Png)
+                    {
+                        self.avatar_image = Some(picker.new_resize_protocol(dynamic_image));
+                    } else if let Ok(dynamic_image) =
+                        image::load_from_memory_with_format(avatar_data, ImageFormat::Jpeg)
+                    {
+                        self.avatar_image = Some(picker.new_resize_protocol(dynamic_image));
+                    }
                 }
             }
         }
@@ -230,6 +273,11 @@ impl App {
             }
             EventApp::ProfileReceived(profile) => {
                 self.profile = Some(profile);
+
+                Ok(false)
+            }
+            EventApp::AvatarReceived(avatar_data) => {
+                self.avatar_cache = Some(avatar_data);
                 Ok(false)
             }
             EventApp::GetMessageHistory(uuid_str, messages) => {
@@ -405,6 +453,36 @@ impl App {
             },
             Options => match key.code {
                 KeyCode::Esc | KeyCode::Char('q') => self.current_screen = Main,
+                KeyCode::Up | KeyCode::Char('w') => {
+                    if self.config_selected > 0 {
+                        self.config_selected -= 1;
+                    }
+                }
+                KeyCode::Down | KeyCode::Char('s') => {
+                    if self.config_selected < 1 {
+                        self.config_selected += 1;
+                    }
+                }
+                KeyCode::Enter | KeyCode::Char(' ') => match self.config_selected {
+                    0 => {
+                        self.config.toggle_color_mode();
+                        if let Err(e) = self.config.save() {
+                            eprintln!("Failed to save config: {:?}", e);
+                        }
+                    }
+                    1 => {
+                        self.config.toggle_show_images();
+                        if let Err(e) = self.config.save() {
+                            eprintln!("Failed to save config: {:?}", e);
+                        }
+                        if !self.config.show_images {
+                            self.avatar_image = None;
+                        } else if self.avatar_cache.is_some() {
+                            self.load_avatar();
+                        }
+                    }
+                    _ => {}
+                },
                 _ => {}
             },
             LinkingNewDevice => {
@@ -539,7 +617,8 @@ pub async fn init_background_threads(
         .unwrap();
 
     // Add profile fetching
-    let profile_manager = Arc::clone(&manager);
+    let profile_manager_1 = Arc::clone(&manager);
+    let profile_manager_2 = Arc::clone(&manager);
     let tx_profile = tx_thread.clone();
     thread::Builder::new()
         .name(String::from("profile_thread"))
@@ -551,8 +630,13 @@ pub async fn init_background_threads(
                 .build()
                 .unwrap();
             runtime.block_on(async move {
-                if let Ok(profile) = get_profile_tui(Arc::from(profile_manager)).await {
+                if let Ok(profile) = get_profile_tui(Arc::from(profile_manager_1)).await {
                     let _ = tx_profile.send(EventApp::ProfileReceived(profile));
+                }
+                if let Ok(Some(avatar_data)) =
+                    crate::profile::get_my_profile_avatar_tui(Arc::from(profile_manager_2)).await
+                {
+                    let _ = tx_profile.send(EventApp::AvatarReceived(avatar_data));
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(100)).await;
             })
