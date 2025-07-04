@@ -26,6 +26,9 @@ pub enum Command {
     /// Send text message
     SendMessage(SendMessageArgs),
 
+    /// Send text message to group
+    SendMessageToGroup(SendMessageToGroupArgs),
+
     /// Send attachment
     SendAttachment(SendAttachmentArgs),
 
@@ -51,6 +54,15 @@ pub struct SendMessageArgs {
     /// Uuid of the contact that the message should be send to
     #[arg(short, long)]
     pub recipient: String,
+    /// Content of the message
+    pub text_message: String,
+}
+
+#[derive(Args)]
+pub struct SendMessageToGroupArgs {
+    /// Name of the group to send message to
+    pub group_name: String,
+
     /// Content of the message
     pub text_message: String,
 }

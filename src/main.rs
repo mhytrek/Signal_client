@@ -1,12 +1,15 @@
 use anyhow::Result;
 use clap::Parser;
 
+use log::debug;
 use signal_client::args::{Cli, Command};
 use signal_client::messages;
 use signal_client::{cli, contacts, devices, tui};
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // env_logger::init();
+    debug!("Starting app!");
     let cli = Cli::parse();
 
     match cli.command {
@@ -15,7 +18,8 @@ async fn main() -> Result<()> {
         Command::ListContacts => cli::print_contacts().await?,
         Command::RunApp => tui::run_tui().await?,
         Command::SendMessage(args) => {
-            messages::send::contacts::send_message_to_contact_cli(args.recipient, args.text_message).await?
+            messages::send::contacts::send_message_to_contact_cli(args.recipient, args.text_message)
+                .await?
         }
         Command::ListMessages(args) => cli::print_messages(args.recipient, args.from).await?,
         Command::Receive => cli::print_received_message().await?,
@@ -29,7 +33,11 @@ async fn main() -> Result<()> {
             .await?
         }
         Command::ListGroups => cli::print_groups().await?,
-    }
+        Command::SendMessageToGroup(args) => {
+            messages::send::groups::send_message_to_group_cli(args.group_name, args.text_message)
+                .await?
+        }
+    };
 
     Ok(())
 }
