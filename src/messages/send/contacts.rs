@@ -1,3 +1,4 @@
+use super::create_attachment;
 use crate::contacts::get_contacts_cli;
 use crate::messages::receive::receiving_loop;
 use crate::{create_registered_manager, AsyncContactsMap, AsyncRegisteredManager};
@@ -13,7 +14,19 @@ use presage_store_sled::{SledStore, SledStoreError};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
-use super::{create_attachment, create_data_message};
+
+fn create_data_message(text_message: String, timestamp: u64) -> Result<DataMessage> {
+    let data_msg = DataMessage {
+        body: Some(
+            text_message
+                .parse()
+                .map_err(|_| anyhow::anyhow!("Failed to parse text message!"))?,
+        ),
+        timestamp: Some(timestamp),
+        ..Default::default()
+    };
+    Ok(data_msg)
+}
 
 /// finds contact uuid from string that can be contact_name or contact phone_number
 pub async fn find_uuid(
@@ -109,7 +122,6 @@ pub async fn send_message_to_contact_cli(recipient: String, text_message: String
     )
     .await
 }
-
 
 /// Send message with attachment
 async fn send_attachment(

@@ -1,25 +1,12 @@
 use anyhow::Result;
-use presage::proto::DataMessage;
 use mime_guess::mime::APPLICATION_OCTET_STREAM;
 use presage::libsignal_service::sender::AttachmentSpec;
+// use presage::proto::DataMessage;
 use std::fs;
 use std::path::PathBuf;
 
 pub mod contacts;
 pub mod groups;
-
-fn create_data_message(text_message: String, timestamp: u64) -> Result<DataMessage> {
-    let data_msg = DataMessage {
-        body: Some(
-            text_message
-                .parse()
-                .map_err(|_| anyhow::anyhow!("Failed to parse text message!"))?,
-        ),
-        timestamp: Some(timestamp),
-        ..Default::default()
-    };
-    Ok(data_msg)
-}
 
 /// Create attachment spec from file path
 async fn create_attachment(attachment_path: String) -> Result<(AttachmentSpec, Vec<u8>)> {
@@ -66,5 +53,3 @@ async fn create_attachment(attachment_path: String) -> Result<(AttachmentSpec, V
 
     Ok((attachment_spec, file_data))
 }
-
-

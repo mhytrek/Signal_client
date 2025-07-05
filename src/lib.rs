@@ -1,4 +1,5 @@
 use anyhow::{Error, Result};
+use log::info;
 use presage::{
     libsignal_service::prelude::Uuid,
     manager::{Manager, Registered},
@@ -39,6 +40,7 @@ pub async fn create_registered_manager() -> Result<Manager<SledStore, Registered
 
     // Sadly it has to be done this way, because anyhow::Error doesn't cover errors
     // from presage
+    info!("Trying to create registered manager!");
     match Manager::load_registered(store).await {
         Ok(manager) => Ok(manager),
         Err(err) => Err(Error::new(err)),
