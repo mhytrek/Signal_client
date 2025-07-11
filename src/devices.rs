@@ -83,12 +83,6 @@ pub async fn link_new_device_cli(device_name: String) -> Result<()> {
     )
     .await;
 
-    if is_registered().await? {
-        println!("Registered successfully!");
-    } else {
-        println!("Failed to register device!");
-    }
-
     Ok(())
 }
 

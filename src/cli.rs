@@ -7,6 +7,7 @@ use crate::{
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use presage::model::{contacts::Contact, groups::Group};
+use viuer::{print_from_file, Config};
 
 fn print_contact(contact: &Contact) {
     println!("Name: {}", contact.name);
