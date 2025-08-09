@@ -4,3 +4,7 @@ store/
 
 # Tags for vim
 tags
+
+# If we are constantly updating presage,
+# keeping this will result in a ton of conflicts
+Cargo.lock
