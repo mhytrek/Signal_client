@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 presage = { git = "https://github.com/whisperfish/presage" }
-presage-store-sled = { git = "https://github.com/whisperfish/presage" }
+presage-store-sqlite = { git = "https://github.com/whisperfish/presage" }
 tokio = { version = "1.42", features = ["macros", "rt-multi-thread", "io-std", "io-util"] }
 anyhow = "1.0.95"
 futures = "0.3.31"

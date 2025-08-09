@@ -4,9 +4,9 @@ use presage::{
     manager::{Manager, Registered},
     model::{contacts::Contact, identity::OnNewIdentity},
 };
-use presage_store_sled::{MigrationConflictStrategy, SledStore};
-use std::collections::HashMap;
+use presage_store_sqlite::{SqliteConnectOptions, SqliteStore, SqliteStoreError};
 use std::sync::Arc;
+use std::{collections::HashMap, str::FromStr};
 use tokio::sync::{Mutex, RwLock};
 
 pub mod app;
@@ -23,21 +23,19 @@ pub mod ui;
 
 pub mod sending {}
 
-pub type AsyncRegisteredManager = Arc<RwLock<Manager<SledStore, Registered>>>;
+pub type AsyncRegisteredManager = Arc<RwLock<Manager<SqliteStore, Registered>>>;
 
 pub type AsyncContactsMap = Arc<Mutex<HashMap<Uuid, Contact>>>;
 
-/// Creates new manager in registered state
-pub async fn create_registered_manager() -> Result<Manager<SledStore, Registered>> {
-    let store = SledStore::open(
-        paths::STORE,
-        MigrationConflictStrategy::Drop,
-        OnNewIdentity::Trust,
-    )
-    .await?;
+pub async fn open_store(path: &str) -> Result<SqliteStore, SqliteStoreError> {
+    let options = SqliteConnectOptions::from_str(path)?.create_if_missing(true);
+    SqliteStore::open_with_options(options, OnNewIdentity::Trust).await
+}
 
-    // Sadly it has to be done this way, because anyhow::Error doesn't cover errors
-    // from presage
+/// Creates new manager in registered state
+pub async fn create_registered_manager() -> Result<Manager<SqliteStore, Registered>> {
+    let store = open_store(paths::STORE).await?;
+
     match Manager::load_registered(store).await {
         Ok(manager) => Ok(manager),
         Err(err) => Err(Error::new(err)),
