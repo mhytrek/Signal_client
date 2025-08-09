@@ -1,4 +1,3 @@
-use log::info;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;

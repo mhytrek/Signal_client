@@ -1,4 +1,3 @@
-use log::debug;
 use presage::proto::GroupContextV2;
 use std::time::{SystemTime, UNIX_EPOCH};
 

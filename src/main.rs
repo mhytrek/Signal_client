@@ -1,14 +1,12 @@
 use anyhow::Result;
 use clap::Parser;
 
-use env_logger;
 use signal_client::args::{Cli, Command};
 use signal_client::messages;
 use signal_client::{cli, contacts, devices, tui};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    env_logger::init();
     let cli = Cli::parse();
 
     match cli.command {
