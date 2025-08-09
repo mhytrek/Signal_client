@@ -7,3 +7,5 @@ tags
 
 # Vim temp file
 *.swp
+
+Cargo.lock
