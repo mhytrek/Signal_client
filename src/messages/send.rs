@@ -1,8 +1,9 @@
 use crate::contacts::get_contacts_cli;
 use crate::messages::receive::receiving_loop;
-use crate::{create_registered_manager, AsyncContactsMap, AsyncRegisteredManager};
+use crate::{AsyncContactsMap, AsyncRegisteredManager, create_registered_manager};
 use anyhow::Result;
 use mime_guess::mime::APPLICATION_OCTET_STREAM;
+use presage::Manager;
 use presage::libsignal_service::prelude::Uuid;
 use presage::libsignal_service::protocol::ServiceId;
 use presage::libsignal_service::sender::AttachmentSpec;
@@ -10,7 +11,6 @@ use presage::manager::Registered;
 use presage::model::contacts::Contact;
 use presage::proto::DataMessage;
 use presage::store::ContentsStore;
-use presage::Manager;
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
 use std::fs;
 use std::path::PathBuf;

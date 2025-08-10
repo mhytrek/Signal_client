@@ -3,23 +3,23 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use futures::Stream;
-use futures::{pin_mut, StreamExt};
+use futures::{StreamExt, pin_mut};
 use presage::libsignal_service::content::ContentBody;
 use presage::libsignal_service::prelude::Content;
 use presage::libsignal_service::prelude::Uuid;
 use presage::manager::Manager;
 use presage::manager::Registered;
 use presage::model::messages::Received;
-use presage::proto::{sync_message::Sent, DataMessage, SyncMessage};
+use presage::proto::{DataMessage, SyncMessage, sync_message::Sent};
 use presage::store::Thread;
 use presage::store::{ContentExt, ContentsStore};
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
 use tokio::sync::Mutex;
 
-use crate::contacts::get_contacts_cli;
-use crate::create_registered_manager;
 use crate::AsyncContactsMap;
 use crate::AsyncRegisteredManager;
+use crate::contacts::get_contacts_cli;
+use crate::create_registered_manager;
 
 pub struct MessageDto {
     pub uuid: Uuid,

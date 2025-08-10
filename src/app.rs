@@ -1,26 +1,26 @@
 use crate::contacts::get_contacts_tui;
-use crate::messages::receive::{self, list_messages_tui, MessageDto};
+use crate::messages::receive::{self, MessageDto, list_messages_tui};
 use crate::messages::send::{send_attachment_tui, send_message_tui};
 use crate::paths::QRCODE;
 use crate::profile::get_profile_tui;
 use crate::ui::ui;
 use crate::{
-    config::Config, contacts, create_registered_manager, devices, AsyncContactsMap,
-    AsyncRegisteredManager,
+    AsyncContactsMap, AsyncRegisteredManager, config::Config, contacts, create_registered_manager,
+    devices,
 };
 use anyhow::{Error, Result};
 use crossterm::event::{self, Event, KeyModifiers};
 use crossterm::event::{KeyCode, KeyEventKind};
 use presage::libsignal_service::Profile;
-use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
+use ratatui::backend::CrosstermBackend;
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use std::collections::HashMap;
 use std::io::Stderr;
 use std::path::Path;
-use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::Arc;
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::{fs, io};
 use tokio::runtime::Builder;
 use tokio::sync::{Mutex, RwLock};
@@ -185,9 +185,10 @@ impl App {
             terminal.draw(|f| ui(f, self))?;
 
             if let Ok(event) = self.rx_tui.recv()
-                && self.handle_event(event, &self.tx_tui.clone()).await? {
-                    return Ok(true);
-                }
+                && self.handle_event(event, &self.tx_tui.clone()).await?
+            {
+                return Ok(true);
+            }
         }
     }
 
@@ -308,10 +309,11 @@ impl App {
 
     fn delete_char(&mut self) {
         if let Some((_, _, input)) = self.contacts.get_mut(self.contact_selected)
-            && self.character_index > 0 {
-                input.pop();
-                self.character_index -= 1;
-            }
+            && self.character_index > 0
+        {
+            input.pop();
+            self.character_index -= 1;
+        }
     }
 
     fn validate_attachment_path(&mut self) {

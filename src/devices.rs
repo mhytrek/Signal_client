@@ -4,7 +4,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use futures::{channel::oneshot, future};
-use presage::{libsignal_service::configuration::SignalServers, Manager};
+use presage::{Manager, libsignal_service::configuration::SignalServers};
 use tokio::fs;
 
 use crate::open_store;

@@ -1,12 +1,12 @@
-use crate::messages::receive::receiving_loop;
 use crate::AsyncRegisteredManager;
-use crate::{create_registered_manager, AsyncContactsMap};
+use crate::messages::receive::receiving_loop;
+use crate::{AsyncContactsMap, create_registered_manager};
 use anyhow::Result;
+use presage::Manager;
 use presage::libsignal_service::prelude::Uuid;
 use presage::manager::Registered;
 use presage::model::contacts::Contact;
 use presage::store::ContentsStore;
-use presage::Manager;
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
 use std::collections::HashMap;
 use std::sync::Arc;

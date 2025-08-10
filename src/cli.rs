@@ -1,12 +1,12 @@
 use crate::{
     contacts::list_contacts_cli,
-    messages::receive::{list_messages_cli, receive_messages_cli, MessageDto},
+    messages::receive::{MessageDto, list_messages_cli, receive_messages_cli},
     profile::{get_my_profile_avatar_cli, get_profile_cli},
 };
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use presage::model::contacts::Contact;
-use viuer::{print_from_file, Config};
+use viuer::{Config, print_from_file};
 
 fn print_contact(contact: &Contact) {
     println!("Name: {}", contact.name);

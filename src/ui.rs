@@ -7,6 +7,7 @@ use chrono::{DateTime, Local, Utc};
 use qrcode::QrCode;
 use ratatui::layout::Alignment;
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
@@ -14,7 +15,6 @@ use ratatui::{
         Block, BorderType, Borders, List, ListItem, ListState, Padding, Paragraph, Scrollbar,
         ScrollbarOrientation, ScrollbarState, Wrap,
     },
-    Frame,
 };
 use ratatui_image::{Resize, StatefulImage};
 use tui_qrcode::{Colors, QrCodeWidget};
@@ -64,7 +64,11 @@ pub fn ui(frame: &mut Frame, app: &mut App) {
             }
             LinkingStatus::Linked => {}
             LinkingStatus::Error(ref _error_msg) => {
-                render_popup(frame, frame.area(), "Error linking device, check if you have Internet connection.\n PRESS ANY KEY TO RETRY");
+                render_popup(
+                    frame,
+                    frame.area(),
+                    "Error linking device, check if you have Internet connection.\n PRESS ANY KEY TO RETRY",
+                );
             }
         },
         CurrentScreen::Syncing => {
@@ -336,7 +340,10 @@ fn render_qrcode(frame: &mut Frame, area: Rect) {
             let qr_area = centered_rect_fixed_size(50, 25, area);
             frame.render_widget(widget, qr_area);
         } else {
-            let text = format!("Terminal too small to show QRcode.\nMinimum window size 50x25 \n Current window size {}x{}", area.width, area.height);
+            let text = format!(
+                "Terminal too small to show QRcode.\nMinimum window size 50x25 \n Current window size {}x{}",
+                area.width, area.height
+            );
             render_popup(frame, area, &text);
         }
     } else {
