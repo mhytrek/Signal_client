@@ -29,8 +29,7 @@ pub async fn print_contacts() -> Result<()> {
 fn print_message(message: &MessageDto) {
     let millis = message.timestamp;
     let secs = (millis / 1000) as i64;
-    let datetime_utc: DateTime<Utc> =
-        DateTime::from_timestamp(secs, 0).expect("Invalid timestamp");
+    let datetime_utc: DateTime<Utc> = DateTime::from_timestamp(secs, 0).expect("Invalid timestamp");
     let datetime_local = datetime_utc.with_timezone(&Local);
 
     match message.sender {
@@ -55,7 +54,6 @@ pub async fn print_messages(recipient: String, from: String) -> Result<()> {
 
     // reversing the order of messages to print them out from the oldest to the latest
     messages.reverse();
-
 
     for message in messages {
         print_message(&message);

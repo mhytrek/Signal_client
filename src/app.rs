@@ -295,7 +295,6 @@ impl App {
                 Ok(false)
             }
             EventApp::GetMessageHistory(uuid_str, mut messages) => {
-                
                 // reversing the order of messages to print them out from the oldest to the latest
                 messages.reverse();
                 self.contact_messages.insert(uuid_str, messages);
