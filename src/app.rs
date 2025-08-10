@@ -233,10 +233,22 @@ impl App {
                 if self.current_screen == CurrentScreen::Syncing {
                     self.current_screen = CurrentScreen::Main;
                 }
+                let selected_uuid = self
+                    .contacts
+                    .get(self.contact_selected)
+                    .map(|contact| contact.0.clone())
+                    .unwrap_or(String::new());
+
                 self.contacts = contacts
                     .into_iter()
                     .map(|(uuid, name)| (uuid, name, String::new()))
                     .collect();
+
+                self.config_selected = self
+                    .contacts
+                    .iter()
+                    .position(|c| c.0 == selected_uuid)
+                    .unwrap_or(0);
                 Ok(false)
             }
             EventApp::LinkingFinished(result) => {
