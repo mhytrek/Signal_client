@@ -1,4 +1,4 @@
-pub const STORE: &str = "./store";
+pub const STORE: &str = "sqlite://store.db";
 
 pub const QRCODE: &str = "./assets/qrcode";
 

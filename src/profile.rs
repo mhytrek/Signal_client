@@ -1,4 +1,4 @@
-use crate::{create_registered_manager, AsyncRegisteredManager};
+use crate::{AsyncRegisteredManager, create_registered_manager};
 use anyhow::Result;
 use presage::libsignal_service::Profile;
 use std::sync::Arc;

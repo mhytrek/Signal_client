@@ -4,3 +4,6 @@ store/
 
 # Tags for vim
 tags
+
+store.db
+store.db-journal

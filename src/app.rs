@@ -1,26 +1,26 @@
 use crate::contacts::get_contacts_tui;
-use crate::messages::receive::{self, list_messages_tui, MessageDto};
+use crate::messages::receive::{self, MessageDto, list_messages_tui};
 use crate::messages::send::{send_attachment_tui, send_message_tui};
 use crate::paths::QRCODE;
 use crate::profile::get_profile_tui;
 use crate::ui::ui;
 use crate::{
-    config::Config, contacts, create_registered_manager, devices, AsyncContactsMap,
-    AsyncRegisteredManager,
+    AsyncContactsMap, AsyncRegisteredManager, config::Config, contacts, create_registered_manager,
+    devices,
 };
 use anyhow::{Error, Result};
 use crossterm::event::{self, Event, KeyModifiers};
 use crossterm::event::{KeyCode, KeyEventKind};
 use presage::libsignal_service::Profile;
-use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
+use ratatui::backend::CrosstermBackend;
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use std::collections::HashMap;
 use std::io::Stderr;
 use std::path::Path;
-use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::Arc;
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::{fs, io};
 use tokio::runtime::Builder;
 use tokio::sync::{Mutex, RwLock};
@@ -170,7 +170,7 @@ impl App {
                 if let Err(e) =
                     init_background_threads(self.tx_thread.clone(), rx, new_manager_mutex).await
                 {
-                    eprintln!("Failed to init threads: {:?}", e);
+                    eprintln!("Failed to init threads: {e:?}");
                 }
             }
             self.current_screen = CurrentScreen::Syncing;
@@ -184,10 +184,10 @@ impl App {
         loop {
             terminal.draw(|f| ui(f, self))?;
 
-            if let Ok(event) = self.rx_tui.recv() {
-                if self.handle_event(event, &self.tx_tui.clone()).await? {
-                    return Ok(true);
-                }
+            if let Ok(event) = self.rx_tui.recv()
+                && self.handle_event(event, &self.tx_tui.clone()).await?
+            {
+                return Ok(true);
             }
         }
     }
@@ -262,7 +262,7 @@ impl App {
                             )
                             .await
                             {
-                                eprintln!("Failed to init threads: {:?}", e);
+                                eprintln!("Failed to init threads: {e:?}");
                             }
                         }
                         self.current_screen = CurrentScreen::Syncing;
@@ -308,11 +308,11 @@ impl App {
     }
 
     fn delete_char(&mut self) {
-        if let Some((_, _, input)) = self.contacts.get_mut(self.contact_selected) {
-            if self.character_index > 0 {
-                input.pop();
-                self.character_index -= 1;
-            }
+        if let Some((_, _, input)) = self.contacts.get_mut(self.contact_selected)
+            && self.character_index > 0
+        {
+            input.pop();
+            self.character_index -= 1;
         }
     }
 
@@ -467,13 +467,13 @@ impl App {
                     0 => {
                         self.config.toggle_color_mode();
                         if let Err(e) = self.config.save() {
-                            eprintln!("Failed to save config: {:?}", e);
+                            eprintln!("Failed to save config: {e:?}");
                         }
                     }
                     1 => {
                         self.config.toggle_show_images();
                         if let Err(e) = self.config.save() {
-                            eprintln!("Failed to save config: {:?}", e);
+                            eprintln!("Failed to save config: {e:?}");
                         }
                         if !self.config.show_images {
                             self.avatar_image = None;
@@ -834,7 +834,7 @@ pub async fn handle_background_events(
                                     ),
                                 ));
                             } else {
-                                println!("Error sending message: {:?}", e);
+                                println!("Error sending message: {e:?}");
                             }
                         }
                     }
@@ -867,7 +867,7 @@ pub async fn handle_background_events(
                                     ),
                                 ));
                             } else {
-                                println!("Error sending attachment: {:?}", e);
+                                println!("Error sending attachment: {e:?}");
                             }
                         }
                     }

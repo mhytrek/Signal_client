@@ -4,22 +4,16 @@ use std::path::Path;
 
 use anyhow::Result;
 use futures::{channel::oneshot, future};
-use presage::model::identity::OnNewIdentity;
-use presage::{libsignal_service::configuration::SignalServers, Manager};
-use presage_store_sled::{MigrationConflictStrategy, SledStore};
+use presage::{Manager, libsignal_service::configuration::SignalServers};
 use tokio::fs;
 
+use crate::open_store;
 use crate::paths::{self, ASSETS, QRCODE};
 
 // / Links a new device to the Signal account using the given name.
 // / Generates a url and waits for the user to use it to complete the linking process.
 pub async fn link_new_device_tui(device_name: String) -> Result<()> {
-    let store = SledStore::open(
-        paths::STORE,
-        MigrationConflictStrategy::Drop,
-        OnNewIdentity::Trust,
-    )
-    .await?;
+    let store = open_store(paths::STORE).await?;
 
     if !Path::new(ASSETS).exists() {
         fs::create_dir(ASSETS).await?;
@@ -59,12 +53,7 @@ pub async fn link_new_device_tui(device_name: String) -> Result<()> {
 /// Links a new device to the Signal account using the given name.
 /// Generates a QR code and prints it in the terminal, then waits for the user to scan it to complete the linking process.
 pub async fn link_new_device_cli(device_name: String) -> Result<()> {
-    let store = SledStore::open(
-        paths::STORE,
-        MigrationConflictStrategy::Drop,
-        OnNewIdentity::Trust,
-    )
-    .await?;
+    let store = open_store(paths::STORE).await?;
 
     let (tx, rx) = oneshot::channel();
     let (_manager, _err) = future::join(
@@ -74,9 +63,9 @@ pub async fn link_new_device_cli(device_name: String) -> Result<()> {
                 Ok(url) => {
                     println!("Scan the QR code to link the device!");
                     qr2term::print_qr(url.as_ref()).expect("QR generation failed");
-                    println!("You can also use the URL: {}", url);
+                    println!("You can also use the URL: {url}");
                 }
-                Err(err) => println!("Error while linking device: {}", err),
+                Err(err) => println!("Error while linking device: {err}"),
             }
         },
     )
@@ -86,12 +75,7 @@ pub async fn link_new_device_cli(device_name: String) -> Result<()> {
 
 /// return true if the device is registered and false otherwise
 pub async fn is_registered() -> Result<bool> {
-    let store = SledStore::open(
-        paths::STORE,
-        MigrationConflictStrategy::Drop,
-        OnNewIdentity::Trust,
-    )
-    .await?;
+    let store = open_store(paths::STORE).await?;
 
     match Manager::load_registered(store).await {
         Ok(_) => Ok(true),

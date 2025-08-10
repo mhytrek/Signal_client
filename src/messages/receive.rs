@@ -3,23 +3,23 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use futures::Stream;
-use futures::{pin_mut, StreamExt};
+use futures::{StreamExt, pin_mut};
 use presage::libsignal_service::content::ContentBody;
 use presage::libsignal_service::prelude::Content;
 use presage::libsignal_service::prelude::Uuid;
 use presage::manager::Manager;
 use presage::manager::Registered;
 use presage::model::messages::Received;
-use presage::proto::{sync_message::Sent, DataMessage, SyncMessage};
+use presage::proto::{DataMessage, SyncMessage, sync_message::Sent};
 use presage::store::Thread;
 use presage::store::{ContentExt, ContentsStore};
-use presage_store_sled::{SledStore, SledStoreError};
+use presage_store_sqlite::{SqliteStore, SqliteStoreError};
 use tokio::sync::Mutex;
 
-use crate::contacts::get_contacts_cli;
-use crate::create_registered_manager;
 use crate::AsyncContactsMap;
 use crate::AsyncRegisteredManager;
+use crate::contacts::get_contacts_cli;
+use crate::create_registered_manager;
 
 pub struct MessageDto {
     pub uuid: Uuid,
@@ -55,7 +55,7 @@ async fn loop_with_contents(messages: impl Stream<Item = Received>, contents: &m
 /// Function receives messages from the primary device
 pub async fn receiving_loop(
     messages: impl Stream<Item = Received>,
-    manager: &mut Manager<SledStore, Registered>,
+    manager: &mut Manager<SqliteStore, Registered>,
     contents_optional: Option<&mut Vec<Content>>,
     current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
@@ -67,10 +67,10 @@ pub async fn receiving_loop(
 }
 
 async fn list_messages(
-    manager: &Manager<SledStore, Registered>,
+    manager: &Manager<SqliteStore, Registered>,
     recipient: String,
     from: String,
-) -> Result<Vec<Result<Content, SledStoreError>>> {
+) -> Result<Vec<Result<Content, SqliteStoreError>>> {
     let recipient_uuid = Uuid::from_str(&recipient)?;
     let thread = Thread::Contact(recipient_uuid);
     let from_u64 = u64::from_str(&from)?;
@@ -95,7 +95,7 @@ pub fn format_message(content: &Content) -> Option<MessageDto> {
             } => Some(body.to_string()),
             DataMessage {
                 flags: Some(flag), ..
-            } => Some(format!("[FLAG] Data message (flag: {})", flag)),
+            } => Some(format!("[FLAG] Data message (flag: {flag})")),
 
             _ => None,
         },
@@ -116,7 +116,7 @@ pub fn format_message(content: &Content) -> Option<MessageDto> {
 
                     DataMessage {
                         flags: Some(flag), ..
-                    } => Some(format!("[FLAG] Synced data message (flag: {})", flag)),
+                    } => Some(format!("[FLAG] Synced data message (flag: {flag})")),
 
                     _ => None,
                 }
@@ -231,7 +231,7 @@ pub async fn receive_messages_cli() -> Result<Vec<MessageDto>> {
 }
 
 async fn check_contacts(
-    manager: &mut Manager<SledStore, Registered>,
+    manager: &mut Manager<SqliteStore, Registered>,
     current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
     let mut current_contacts = current_contacts_mutex.lock().await;
@@ -264,7 +264,7 @@ async fn check_contacts(
         // on write lock or owned instance (shouldn't be a problem, because function needs)
         // a mutable reference, write lock is required for that
         unsafe {
-            let store = manager.store() as *const SledStore as *mut SledStore;
+            let store = manager.store() as *const SqliteStore as *mut SqliteStore;
             (*store).save_contact(&contact).await?;
         }
         current_contacts.insert(contact.uuid, contact);

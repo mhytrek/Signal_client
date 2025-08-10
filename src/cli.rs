@@ -1,18 +1,18 @@
 use crate::{
     contacts::list_contacts_cli,
-    messages::receive::{list_messages_cli, receive_messages_cli, MessageDto},
+    messages::receive::{MessageDto, list_messages_cli, receive_messages_cli},
     profile::{get_my_profile_avatar_cli, get_profile_cli},
 };
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use presage::model::contacts::Contact;
-use viuer::{print_from_file, Config};
+use viuer::{Config, print_from_file};
 
 fn print_contact(contact: &Contact) {
     println!("Name: {}", contact.name);
     println!("UUID: {}", contact.uuid);
     if let Some(phone_number) = &contact.phone_number {
-        println!("Phone number: {}", phone_number);
+        println!("Phone number: {phone_number}");
     }
 }
 
@@ -69,17 +69,17 @@ pub async fn print_profile() -> Result<()> {
 
     println!("Profile:");
     if let Some(name) = &profile.name {
-        println!("Name: {}", name);
+        println!("Name: {name}");
     } else {
         println!("Name: N/A");
     }
     if let Some(about) = &profile.about {
-        println!("About: {}", about);
+        println!("About: {about}");
     } else {
         println!("About: N/A");
     }
     if let Some(about_emoji) = &profile.about_emoji {
-        println!("About Emoji: {}", about_emoji);
+        println!("About Emoji: {about_emoji}");
     } else {
         println!("About Emoji: N/A");
     }
@@ -94,14 +94,14 @@ pub async fn print_profile() -> Result<()> {
         Ok(Some(avatar_data)) => match display_avatar_color(&avatar_data) {
             Ok(_) => println!("\n"),
             Err(e) => {
-                println!("Could not display avatar in terminal: {}", e);
+                println!("Could not display avatar in terminal: {e}");
             }
         },
         Ok(None) => {
             println!("No avatar set");
         }
         Err(e) => {
-            println!("Error retrieving avatar: {}", e);
+            println!("Error retrieving avatar: {e}");
         }
     }
 

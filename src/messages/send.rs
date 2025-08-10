@@ -1,8 +1,9 @@
 use crate::contacts::get_contacts_cli;
 use crate::messages::receive::receiving_loop;
-use crate::{create_registered_manager, AsyncContactsMap, AsyncRegisteredManager};
+use crate::{AsyncContactsMap, AsyncRegisteredManager, create_registered_manager};
 use anyhow::Result;
 use mime_guess::mime::APPLICATION_OCTET_STREAM;
+use presage::Manager;
 use presage::libsignal_service::prelude::Uuid;
 use presage::libsignal_service::protocol::ServiceId;
 use presage::libsignal_service::sender::AttachmentSpec;
@@ -10,8 +11,7 @@ use presage::manager::Registered;
 use presage::model::contacts::Contact;
 use presage::proto::DataMessage;
 use presage::store::ContentsStore;
-use presage::Manager;
-use presage_store_sled::{SledStore, SledStoreError};
+use presage_store_sqlite::{SqliteStore, SqliteStoreError};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -21,9 +21,9 @@ use tokio::sync::Mutex;
 /// finds contact uuid from string that can be contact_name or contact phone_number
 pub async fn find_uuid(
     recipient_info: String,
-    manager: &mut Manager<SledStore, Registered>,
+    manager: &mut Manager<SqliteStore, Registered>,
 ) -> Result<Uuid> {
-    let contacts: Vec<Result<Contact, SledStoreError>> =
+    let contacts: Vec<Result<Contact, SqliteStoreError>> =
         manager.store().contacts().await?.collect();
     let uuid = contacts
         .into_iter()
@@ -43,7 +43,7 @@ pub async fn find_uuid(
 
 async fn get_address(
     recipient: String,
-    manager: &mut Manager<SledStore, Registered>,
+    manager: &mut Manager<SqliteStore, Registered>,
 ) -> Result<ServiceId> {
     let recipient_uuid = find_uuid(recipient, manager).await?;
     // let recipient_uuid = Uuid::from_str(&recipient)?;
@@ -64,7 +64,7 @@ fn create_data_message(text_message: String, timestamp: u64) -> Result<DataMessa
 }
 
 async fn send(
-    manager: &mut Manager<SledStore, Registered>,
+    manager: &mut Manager<SqliteStore, Registered>,
     recipient_addr: ServiceId,
     data_message: DataMessage,
     timestamp: u64,
@@ -77,7 +77,7 @@ async fn send(
 }
 
 async fn send_message(
-    manager: &mut Manager<SledStore, Registered>,
+    manager: &mut Manager<SqliteStore, Registered>,
     recipient: String,
     text_message: String,
     current_contacts_mutex: AsyncContactsMap,
@@ -174,7 +174,7 @@ async fn create_attachment(attachment_path: String) -> Result<(AttachmentSpec, V
 
 /// Send message with attachment
 async fn send_attachment(
-    manager: &mut Manager<SledStore, Registered>,
+    manager: &mut Manager<SqliteStore, Registered>,
     recipient: String,
     text_message: String,
     attachment_path: String,

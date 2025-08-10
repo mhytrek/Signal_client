@@ -7,6 +7,7 @@ use chrono::{DateTime, Local, Utc};
 use qrcode::QrCode;
 use ratatui::layout::Alignment;
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
@@ -14,7 +15,6 @@ use ratatui::{
         Block, BorderType, Borders, List, ListItem, ListState, Padding, Paragraph, Scrollbar,
         ScrollbarOrientation, ScrollbarState, Wrap,
     },
-    Frame,
 };
 use ratatui_image::{Resize, StatefulImage};
 use tui_qrcode::{Colors, QrCodeWidget};
@@ -64,7 +64,11 @@ pub fn ui(frame: &mut Frame, app: &mut App) {
             }
             LinkingStatus::Linked => {}
             LinkingStatus::Error(ref _error_msg) => {
-                render_popup(frame, frame.area(), "Error linking device, check if you have Internet connection.\n PRESS ANY KEY TO RETRY");
+                render_popup(
+                    frame,
+                    frame.area(),
+                    "Error linking device, check if you have Internet connection.\n PRESS ANY KEY TO RETRY",
+                );
             }
         },
         CurrentScreen::Syncing => {
@@ -148,12 +152,12 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
                 if app.contacts[app.contact_selected].0 != msg.uuid.to_string() {
                     style = style.add_modifier(Modifier::BOLD);
                     ListItem::new(
-                        Line::from(format!(" {}", content))
+                        Line::from(format!(" {content}"))
                             .style(style)
                             .right_aligned(),
                     )
                 } else {
-                    ListItem::new(Line::from(format!("{} ", content)).style(style))
+                    ListItem::new(Line::from(format!("{content} ")).style(style))
                 }
             })
             .collect(),
@@ -175,7 +179,7 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
         .block(Block::default().title("Input").borders(Borders::ALL));
 
     let attachment_title = match &app.attachment_error {
-        Some(error) => format!("Attachment Path - ERROR: {}", error),
+        Some(error) => format!("Attachment Path - ERROR: {error}"),
         None => "Attachment Path".to_string(),
     };
 
@@ -299,7 +303,7 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(app.config.get_success_color()),
         ),
         NetworkStatus::Disconnected(msg) => Span::styled(
-            format!("⚠ {}", msg),
+            format!("⚠ {msg}"),
             Style::default().fg(app.config.get_error_color()),
         ),
     };
@@ -336,7 +340,10 @@ fn render_qrcode(frame: &mut Frame, area: Rect) {
             let qr_area = centered_rect_fixed_size(50, 25, area);
             frame.render_widget(widget, qr_area);
         } else {
-            let text = format!("Terminal too small to show QRcode.\nMinimum window size 50x25 \n Current window size {}x{}", area.width, area.height);
+            let text = format!(
+                "Terminal too small to show QRcode.\nMinimum window size 50x25 \n Current window size {}x{}",
+                area.width, area.height
+            );
             render_popup(frame, area, &text);
         }
     } else {
