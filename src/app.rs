@@ -189,6 +189,7 @@ impl App {
             {
                 return Ok(true);
             }
+            terminal.draw(|f| ui(f, self))?;
         }
     }
 
@@ -237,14 +238,14 @@ impl App {
                     .contacts
                     .get(self.contact_selected)
                     .map(|contact| contact.0.clone())
-                    .unwrap_or(String::new());
+                    .unwrap_or_default();
 
                 self.contacts = contacts
                     .into_iter()
                     .map(|(uuid, name)| (uuid, name, String::new()))
                     .collect();
 
-                self.config_selected = self
+                self.contact_selected = self
                     .contacts
                     .iter()
                     .position(|c| c.0 == selected_uuid)
