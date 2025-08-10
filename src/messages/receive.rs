@@ -258,7 +258,6 @@ async fn check_contacts(
         // Maybe it works, maybe it doesn't, requires behavioral testing
         // manager.store().to_owned().save_contact(&contact).await?;
         // IT DEFINITELY REQUIRES TESTING
-        // EXTREMELY UNSAFE
         // However avoids unnecessary copying
         // It SHOULD work as long as receiving loop function is run with manager
         // on write lock or owned instance (shouldn't be a problem, because function needs)
