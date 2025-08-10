@@ -184,11 +184,10 @@ impl App {
         loop {
             terminal.draw(|f| ui(f, self))?;
 
-            if let Ok(event) = self.rx_tui.recv() {
-                if self.handle_event(event, &self.tx_tui.clone()).await? {
+            if let Ok(event) = self.rx_tui.recv()
+                && self.handle_event(event, &self.tx_tui.clone()).await? {
                     return Ok(true);
                 }
-            }
         }
     }
 
@@ -308,12 +307,11 @@ impl App {
     }
 
     fn delete_char(&mut self) {
-        if let Some((_, _, input)) = self.contacts.get_mut(self.contact_selected) {
-            if self.character_index > 0 {
+        if let Some((_, _, input)) = self.contacts.get_mut(self.contact_selected)
+            && self.character_index > 0 {
                 input.pop();
                 self.character_index -= 1;
             }
-        }
     }
 
     fn validate_attachment_path(&mut self) {

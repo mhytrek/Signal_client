@@ -29,11 +29,10 @@ impl Config {
     pub fn load() -> Self {
         let config_path = Self::get_config_path();
 
-        if let Ok(contents) = fs::read_to_string(&config_path) {
-            if let Ok(config) = serde_json::from_str::<Config>(&contents) {
+        if let Ok(contents) = fs::read_to_string(&config_path)
+            && let Ok(config) = serde_json::from_str::<Config>(&contents) {
                 return config;
             }
-        }
 
         let default_config = Config::default();
         let _ = default_config.save();
