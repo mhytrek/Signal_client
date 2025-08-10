@@ -189,7 +189,6 @@ impl App {
             {
                 return Ok(true);
             }
-            terminal.draw(|f| ui(f, self))?;
         }
     }
 
