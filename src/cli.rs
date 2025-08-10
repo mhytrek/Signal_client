@@ -4,7 +4,7 @@ use crate::{
     profile::{get_my_profile_avatar_cli, get_profile_cli},
 };
 use anyhow::Result;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local, Utc};
 use presage::model::contacts::Contact;
 use viuer::{Config, print_from_file};
 
@@ -29,27 +29,34 @@ pub async fn print_contacts() -> Result<()> {
 fn print_message(message: &MessageDto) {
     let millis = message.timestamp;
     let secs = (millis / 1000) as i64;
-    let datetime: DateTime<Utc> = DateTime::from_timestamp(secs, 0).expect("Invalid timestamp");
+    let datetime_utc: DateTime<Utc> =
+        DateTime::from_timestamp(secs, 0).expect("Invalid timestamp");
+    let datetime_local = datetime_utc.with_timezone(&Local);
 
     match message.sender {
         true => {
             println!(
                 "[{}] Me -> {}",
-                datetime.format("%Y-%m-%d %H:%M:%S"),
+                datetime_local.format("%Y-%m-%d %H:%M:%S"),
                 message.text
             );
         }
         false => {
             println!(
                 "[{}] Them <- {}",
-                datetime.format("%Y-%m-%d %H:%M:%S"),
+                datetime_local.format("%Y-%m-%d %H:%M:%S"),
                 message.text
             );
         }
     }
 }
 pub async fn print_messages(recipient: String, from: String) -> Result<()> {
-    let messages = list_messages_cli(recipient, from).await?;
+    let mut messages = list_messages_cli(recipient, from).await?;
+
+    // reversing the order of messages to print them out from the oldest to the latest
+    messages.reverse();
+
+
     for message in messages {
         print_message(&message);
     }
@@ -57,7 +64,11 @@ pub async fn print_messages(recipient: String, from: String) -> Result<()> {
 }
 
 pub async fn print_received_message() -> Result<()> {
-    let messages = receive_messages_cli().await?;
+    let mut messages = receive_messages_cli().await?;
+
+    // reversing the order of messages to print them out from the oldest to the latest
+    messages.reverse();
+
     for message in messages {
         print_message(&message);
     }

@@ -118,6 +118,7 @@ pub fn format_message(content: &Content) -> Option<MessageDto> {
                         body: Some(body), ..
                     } => Some(body.to_string()),
 
+                    // comment next case to turn off the messages with [FLAG]
                     DataMessage {
                         flags: Some(flag), ..
                     } => Some(format!("[FLAG] Synced data message (flag: {flag})")),
