@@ -63,9 +63,9 @@ pub async fn link_new_device_cli(device_name: String) -> Result<()> {
                 Ok(url) => {
                     println!("Scan the QR code to link the device!");
                     qr2term::print_qr(url.as_ref()).expect("QR generation failed");
-                    println!("You can also use the URL: {}", url);
+                    println!("You can also use the URL: {url}");
                 }
-                Err(err) => println!("Error while linking device: {}", err),
+                Err(err) => println!("Error while linking device: {err}"),
             }
         },
     )

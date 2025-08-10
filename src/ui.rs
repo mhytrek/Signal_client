@@ -148,12 +148,12 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
                 if app.contacts[app.contact_selected].0 != msg.uuid.to_string() {
                     style = style.add_modifier(Modifier::BOLD);
                     ListItem::new(
-                        Line::from(format!(" {}", content))
+                        Line::from(format!(" {content}"))
                             .style(style)
                             .right_aligned(),
                     )
                 } else {
-                    ListItem::new(Line::from(format!("{} ", content)).style(style))
+                    ListItem::new(Line::from(format!("{content} ")).style(style))
                 }
             })
             .collect(),
@@ -175,7 +175,7 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
         .block(Block::default().title("Input").borders(Borders::ALL));
 
     let attachment_title = match &app.attachment_error {
-        Some(error) => format!("Attachment Path - ERROR: {}", error),
+        Some(error) => format!("Attachment Path - ERROR: {error}"),
         None => "Attachment Path".to_string(),
     };
 
@@ -299,7 +299,7 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(app.config.get_success_color()),
         ),
         NetworkStatus::Disconnected(msg) => Span::styled(
-            format!("⚠ {}", msg),
+            format!("⚠ {msg}"),
             Style::default().fg(app.config.get_error_color()),
         ),
     };

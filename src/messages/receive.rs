@@ -95,7 +95,7 @@ pub fn format_message(content: &Content) -> Option<MessageDto> {
             } => Some(body.to_string()),
             DataMessage {
                 flags: Some(flag), ..
-            } => Some(format!("[FLAG] Data message (flag: {})", flag)),
+            } => Some(format!("[FLAG] Data message (flag: {flag})")),
 
             _ => None,
         },
@@ -116,7 +116,7 @@ pub fn format_message(content: &Content) -> Option<MessageDto> {
 
                     DataMessage {
                         flags: Some(flag), ..
-                    } => Some(format!("[FLAG] Synced data message (flag: {})", flag)),
+                    } => Some(format!("[FLAG] Synced data message (flag: {flag})")),
 
                     _ => None,
                 }

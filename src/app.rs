@@ -170,7 +170,7 @@ impl App {
                 if let Err(e) =
                     init_background_threads(self.tx_thread.clone(), rx, new_manager_mutex).await
                 {
-                    eprintln!("Failed to init threads: {:?}", e);
+                    eprintln!("Failed to init threads: {e:?}");
                 }
             }
             self.current_screen = CurrentScreen::Syncing;
@@ -261,7 +261,7 @@ impl App {
                             )
                             .await
                             {
-                                eprintln!("Failed to init threads: {:?}", e);
+                                eprintln!("Failed to init threads: {e:?}");
                             }
                         }
                         self.current_screen = CurrentScreen::Syncing;
@@ -465,13 +465,13 @@ impl App {
                     0 => {
                         self.config.toggle_color_mode();
                         if let Err(e) = self.config.save() {
-                            eprintln!("Failed to save config: {:?}", e);
+                            eprintln!("Failed to save config: {e:?}");
                         }
                     }
                     1 => {
                         self.config.toggle_show_images();
                         if let Err(e) = self.config.save() {
-                            eprintln!("Failed to save config: {:?}", e);
+                            eprintln!("Failed to save config: {e:?}");
                         }
                         if !self.config.show_images {
                             self.avatar_image = None;
@@ -832,7 +832,7 @@ pub async fn handle_background_events(
                                     ),
                                 ));
                             } else {
-                                println!("Error sending message: {:?}", e);
+                                println!("Error sending message: {e:?}");
                             }
                         }
                     }
@@ -865,7 +865,7 @@ pub async fn handle_background_events(
                                     ),
                                 ));
                             } else {
-                                println!("Error sending attachment: {:?}", e);
+                                println!("Error sending attachment: {e:?}");
                             }
                         }
                     }
