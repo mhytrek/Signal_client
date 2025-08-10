@@ -10,7 +10,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-Dwarnings"
+  RUSTFLAGS: "-Dwarnings -Dclippy::uninlined_format_args"
 
 permissions:
   contents: write
