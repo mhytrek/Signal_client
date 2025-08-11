@@ -1,3 +1,4 @@
+use std::env;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -20,6 +21,7 @@ use crate::AsyncContactsMap;
 use crate::AsyncRegisteredManager;
 use crate::contacts::get_contacts_cli;
 use crate::create_registered_manager;
+use crate::env::SIGNAL_DISPLAY_FLAGS;
 
 pub struct MessageDto {
     pub uuid: Uuid,
@@ -95,7 +97,9 @@ pub fn format_message(content: &Content) -> Option<MessageDto> {
             } => Some(body.to_string()),
             DataMessage {
                 flags: Some(flag), ..
-            } => Some(format!("[FLAG] Data message (flag: {flag})")),
+            } if env::var(SIGNAL_DISPLAY_FLAGS).is_ok() => {
+                Some(format!("[FLAG] Data message (flag: {flag})"))
+            }
 
             _ => None,
         },
