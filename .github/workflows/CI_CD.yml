@@ -28,6 +28,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.89.0
+          components: rustfmt, clippy
 
       - name: Checkout repo
         uses: actions/checkout@v4
