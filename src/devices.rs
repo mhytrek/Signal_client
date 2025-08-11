@@ -56,7 +56,7 @@ pub async fn link_new_device_cli(device_name: String) -> Result<()> {
     let store = open_store(paths::STORE).await?;
 
     let (tx, rx) = oneshot::channel();
-    let (_manager, _err) = future::join(
+    let (manager, _err) = future::join(
         Manager::link_secondary_device(store, SignalServers::Production, device_name, tx),
         async move {
             match rx.await {
@@ -70,6 +70,11 @@ pub async fn link_new_device_cli(device_name: String) -> Result<()> {
         },
     )
     .await;
+
+    match manager {
+        Ok(_) => println!("Device linked successfully!"),
+        Err(e) => println!("Error while linking device: {e}"),
+    }
     Ok(())
 }
 
