@@ -15,6 +15,7 @@ pub mod cli;
 pub mod config;
 pub mod contacts;
 pub mod devices;
+pub mod env;
 pub mod messages;
 pub mod paths;
 pub mod profile;
