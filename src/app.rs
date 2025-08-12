@@ -294,7 +294,9 @@ impl App {
                 self.avatar_cache = Some(avatar_data);
                 Ok(false)
             }
-            EventApp::GetMessageHistory(uuid_str, messages) => {
+            EventApp::GetMessageHistory(uuid_str, mut messages) => {
+                // reversing the order of messages to print them out from the oldest to the latest
+                messages.reverse();
                 self.contact_messages.insert(uuid_str, messages);
                 self.message_selected = match self
                     .contact_messages
