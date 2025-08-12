@@ -163,25 +163,35 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
                     msg.text
                 );
 
+                let max_width = vertical_chunks[0].width -3;
+
+                let wrapped_text = wrap_text(content, max_width);
+
                 if app.contacts[app.contact_selected].0 != msg.uuid.to_string() {
                     style = style.add_modifier(Modifier::BOLD);
+
                     ListItem::new(
-                        Line::from(format!(" {content}"))
+
+                        wrapped_text
                             .style(style)
                             .right_aligned(),
+                            
                     )
                 } else {
-                    ListItem::new(Line::from(format!("{content} ")).style(style))
+                    
+                    ListItem::new(wrapped_text.style(style))
                 }
             })
             .collect(),
         None => vec![],
     };
 
-    let chat_window = List::new(messages.clone()).block(
+    let chat_window = List::new(messages.clone())
+    .block(
         Block::default()
             .title(app.contacts[app.contact_selected].1.clone())
             .borders(Borders::ALL),
+            
     );
 
     let input_area_chunks = Layout::default()
@@ -662,4 +672,20 @@ fn centered_rect_fixed_size(width: u16, height: u16, r: Rect) -> Rect {
         width: rect_width,
         height: rect_height,
     }
+}
+
+fn wrap_text<'a>(text: String, width: u16) -> Text<'a> {
+    let mut wrapped = String::new();
+    let mut count = 0;
+
+    for ch in text.chars() {
+        if count >= width {
+            wrapped.push('\n');
+            count = 0;
+        }
+        wrapped.push(ch);
+        count += 1;
+    }
+
+    Text::from(wrapped)
 }
