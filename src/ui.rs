@@ -141,58 +141,170 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(3)])
         .split(area);
 
-    let messages: Vec<ListItem> = match &app
+    // let messages: Vec<ListItem> = match &app
+    //     .contact_messages
+    //     .get(&app.contacts[app.contact_selected].0)
+    // {
+    //     Some(msgs) => msgs
+    //         .iter()
+    //         .map(|msg| {
+    //             let mut style = Style::default();
+
+                // let millis = msg.timestamp;
+                // let secs = (millis / 1000) as i64;
+                // let datetime_utc: DateTime<Utc> =
+                //     DateTime::from_timestamp(secs, 0).expect("Invalid timestamp");
+
+                // let datetime_local = datetime_utc.with_timezone(&Local);
+
+    //             let content = format!(
+    //                 "[{}] {}",
+    //                 datetime_local.format("%Y-%m-%d %H:%M:%S"),
+    //                 msg.text
+    //             );
+
+    //             let max_width = vertical_chunks[0].width -3;
+
+    //             let wrapped_text = wrap_text(content, max_width);
+
+    //             if app.contacts[app.contact_selected].0 != msg.uuid.to_string() {
+    //                 style = style.add_modifier(Modifier::BOLD);
+
+    //                 ListItem::new(
+
+    //                     wrapped_text
+    //                         .style(style)
+    //                         .right_aligned(),
+                            
+    //                 )
+    //             } else {
+                    
+    //                 ListItem::new(wrapped_text.style(style))
+    //             }
+    //         })
+    //         .collect(),
+    //     None => vec![],
+    // };
+
+    // let chat_window = List::new(messages.clone())
+    // .block(
+    //     Block::default()
+    //         .title(app.contacts[app.contact_selected].1.clone())
+    //         .borders(Borders::ALL),
+            
+    // );
+
+    let messages = match app
         .contact_messages
         .get(&app.contacts[app.contact_selected].0)
     {
-        Some(msgs) => msgs
-            .iter()
-            .map(|msg| {
-                let mut style = Style::default();
-
-                let millis = msg.timestamp;
-                let secs = (millis / 1000) as i64;
-                let datetime_utc: DateTime<Utc> =
-                    DateTime::from_timestamp(secs, 0).expect("Invalid timestamp");
-
-                let datetime_local = datetime_utc.with_timezone(&Local);
-
-                let content = format!(
-                    "[{}] {}",
-                    datetime_local.format("%Y-%m-%d %H:%M:%S"),
-                    msg.text
-                );
-
-                let max_width = vertical_chunks[0].width -3;
-
-                let wrapped_text = wrap_text(content, max_width);
-
-                if app.contacts[app.contact_selected].0 != msg.uuid.to_string() {
-                    style = style.add_modifier(Modifier::BOLD);
-
-                    ListItem::new(
-
-                        wrapped_text
-                            .style(style)
-                            .right_aligned(),
-                            
-                    )
-                } else {
-                    
-                    ListItem::new(wrapped_text.style(style))
-                }
-            })
-            .collect(),
-        None => vec![],
+        Some(msgs) => msgs,
+        None => return,
     };
 
-    let chat_window = List::new(messages.clone())
-    .block(
-        Block::default()
-            .title(app.contacts[app.contact_selected].1.clone())
-            .borders(Borders::ALL),
-            
-    );
+    let msg_padding = 2;
+    let margin = vertical_chunks[0].width.saturating_div(4);
+    let available_height = vertical_chunks[0].height;
+    let max_width = vertical_chunks[0]
+        .width
+        .saturating_sub(msg_padding * 2 + 2 + margin) as usize;
+    let min_width = 21 as usize; // hardcoded date format
+
+
+    // Calculate how many messages can fit
+    let mut heights: Vec<u16> = Vec::new();
+    let mut widths: Vec<u16> = Vec::new();
+
+    for msg in messages {
+        let lines = msg.text.split('\n');
+        let mut total_lines = 0;
+        let mut longest_line_len =0;
+
+        for line in lines {
+            let len = line.chars().count();
+            longest_line_len = longest_line_len.max(len);
+
+            total_lines += (len / max_width + 1) as u16;
+        }
+
+        heights.push(total_lines + 2);
+
+        let actual_width = longest_line_len
+            .min(max_width)
+            .saturating_add((msg_padding * 2 + 2) as usize)
+            .max(min_width) as u16;
+
+        widths.push(actual_width);
+    }
+
+    let mut used_height = 0;
+    let mut last_visible_start = 0;
+
+    for (idx, &h) in heights.iter().enumerate().rev() {
+        if used_height + h > available_height {
+            break;
+        }
+        last_visible_start = idx;
+        used_height += h;
+    }
+
+    let start_index = app.message_selected.min(last_visible_start);
+
+
+    // Figure out visible messages
+    let mut y_cursor = vertical_chunks[0].y;
+    let mut visible_msgs = Vec::new();
+    for (idx, h) in heights
+        .iter()
+        .enumerate()
+        .skip(start_index)
+    {
+        if y_cursor + h > available_height {
+            break;
+        }
+        visible_msgs.push(idx);
+        y_cursor += h;
+    }
+
+    visible_msgs.reverse();
+
+    // Render only visible messages
+    let mut y_pos = 0;
+    for idx in visible_msgs {
+        let msg = &messages[idx];
+
+
+        let datetime_local = get_local_timestamp(msg.timestamp);
+
+        let para = Paragraph::new(msg.text.clone())
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .title(datetime_local.format("%Y-%m-%d %H:%M:%S").to_string())
+                    
+                )
+            .wrap(Wrap { trim: false });
+
+        let mut  x_pos = vertical_chunks[0].x;
+
+        let height = heights[idx];
+        let width  = widths[idx];
+
+        if app.contacts[app.contact_selected].0 != msg.uuid.to_string() {
+            x_pos = vertical_chunks[0].x + vertical_chunks[0].width - width
+        }
+
+        let msg_area = Rect {
+            x: x_pos,
+            y: y_pos,
+            width,
+            height,
+        };
+
+        frame.render_widget(para, msg_area);
+        y_pos += height;
+    }
 
     let input_area_chunks = Layout::default()
         .direction(Direction::Horizontal)
@@ -227,12 +339,11 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
 
     let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
 
-    let mut scrollbar_state = ScrollbarState::new(messages.len()).position(app.message_selected);
+    let mut scrollbar_state = ScrollbarState::new(messages.len()).position(messages.len() - app.message_selected);
 
     let mut list_state = ListState::default();
-    list_state.select(Some(app.message_selected));
+    list_state.select(Some(messages.len() - app.message_selected));
 
-    frame.render_stateful_widget(chat_window, vertical_chunks[0], &mut list_state);
     frame.render_widget(input_window, input_area_chunks[0]);
     frame.render_widget(attachment_window, input_area_chunks[1]);
     frame.render_stateful_widget(
@@ -514,6 +625,15 @@ fn render_options(frame: &mut Frame, app: &mut App) {
                 "Disabled"
             }
         ),
+
+        format!(
+            "Compact messages: {}",
+            if app.config.compact_messages{
+                "Enabled"
+            } else {
+                "Disabled"
+            }
+        )
     ];
 
     let config_items: Vec<ListItem> = config_options
@@ -674,18 +794,11 @@ fn centered_rect_fixed_size(width: u16, height: u16, r: Rect) -> Rect {
     }
 }
 
-fn wrap_text<'a>(text: String, width: u16) -> Text<'a> {
-    let mut wrapped = String::new();
-    let mut count = 0;
+// Takes a timestamp and transforms it to Date in a local timezone
+fn get_local_timestamp(millis: u64)-> DateTime<Local>{
+        let secs = (millis / 1000) as i64;
+        let datetime_utc: DateTime<Utc> =
+            DateTime::from_timestamp(secs, 0).expect("Invalid timestamp");
 
-    for ch in text.chars() {
-        if count >= width {
-            wrapped.push('\n');
-            count = 0;
-        }
-        wrapped.push(ch);
-        count += 1;
-    }
-
-    Text::from(wrapped)
+        datetime_utc.with_timezone(&Local)
 }
