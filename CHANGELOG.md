@@ -5,10 +5,12 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 
 ## [Unreleased] - yyyy-mm-dd
 
+### Breaking
+- Migrated from `SledStore` to `SqliteStore`.
+
 ### Added
 
 ### Changed
-- Migrated from `SledStore` to `SqliteStore`.
 
 ### Fixed
 - Timezone in messages timestamps.
@@ -19,8 +21,6 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 - Sending attachments (in cli and ui).
 - Receiving messages (in cli and ui).
 - Getting profile data (in cli and tui).
-
-### Changed
 
 ### Fixed
 - Handling connection issues.
