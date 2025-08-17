@@ -12,7 +12,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::SyncContacts => contacts::sync_contacts_cli(None).await?,
+        Command::SyncContacts => contacts::sync_contacts_cli().await?,
         Command::LinkDevice(args) => devices::link_new_device_cli(args.device_name).await?,
         Command::ListContacts => cli::print_contacts().await?,
         Command::RunApp => tui::run_tui().await?,

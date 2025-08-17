@@ -1,12 +1,18 @@
 use std::env;
 
+use tracing::level_filters::LevelFilter;
 use tracing_appender::rolling;
 use tracing_subscriber::{EnvFilter, fmt::writer::BoxMakeWriter};
 
-use crate::env::{SIGNAL_LOGGER_LEVER, SIGNAL_ONSCREEN_LOGGER};
+use crate::env::{SIGNAL_LOGGER_LEVEL, SIGNAL_ONSCREEN_LOGGER};
 
 pub fn init_logger() {
-    let filter = EnvFilter::from_env(SIGNAL_LOGGER_LEVER).add_directive("info".parse().unwrap());
+    // let logger_level = env::var(SIGNAL_LOGGER_LEVEL).unwrap_or(String::new());
+    let filter = EnvFilter::builder()
+        .with_default_directive(LevelFilter::INFO.into())
+        .with_env_var(SIGNAL_LOGGER_LEVEL)
+        .from_env()
+        .unwrap_or_default();
     let onscreen_logs = env::var(SIGNAL_ONSCREEN_LOGGER).is_ok();
 
     if onscreen_logs {

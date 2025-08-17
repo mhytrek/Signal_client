@@ -4,16 +4,18 @@ use std::path::Path;
 
 use anyhow::{Result, anyhow};
 use futures::{channel::oneshot, future};
+use presage::manager::Registered;
 use presage::{Manager, libsignal_service::configuration::SignalServers};
+use presage_store_sqlite::SqliteStore;
 use tokio::fs;
 
-use crate::contacts::sync_contacts_cli;
+use crate::contacts::initial_sync;
 use crate::open_store;
 use crate::paths::{self, ASSETS, QRCODE};
 
 // / Links a new device to the Signal account using the given name.
 // / Generates a url and waits for the user to use it to complete the linking process.
-pub async fn link_new_device_tui(device_name: String) -> Result<()> {
+pub async fn link_new_device_tui(device_name: String) -> Result<Manager<SqliteStore, Registered>> {
     let _ = std::fs::remove_file(paths::STORE);
     let store = open_store(paths::STORE).await?;
 
@@ -46,10 +48,8 @@ pub async fn link_new_device_tui(device_name: String) -> Result<()> {
         fs::remove_dir_all(ASSETS).await?;
     }
 
-    manager_result?;
     url_handler_result?;
-
-    Ok(())
+    Ok(manager_result?)
 }
 
 /// Links a new device to the Signal account using the given name.
@@ -74,14 +74,14 @@ pub async fn link_new_device_cli(device_name: String) -> Result<()> {
     )
     .await;
 
-    let manager = match manager_result {
+    let mut manager = match manager_result {
         Ok(manager) => {
             println!("Device linked successfully! Syncing contacts...");
             manager
         }
         Err(e) => return Err(anyhow!("Error while linking device: {e}")),
     };
-    sync_contacts_cli(Some(manager)).await?;
+    initial_sync(&mut manager).await?;
     Ok(())
 }
 
