@@ -8,6 +8,7 @@ use presage::manager::Registered;
 use presage::{Manager, libsignal_service::configuration::SignalServers};
 use presage_store_sqlite::SqliteStore;
 use tokio::fs;
+use tracing::error;
 
 use crate::contacts::initial_sync;
 use crate::open_store;
@@ -16,7 +17,10 @@ use crate::paths::{self, ASSETS, QRCODE};
 // / Links a new device to the Signal account using the given name.
 // / Generates a url and waits for the user to use it to complete the linking process.
 pub async fn link_new_device_tui(device_name: String) -> Result<Manager<SqliteStore, Registered>> {
-    let store = open_store(paths::STORE).await?;
+    if let Err(e) = std::fs::remove_file(paths::STORE) {
+        error!("Couldn't remove store: {e}");
+    }
+    let store = open_store(paths::SQL_STORE).await?;
 
     if !Path::new(ASSETS).exists() {
         fs::create_dir(ASSETS).await?;
@@ -54,7 +58,10 @@ pub async fn link_new_device_tui(device_name: String) -> Result<Manager<SqliteSt
 /// Links a new device to the Signal account using the given name.
 /// Generates a QR code and prints it in the terminal, then waits for the user to scan it to complete the linking process.
 pub async fn link_new_device_cli(device_name: String) -> Result<()> {
-    let store = open_store(paths::STORE).await?;
+    if let Err(e) = std::fs::remove_file(paths::STORE) {
+        error!("Couldn't remove store: {e}");
+    }
+    let store = open_store(paths::SQL_STORE).await?;
 
     let (tx, rx) = oneshot::channel();
     let (manager_result, _err) = future::join(
@@ -85,7 +92,7 @@ pub async fn link_new_device_cli(device_name: String) -> Result<()> {
 
 /// return true if the device is registered and false otherwise
 pub async fn is_registered() -> Result<bool> {
-    let store = open_store(paths::STORE).await?;
+    let store = open_store(paths::SQL_STORE).await?;
 
     match Manager::load_registered(store).await {
         Ok(_) => Ok(true),

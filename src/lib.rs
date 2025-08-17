@@ -36,7 +36,7 @@ pub async fn open_store(path: &str) -> Result<SqliteStore, SqliteStoreError> {
 
 /// Creates new manager in registered state
 pub async fn create_registered_manager() -> Result<Manager<SqliteStore, Registered>> {
-    let store = open_store(paths::STORE).await?;
+    let store = open_store(paths::SQL_STORE).await?;
 
     match Manager::load_registered(store).await {
         Ok(manager) => Ok(manager),
