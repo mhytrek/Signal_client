@@ -13,6 +13,7 @@ use crate::paths::{self, ASSETS, QRCODE};
 // / Links a new device to the Signal account using the given name.
 // / Generates a url and waits for the user to use it to complete the linking process.
 pub async fn link_new_device_tui(device_name: String) -> Result<()> {
+    let _ = std::fs::remove_file(paths::STORE);
     let store = open_store(paths::STORE).await?;
 
     if !Path::new(ASSETS).exists() {
@@ -53,6 +54,7 @@ pub async fn link_new_device_tui(device_name: String) -> Result<()> {
 /// Links a new device to the Signal account using the given name.
 /// Generates a QR code and prints it in the terminal, then waits for the user to scan it to complete the linking process.
 pub async fn link_new_device_cli(device_name: String) -> Result<()> {
+    let _ = std::fs::remove_file(paths::STORE);
     let store = open_store(paths::STORE).await?;
 
     let (tx, rx) = oneshot::channel();
