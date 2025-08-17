@@ -40,6 +40,7 @@ pub enum CurrentScreen {
     Writing,
     Options,
     Exiting,
+    ContactInfo
 }
 
 #[derive(PartialEq)]
@@ -55,11 +56,26 @@ pub enum InputFocus {
     Attachment,
 }
 
+#[derive(Clone)]
+pub struct ContactInfo {
+    pub uuid: String,
+    pub name: String,
+    pub phone_number: Option<String>,
+    pub verified_state: Option<i32>,
+    pub expire_timer: u32,
+    pub has_avatar: bool,
+}
+
 pub struct App {
     pub contacts: Vec<(String, String, String)>, // contact_uuid, contact_name, input for this contact
 
     pub contact_selected: usize,
     pub message_selected: usize,
+
+    // New fields for contact info
+    pub selected_contact_info: Option<ContactInfo>,
+    pub contact_avatar_cache: Option<Vec<u8>>,
+    pub contact_avatar_image: Option<StatefulProtocol>,
 
     pub current_screen: CurrentScreen,
     pub linking_status: LinkingStatus,
@@ -108,6 +124,9 @@ pub enum EventApp {
     ProfileReceived(Profile),
     AvatarReceived(Vec<u8>),
 
+    ContactInfoReceived(ContactInfo),
+    ContactAvatarReceived(Vec<u8>),
+
     GetMessageHistory(String, Vec<MessageDto>),
     ReceiveMessage,
     QrCodeGenerated,
@@ -117,6 +136,7 @@ pub enum EventSend {
     SendText(String, String),
     SendAttachment(String, String, String),
     GetMessagesForContact(String),
+    GetContactInfo(String),
 }
 
 impl App {
@@ -142,6 +162,10 @@ impl App {
             avatar_cache: None,
             picker,
             avatar_image: None,
+
+            selected_contact_info: None,
+            contact_avatar_cache: None,
+            contact_avatar_image: None,
 
             config: Config::load(),
             config_selected: 0,
@@ -217,6 +241,27 @@ impl App {
         }
     }
 
+    pub fn load_contact_avatar(&mut self) {
+        if let (Some(avatar_data), Some(picker)) = (&self.contact_avatar_cache, &mut self.picker) {
+            match image::load_from_memory(avatar_data) {
+                Ok(dynamic_image) => {
+                    self.contact_avatar_image = Some(picker.new_resize_protocol(dynamic_image));
+                }
+                Err(_) => {
+                    if let Ok(dynamic_image) =
+                        image::load_from_memory_with_format(avatar_data, ImageFormat::Png)
+                    {
+                        self.contact_avatar_image = Some(picker.new_resize_protocol(dynamic_image));
+                    } else if let Ok(dynamic_image) =
+                        image::load_from_memory_with_format(avatar_data, ImageFormat::Jpeg)
+                    {
+                        self.contact_avatar_image = Some(picker.new_resize_protocol(dynamic_image));
+                    }
+                }
+            }
+        }
+    }
+
     async fn handle_event(&mut self, event: EventApp, tx: &Sender<EventSend>) -> io::Result<bool> {
         match event {
             EventApp::KeyInput(key) => {
@@ -257,7 +302,18 @@ impl App {
                     .unwrap_or(0);
                 Ok(false)
             }
-            EventApp::LinkingFinished((result, manager_optional)) => {
+            EventApp::ContactInfoReceived(contact) => {
+                self.selected_contact_info = Some(contact);
+                Ok(false)
+            }
+            EventApp::ContactAvatarReceived(avatar_data) => {
+                self.contact_avatar_cache = Some(avatar_data);
+                if self.config.show_images {
+                    self.load_contact_avatar();
+                }
+                Ok(false)
+            }
+            EventApp::LinkingFinished(result) => {
                 match result {
                     true => {
                         self.linking_status = LinkingStatus::Linked;
@@ -416,6 +472,16 @@ impl App {
                         self.contact_selected -= 1;
                     }
                 }
+                KeyCode::Char('i') => {
+                    let contact_uuid = self.contacts[self.contact_selected].0.clone();
+                    self.tx_tui
+                        .send(EventSend::GetContactInfo(contact_uuid))
+                        .unwrap();
+                    self.current_screen = ContactInfo;
+
+                    self.contact_avatar_cache = None;
+                    self.contact_avatar_image = None;
+                }
                 _ => {}
             },
             Exiting => match key.code {
@@ -505,6 +571,15 @@ impl App {
                     }
                     _ => {}
                 },
+                _ => {}
+            },
+            ContactInfo => match key.code {
+                KeyCode::Esc | KeyCode::Left | KeyCode::Char('q') => {
+                    self.current_screen = CurrentScreen::Main;
+                    self.selected_contact_info = None;
+                    self.contact_avatar_cache = None;
+                    self.contact_avatar_image = None;
+                }
                 _ => {}
             },
             LinkingNewDevice => {
@@ -934,6 +1009,29 @@ pub async fn handle_background_events(
                             .send(EventApp::GetMessageHistory(uuid_str.clone(), messages))
                             .is_err()
                     {}
+                }
+                EventSend::GetContactInfo(uuid_str) => {
+                    let contacts_mutex = Arc::clone(&current_contacts_mutex);
+                    let contacts = contacts_mutex.lock().await;
+
+                    if let Ok(uuid) = uuid_str.parse() {
+                        if let Some(contact) = contacts.get(&uuid) {
+                            let contact_info = ContactInfo {
+                                uuid: contact.uuid.to_string(),
+                                name: contact.name.clone(),
+                                phone_number: contact.phone_number.as_ref().map(|p| p.to_string()),
+                                verified_state: contact.verified.state,
+                                expire_timer: contact.expire_timer,
+                                has_avatar: contact.avatar.is_some(),
+                            };
+                            let _ = tx_status.send(EventApp::ContactInfoReceived(contact_info));
+
+                            if let Some(ref avatar_attachment) = contact.avatar {
+                                let avatar_bytes: Vec<u8> = avatar_attachment.reader.to_vec();
+                                let _ = tx_status.send(EventApp::ContactAvatarReceived(avatar_bytes));
+                            }
+                        }
+                    }
                 }
             }
         }
