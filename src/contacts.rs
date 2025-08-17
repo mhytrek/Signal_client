@@ -27,8 +27,11 @@ async fn sync_contacts(
 }
 
 /// Function to sync contacts when CLI is used
-pub async fn sync_contacts_cli() -> Result<()> {
-    let mut manager = create_registered_manager().await?;
+pub async fn sync_contacts_cli(manager: Option<Manager<SqliteStore, Registered>>) -> Result<()> {
+    let mut manager = match manager {
+        Some(m) => m,
+        None => create_registered_manager().await?,
+    };
     let current_contacts_mutex: AsyncContactsMap =
         Arc::new(Mutex::new(get_contacts(&manager).await?));
     sync_contacts(&mut manager, current_contacts_mutex).await

@@ -2,11 +2,12 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use futures::{channel::oneshot, future};
 use presage::{Manager, libsignal_service::configuration::SignalServers};
 use tokio::fs;
 
+use crate::contacts::sync_contacts_cli;
 use crate::open_store;
 use crate::paths::{self, ASSETS, QRCODE};
 
@@ -58,7 +59,7 @@ pub async fn link_new_device_cli(device_name: String) -> Result<()> {
     let store = open_store(paths::STORE).await?;
 
     let (tx, rx) = oneshot::channel();
-    let (manager, _err) = future::join(
+    let (manager_result, _err) = future::join(
         Manager::link_secondary_device(store, SignalServers::Production, device_name, tx),
         async move {
             match rx.await {
@@ -73,10 +74,14 @@ pub async fn link_new_device_cli(device_name: String) -> Result<()> {
     )
     .await;
 
-    match manager {
-        Ok(_) => println!("Device linked successfully!"),
-        Err(e) => println!("Error while linking device: {e}"),
-    }
+    let manager = match manager_result {
+        Ok(manager) => {
+            println!("Device linked successfully! Syncing contacts...");
+            manager
+        }
+        Err(e) => return Err(anyhow!("Error while linking device: {e}")),
+    };
+    sync_contacts_cli(Some(manager)).await?;
     Ok(())
 }
 
