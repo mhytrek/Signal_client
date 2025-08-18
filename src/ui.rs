@@ -20,9 +20,7 @@ use ratatui_image::{Resize, StatefulImage};
 use tui_qrcode::{Colors, QrCodeWidget};
 
 use crate::{
-    app::{App, CurrentScreen, InputFocus, LinkingStatus, NetworkStatus},
-    messages::receive::MessageDto,
-    paths::QRCODE,
+    app::{App, CurrentScreen, InputFocus, LinkingStatus, NetworkStatus}, messages::receive::MessageDto, paths::QRCODE
 };
 
 /// Main UI rendering function.
@@ -44,6 +42,7 @@ pub fn ui(frame: &mut Frame, app: &mut App) {
         }
         CurrentScreen::Writing => {
             render_contact_list(frame, app, main_chunks[0]);
+            render_chat(frame, app, main_chunks[1]);
             render_chat(frame, app, main_chunks[1]);
             render_footer(frame, app, chunks[1]);
         }
@@ -137,176 +136,41 @@ fn render_contact_list(frame: &mut Frame, app: &App, area: Rect) {
 
 // Renders the chat window and input box in the right chunk of the screen
 fn render_chat(frame: &mut Frame, app: &App, area: Rect) {
+// Renders the chat window and input box in the right chunk of the screen
+fn render_chat(frame: &mut Frame, app: &App, area: Rect) {
     let vertical_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(3)])
         .split(area);
 
-    // let messages: Vec<ListItem> = match &app
-    //     .contact_messages
-    //     .get(&app.contacts[app.contact_selected].0)
-    // {
-    //     Some(msgs) => msgs
-    //         .iter()
-    //         .map(|msg| {
-    //             let mut style = Style::default();
-
-                // let millis = msg.timestamp;
-                // let secs = (millis / 1000) as i64;
-                // let datetime_utc: DateTime<Utc> =
-                //     DateTime::from_timestamp(secs, 0).expect("Invalid timestamp");
-
-                // let datetime_local = datetime_utc.with_timezone(&Local);
-
-    //             let content = format!(
-    //                 "[{}] {}",
-    //                 datetime_local.format("%Y-%m-%d %H:%M:%S"),
-    //                 msg.text
-    //             );
-
-    //             let max_width = vertical_chunks[0].width -3;
-
-    //             let wrapped_text = wrap_text(content, max_width);
-
-    //             if app.contacts[app.contact_selected].0 != msg.uuid.to_string() {
-    //                 style = style.add_modifier(Modifier::BOLD);
-
-    //                 ListItem::new(
-
-    //                     wrapped_text
-    //                         .style(style)
-    //                         .right_aligned(),
-                            
-    //                 )
-    //             } else {
-                    
-    //                 ListItem::new(wrapped_text.style(style))
-    //             }
-    //         })
-    //         .collect(),
-    //     None => vec![],
-    // };
-
-    // let chat_window = List::new(messages.clone())
-    // .block(
-    //     Block::default()
-    //         .title(app.contacts[app.contact_selected].1.clone())
-    //         .borders(Borders::ALL),
-            
-    // );
-
-    let messages = match app
-        .contact_messages
-        .get(&app.contacts[app.contact_selected].0)
-    {
+    let messages = match app.contact_messages.get(&app.contacts[app.contact_selected].0) {
         Some(msgs) => msgs,
-        None => return,
+        None => &Vec::<MessageDto>::new(),
     };
 
+    if messages.len() > 0{
     let msg_padding = 2;
     let margin = vertical_chunks[0].width.saturating_div(4);
     let available_height = vertical_chunks[0].height;
-    let max_width = vertical_chunks[0]
-        .width
-        .saturating_sub(msg_padding * 2 + 2 + margin) as usize;
-    let min_width = 21 as usize; // hardcoded date format
+    let max_width = vertical_chunks[0].width.saturating_sub(msg_padding * 2 + 2 + margin) as usize;
+    let min_width = 21; // hardcoded date format width
 
-
-    // Calculate how many messages can fit
-    let mut heights: Vec<u16> = Vec::new();
-    let mut widths: Vec<u16> = Vec::new();
-
-    for msg in messages {
-        let lines = msg.text.split('\n');
-        let mut total_lines = 0;
-        let mut longest_line_len =0;
-
-        for line in lines {
-            let len = line.chars().count();
-            longest_line_len = longest_line_len.max(len);
-
-            total_lines += (len / max_width + 1) as u16;
-        }
-
-        heights.push(total_lines + 2);
-
-        let actual_width = longest_line_len
-            .min(max_width)
-            .saturating_add((msg_padding * 2 + 2) as usize)
-            .max(min_width) as u16;
-
-        widths.push(actual_width);
-    }
-
-    let mut used_height = 0;
-    let mut last_visible_start = 0;
-
-    for (idx, &h) in heights.iter().enumerate().rev() {
-        if used_height + h > available_height {
-            break;
-        }
-        last_visible_start = idx;
-        used_height += h;
-    }
-
+    let (heights, widths) = calculate_message_sizes(messages, max_width, msg_padding, min_width);
+    let last_visible_start = calculate_last_visible_start(&heights, available_height);
     let start_index = app.message_selected.min(last_visible_start);
+    let visible_msgs = get_visible_messages(&heights, available_height, start_index, vertical_chunks[0].y);
 
+    render_messages(frame, messages, &visible_msgs, &heights, &widths, &vertical_chunks, app, available_height);
 
-    // Figure out visible messages
-    let mut y_cursor = vertical_chunks[0].y;
-    let mut visible_msgs = Vec::new();
-    for (idx, h) in heights
-        .iter()
-        .enumerate()
-        .skip(start_index)
-    {
-        if y_cursor + h > available_height {
-            break;
-        }
-        visible_msgs.push(idx);
-        y_cursor += h;
+    render_scrollbar(frame, app, messages.len(), &vertical_chunks);
     }
 
-    visible_msgs.reverse();
+    render_input_and_attachment(frame, app, &vertical_chunks);
 
-    // Render only visible messages
-    let mut y_pos = 0;
-    for idx in visible_msgs {
-        let msg = &messages[idx];
+}
 
-
-        let datetime_local = get_local_timestamp(msg.timestamp);
-
-        let para = Paragraph::new(msg.text.clone())
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded)
-                    .title(datetime_local.format("%Y-%m-%d %H:%M:%S").to_string())
-                    
-                )
-            .wrap(Wrap { trim: false });
-
-        let mut  x_pos = vertical_chunks[0].x;
-
-        let height = heights[idx];
-        let width  = widths[idx];
-
-        if app.contacts[app.contact_selected].0 != msg.uuid.to_string() {
-            x_pos = vertical_chunks[0].x + vertical_chunks[0].width - width
-        }
-
-        let msg_area = Rect {
-            x: x_pos,
-            y: y_pos,
-            width,
-            height,
-        };
-
-        frame.render_widget(para, msg_area);
-        y_pos += height;
-    }
-
+// renders input and attachment boxes
+fn render_input_and_attachment(frame: &mut Frame, app: &App, vertical_chunks: &[Rect]) {
     let input_area_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Ratio(3, 5), Constraint::Ratio(2, 5)])
@@ -338,13 +202,6 @@ fn render_chat(frame: &mut Frame, app: &App, area: Rect) {
                 .border_style(attachment_border_style),
         );
 
-    let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
-
-    let mut scrollbar_state = ScrollbarState::new(messages.len()).position(messages.len() - app.message_selected);
-
-    let mut list_state = ListState::default();
-    list_state.select(Some(messages.len() - app.message_selected));
-
     frame.render_widget(input_window, input_area_chunks[0]);
     frame.render_widget(attachment_window, input_area_chunks[1]);
 
@@ -366,6 +223,7 @@ fn render_chat(frame: &mut Frame, app: &App, area: Rect) {
     }
 }
 
+// renders scrollbar
 fn render_scrollbar(frame: &mut Frame, app: &App, total_messages: usize, vertical_chunks: &[Rect]) {
     let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
 
@@ -634,15 +492,6 @@ fn render_options(frame: &mut Frame, app: &mut App) {
                 "Disabled"
             }
         ),
-
-        format!(
-            "Compact messages: {}",
-            if app.config.compact_messages{
-                "Enabled"
-            } else {
-                "Disabled"
-            }
-        )
     ];
 
     let config_items: Vec<ListItem> = config_options
@@ -811,3 +660,171 @@ fn get_local_timestamp(millis: u64)-> DateTime<Local>{
 
         datetime_utc.with_timezone(&Local)
 }
+
+// calculates the heights and widths of the messages
+fn calculate_message_sizes(messages: &[MessageDto], max_width: usize, msg_padding: u16, min_width: usize) -> (Vec<u16>, Vec<u16>) {
+    let mut heights = Vec::new();
+    let mut widths = Vec::new();
+
+    for msg in messages {
+        let lines = msg.text.split('\n');
+        let mut total_lines = 0;
+        let mut longest_line_len = 0;
+
+        for line in lines {
+            let len = line.chars().count();
+            longest_line_len = longest_line_len.max(len);
+            total_lines += (len / max_width + 1) as u16;
+        }
+
+        heights.push(total_lines + 2); 
+
+        let actual_width = longest_line_len
+            .min(max_width)
+            .saturating_add((msg_padding * 2 + 2) as usize)
+            .max(min_width) as u16;
+
+        widths.push(actual_width);
+    }
+
+    (heights, widths)
+}
+
+// calculates which message would be the las visible
+fn calculate_last_visible_start(heights: &[u16], available_height: u16) -> usize {
+    let mut used_height = 0;
+    let mut last_visible_start = 0;
+
+    for (idx, &h) in heights.iter().enumerate().rev() {
+        if used_height + h > available_height {
+            break;
+        }
+        last_visible_start = idx;
+        used_height += h;
+    }
+
+    last_visible_start
+}
+
+// returns list of indexes of visible messages
+fn get_visible_messages(heights: &[u16], available_height: u16, start_index: usize, y_start: u16) -> Vec<(usize,bool)> {
+    let mut y_cursor = y_start;
+    let mut visible_msgs = Vec::new(); // index, is_fully_visible
+
+    for (idx, h) in heights.iter().enumerate().skip(start_index) {
+
+        if y_cursor == available_height {
+            break;
+        }
+
+        else if y_cursor + h > available_height {
+            visible_msgs.push((idx,false));
+            break;
+        }
+        visible_msgs.push((idx,true));
+        y_cursor += h;
+
+
+    }
+
+    visible_msgs.reverse();
+    visible_msgs
+}
+
+//renders visible messages
+fn render_messages(
+    frame: &mut Frame,
+    messages: &[MessageDto],
+    visible_msgs: &[(usize, bool)],
+    heights: &[u16],
+    widths: &[u16],
+    vertical_chunks: &[Rect],
+    app: &App,
+    available_height: u16,
+) {
+    let mut y_pos = 0;
+
+    for &(idx, is_fully_visible) in visible_msgs {
+        let msg = &messages[idx];
+        let datetime_local = get_local_timestamp(msg.timestamp);
+        let mut x_pos: u16;
+        let width = widths[idx];
+        let mut height = heights[idx];
+        let para: Paragraph;
+
+        if is_fully_visible {
+            para = Paragraph::new(msg.text.clone())
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded)
+                        .title(datetime_local.format("%Y-%m-%d %H:%M:%S").to_string()),
+                )
+                .wrap(Wrap { trim: false });
+        } else {
+    let remaining_height = available_height.saturating_sub(y_pos);
+
+
+    let max_text_lines = remaining_height.saturating_sub(1);
+
+    let mut visible_text = String::new();
+    let mut used_lines = 0;
+
+    for line in msg.text.lines() {
+        let mut current_line = line;
+        while !current_line.is_empty() {
+            let take = current_line
+                .chars()
+                .take(width as usize - 4)
+                .collect::<String>();
+
+            if used_lines + 1 > max_text_lines {
+                break;
+            }
+
+            visible_text.push_str(&take);
+            visible_text.push('\n');
+            used_lines += 1;
+
+            current_line = &current_line[take.len()..];
+        }
+        if used_lines >= max_text_lines {
+            break;
+        }
+    }
+
+    height = used_lines + 1; 
+    para = Paragraph::new(visible_text)
+        .block(
+            Block::default()
+                .borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM)
+                .border_type(BorderType::Rounded),
+        )
+        .wrap(Wrap { trim: false });
+}
+
+
+        x_pos = vertical_chunks[0].x;
+
+if app.contacts[app.contact_selected].0 != msg.uuid.to_string() {
+    x_pos = vertical_chunks[0].x + vertical_chunks[0].width - width;
+}
+
+let max_allowed_height = vertical_chunks[0].height.saturating_sub(y_pos);
+if height > max_allowed_height {
+    height = max_allowed_height;
+}
+
+let msg_area = Rect {
+    x: x_pos,
+    y: y_pos,
+    width,
+    height,
+};
+frame.render_widget(para, msg_area);
+
+y_pos += height;
+
+    }
+}
+
