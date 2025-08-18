@@ -5,9 +5,9 @@ use std::path::PathBuf;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Config {
-    pub color_mode: bool,  // true for color, false for black-and-white
-    pub show_images: bool, // true to show images, false to hide them
-    pub compact_messages: bool // true to have compact messages display
+    pub color_mode: bool,       // true for color, false for black-and-white
+    pub show_images: bool,      // true to show images, false to hide them
+    pub compact_messages: bool, // true to have compact messages display
 }
 
 impl Default for Config {

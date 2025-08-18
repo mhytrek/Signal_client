@@ -20,7 +20,9 @@ use ratatui_image::{Resize, StatefulImage};
 use tui_qrcode::{Colors, QrCodeWidget};
 
 use crate::{
-    app::{App, CurrentScreen, InputFocus, LinkingStatus, NetworkStatus}, messages::receive::MessageDto, paths::QRCODE
+    app::{App, CurrentScreen, InputFocus, LinkingStatus, NetworkStatus},
+    messages::receive::MessageDto,
+    paths::QRCODE,
 };
 
 /// Main UI rendering function.
@@ -140,30 +142,49 @@ fn render_chat(frame: &mut Frame, app: &App, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(3)])
         .split(area);
 
-    let messages = match app.contact_messages.get(&app.contacts[app.contact_selected].0) {
+    let messages = match app
+        .contact_messages
+        .get(&app.contacts[app.contact_selected].0)
+    {
         Some(msgs) => msgs,
         None => &Vec::<MessageDto>::new(),
     };
 
-    if messages.len() > 0{
-    let msg_padding = 2;
-    let margin = vertical_chunks[0].width.saturating_div(4);
-    let available_height = vertical_chunks[0].height;
-    let max_width = vertical_chunks[0].width.saturating_sub(msg_padding * 2 + 2 + margin) as usize;
-    let min_width = 21; // hardcoded date format width
+    if !messages.is_empty() {
+        let msg_padding = 2;
+        let margin = vertical_chunks[0].width.saturating_div(4);
+        let available_height = vertical_chunks[0].height;
+        let max_width = vertical_chunks[0]
+            .width
+            .saturating_sub(msg_padding * 2 + 2 + margin) as usize;
+        let min_width = 21; // hardcoded date format width
 
-    let (heights, widths) = calculate_message_sizes(messages, max_width, msg_padding, min_width);
-    let last_visible_start = calculate_last_visible_start(&heights, available_height);
-    let start_index = app.message_selected.min(last_visible_start);
-    let visible_msgs = get_visible_messages(&heights, available_height, start_index, vertical_chunks[0].y);
+        let (heights, widths) =
+            calculate_message_sizes(messages, max_width, msg_padding, min_width);
+        let last_visible_start = calculate_last_visible_start(&heights, available_height);
+        let start_index = app.message_selected.min(last_visible_start);
+        let visible_msgs = get_visible_messages(
+            &heights,
+            available_height,
+            start_index,
+            vertical_chunks[0].y,
+        );
 
-    render_messages(frame, messages, &visible_msgs, &heights, &widths, &vertical_chunks, app, available_height);
+        render_messages(
+            frame,
+            messages,
+            &visible_msgs,
+            &heights,
+            &widths,
+            &vertical_chunks,
+            app,
+            available_height,
+        );
 
-    render_scrollbar(frame, app, messages.len(), &vertical_chunks);
+        render_scrollbar(frame, app, messages.len(), &vertical_chunks);
     }
 
     render_input_and_attachment(frame, app, &vertical_chunks);
-
 }
 
 // renders input and attachment boxes
@@ -650,16 +671,20 @@ fn centered_rect_fixed_size(width: u16, height: u16, r: Rect) -> Rect {
 }
 
 // Takes a timestamp and transforms it to Date in a local timezone
-fn get_local_timestamp(millis: u64)-> DateTime<Local>{
-        let secs = (millis / 1000) as i64;
-        let datetime_utc: DateTime<Utc> =
-            DateTime::from_timestamp(secs, 0).expect("Invalid timestamp");
+fn get_local_timestamp(millis: u64) -> DateTime<Local> {
+    let secs = (millis / 1000) as i64;
+    let datetime_utc: DateTime<Utc> = DateTime::from_timestamp(secs, 0).expect("Invalid timestamp");
 
-        datetime_utc.with_timezone(&Local)
+    datetime_utc.with_timezone(&Local)
 }
 
 // calculates the heights and widths of the messages
-fn calculate_message_sizes(messages: &[MessageDto], max_width: usize, msg_padding: u16, min_width: usize) -> (Vec<u16>, Vec<u16>) {
+fn calculate_message_sizes(
+    messages: &[MessageDto],
+    max_width: usize,
+    msg_padding: u16,
+    min_width: usize,
+) -> (Vec<u16>, Vec<u16>) {
     let mut heights = Vec::new();
     let mut widths = Vec::new();
 
@@ -674,7 +699,7 @@ fn calculate_message_sizes(messages: &[MessageDto], max_width: usize, msg_paddin
             total_lines += (len / max_width + 1) as u16;
         }
 
-        heights.push(total_lines + 2); 
+        heights.push(total_lines + 2);
 
         let actual_width = longest_line_len
             .min(max_width)
@@ -704,24 +729,24 @@ fn calculate_last_visible_start(heights: &[u16], available_height: u16) -> usize
 }
 
 // returns list of indexes of visible messages
-fn get_visible_messages(heights: &[u16], available_height: u16, start_index: usize, y_start: u16) -> Vec<(usize,bool)> {
+fn get_visible_messages(
+    heights: &[u16],
+    available_height: u16,
+    start_index: usize,
+    y_start: u16,
+) -> Vec<(usize, bool)> {
     let mut y_cursor = y_start;
     let mut visible_msgs = Vec::new(); // index, is_fully_visible
 
     for (idx, h) in heights.iter().enumerate().skip(start_index) {
-
         if y_cursor == available_height {
             break;
-        }
-
-        else if y_cursor + h > available_height {
-            visible_msgs.push((idx,false));
+        } else if y_cursor + h > available_height {
+            visible_msgs.push((idx, false));
             break;
         }
-        visible_msgs.push((idx,true));
+        visible_msgs.push((idx, true));
         y_cursor += h;
-
-
     }
 
     visible_msgs.reverse();
@@ -759,69 +784,65 @@ fn render_messages(
                 )
                 .wrap(Wrap { trim: false });
         } else {
-    let remaining_height = available_height.saturating_sub(y_pos);
+            let remaining_height = available_height.saturating_sub(y_pos);
 
+            let max_text_lines = remaining_height.saturating_sub(1);
 
-    let max_text_lines = remaining_height.saturating_sub(1);
+            let mut visible_text = String::new();
+            let mut used_lines = 0;
 
-    let mut visible_text = String::new();
-    let mut used_lines = 0;
+            for line in msg.text.lines() {
+                let mut current_line = line;
+                while !current_line.is_empty() {
+                    let take = current_line
+                        .chars()
+                        .take(width as usize - 4)
+                        .collect::<String>();
 
-    for line in msg.text.lines() {
-        let mut current_line = line;
-        while !current_line.is_empty() {
-            let take = current_line
-                .chars()
-                .take(width as usize - 4)
-                .collect::<String>();
+                    if used_lines + 1 > max_text_lines {
+                        break;
+                    }
 
-            if used_lines + 1 > max_text_lines {
-                break;
+                    visible_text.push_str(&take);
+                    visible_text.push('\n');
+                    used_lines += 1;
+
+                    current_line = &current_line[take.len()..];
+                }
+                if used_lines >= max_text_lines {
+                    break;
+                }
             }
 
-            visible_text.push_str(&take);
-            visible_text.push('\n');
-            used_lines += 1;
-
-            current_line = &current_line[take.len()..];
+            height = used_lines + 1;
+            para = Paragraph::new(visible_text)
+                .block(
+                    Block::default()
+                        .borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM)
+                        .border_type(BorderType::Rounded),
+                )
+                .wrap(Wrap { trim: false });
         }
-        if used_lines >= max_text_lines {
-            break;
-        }
-    }
-
-    height = used_lines + 1; 
-    para = Paragraph::new(visible_text)
-        .block(
-            Block::default()
-                .borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM)
-                .border_type(BorderType::Rounded),
-        )
-        .wrap(Wrap { trim: false });
-}
-
 
         x_pos = vertical_chunks[0].x;
 
-if app.contacts[app.contact_selected].0 != msg.uuid.to_string() {
-    x_pos = vertical_chunks[0].x + vertical_chunks[0].width - width;
-}
+        if app.contacts[app.contact_selected].0 != msg.uuid.to_string() {
+            x_pos = vertical_chunks[0].x + vertical_chunks[0].width - width;
+        }
 
-let max_allowed_height = vertical_chunks[0].height.saturating_sub(y_pos);
-if height > max_allowed_height {
-    height = max_allowed_height;
-}
+        let max_allowed_height = vertical_chunks[0].height.saturating_sub(y_pos);
+        if height > max_allowed_height {
+            height = max_allowed_height;
+        }
 
-let msg_area = Rect {
-    x: x_pos,
-    y: y_pos,
-    width,
-    height,
-};
-frame.render_widget(para, msg_area);
+        let msg_area = Rect {
+            x: x_pos,
+            y: y_pos,
+            width,
+            height,
+        };
+        frame.render_widget(para, msg_area);
 
-y_pos += height;
-
+        y_pos += height;
     }
 }
-
