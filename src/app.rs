@@ -357,7 +357,6 @@ impl App {
                 Ok(false)
             }
             EventApp::GetMessageHistory(uuid_str, messages) => {
-
                 self.contact_messages.insert(uuid_str, messages);
                 self.message_selected = 0;
                 Ok(false)
