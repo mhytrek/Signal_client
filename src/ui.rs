@@ -86,7 +86,6 @@ pub fn ui(frame: &mut Frame, app: &mut App) {
 
             render_contact_list(frame, app, horizontal_chunks[0]);
             render_contact_info_compact(frame, app, horizontal_chunks[1]);
-            render_chat_and_contact(frame, app, horizontal_chunks[2]);
             render_footer(frame, app, chunks[1]);
         }
     }
@@ -570,11 +569,14 @@ fn render_contact_info_compact(frame: &mut Frame, app: &mut App, area: Rect) {
                 centered_area[1],
                 contact_avatar,
             );
-
         } else {
             let placeholder_text = if app.contact_avatar_cache.is_some() {
                 "Loading..."
-            } else if app.selected_contact_info.as_ref().map_or(false, |c| c.has_avatar) {
+            } else if app
+                .selected_contact_info
+                .as_ref()
+                .is_some_and(|c| c.has_avatar)
+            {
                 "Avatar available but not loaded"
             } else {
                 "No avatar"
@@ -604,7 +606,7 @@ fn render_contact_info_compact(frame: &mut Frame, app: &mut App, area: Rect) {
             contact.phone_number.as_deref().unwrap_or("Not set"),
             match contact.verified_state {
                 Some(state) if state > 0 => "Yes",
-                _ => "No"
+                _ => "No",
             },
             if contact.has_avatar { "Set" } else { "Not set" },
         ));

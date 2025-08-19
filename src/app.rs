@@ -40,7 +40,7 @@ pub enum CurrentScreen {
     Writing,
     Options,
     Exiting,
-    ContactInfo
+    ContactInfo,
 }
 
 #[derive(PartialEq)]
@@ -313,7 +313,7 @@ impl App {
                 }
                 Ok(false)
             }
-            EventApp::LinkingFinished(result) => {
+            EventApp::LinkingFinished((result, manager_optional)) => {
                 match result {
                     true => {
                         self.linking_status = LinkingStatus::Linked;
@@ -1014,22 +1014,22 @@ pub async fn handle_background_events(
                     let contacts_mutex = Arc::clone(&current_contacts_mutex);
                     let contacts = contacts_mutex.lock().await;
 
-                    if let Ok(uuid) = uuid_str.parse() {
-                        if let Some(contact) = contacts.get(&uuid) {
-                            let contact_info = ContactInfo {
-                                uuid: contact.uuid.to_string(),
-                                name: contact.name.clone(),
-                                phone_number: contact.phone_number.as_ref().map(|p| p.to_string()),
-                                verified_state: contact.verified.state,
-                                expire_timer: contact.expire_timer,
-                                has_avatar: contact.avatar.is_some(),
-                            };
-                            let _ = tx_status.send(EventApp::ContactInfoReceived(contact_info));
+                    if let Ok(uuid) = uuid_str.parse()
+                        && let Some(contact) = contacts.get(&uuid)
+                    {
+                        let contact_info = ContactInfo {
+                            uuid: contact.uuid.to_string(),
+                            name: contact.name.clone(),
+                            phone_number: contact.phone_number.as_ref().map(|p| p.to_string()),
+                            verified_state: contact.verified.state,
+                            expire_timer: contact.expire_timer,
+                            has_avatar: contact.avatar.is_some(),
+                        };
+                        let _ = tx_status.send(EventApp::ContactInfoReceived(contact_info));
 
-                            if let Some(ref avatar_attachment) = contact.avatar {
-                                let avatar_bytes: Vec<u8> = avatar_attachment.reader.to_vec();
-                                let _ = tx_status.send(EventApp::ContactAvatarReceived(avatar_bytes));
-                            }
+                        if let Some(ref avatar_attachment) = contact.avatar {
+                            let avatar_bytes: Vec<u8> = avatar_attachment.reader.to_vec();
+                            let _ = tx_status.send(EventApp::ContactAvatarReceived(avatar_bytes));
                         }
                     }
                 }
