@@ -17,6 +17,9 @@ pub enum Command {
     /// Prints locally stored contacts
     ListContacts,
 
+    /// Prints locally stored groups
+    ListGroups,
+
     /// Displays a prototype of a layout with example data
     RunApp,
 

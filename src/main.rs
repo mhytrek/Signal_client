@@ -15,6 +15,7 @@ async fn main() -> Result<()> {
         Command::SyncContacts => contacts::sync_contacts_cli().await?,
         Command::LinkDevice(args) => devices::link_new_device_cli(args.device_name).await?,
         Command::ListContacts => cli::print_contacts().await?,
+        Command::ListGroups => cli::print_groups().await?,
         Command::RunApp => tui::run_tui().await?,
         Command::SendMessage(args) => {
             messages::send::send_message_cli(args.recipient, args.text_message).await?
