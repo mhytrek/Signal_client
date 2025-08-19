@@ -10,20 +10,28 @@ pub struct Cli {
 pub enum Command {
     /// Link this device to your signal account
     LinkDevice(LinkDeviceArgs),
+
     /// Synchronizes contacts with primary device
     SyncContacts,
+
     /// Prints locally stored contacts
     ListContacts,
+
     /// Displays a prototype of a layout with example data
     RunApp,
+
     /// Send text message
     SendMessage(SendMessageArgs),
+
     /// Send attachment
     SendAttachment(SendAttachmentArgs),
+
     /// Prints messages from given point in time
     ListMessages(ListMessagesArgs),
+
     /// Prints the messages received from the last synchronization
     Receive,
+
     /// Prints profile info
     GetProfile,
 }
@@ -40,6 +48,7 @@ pub struct SendMessageArgs {
     /// Name, phone number or UUID of the contact that the message should be send to
     #[arg(short, long)]
     pub recipient: String,
+
     /// Content of the message
     pub text_message: String,
 }
@@ -49,6 +58,7 @@ pub struct ListMessagesArgs {
     /// Uuid of the contact that the message history should be shown
     #[arg(short, long)]
     pub recipient: String,
+
     /// The timestamp from which messages start being displayed
     pub from: String,
 }
@@ -58,9 +68,11 @@ pub struct SendAttachmentArgs {
     /// Uuid of the contact that the message should be send to
     #[arg(short, long)]
     pub recipient: String,
+
     /// Content of the message
     #[arg(short, long, default_value_t = String::from(""))]
     pub text_message: String,
+
     /// Full path to attachment
     pub attachment_path: String,
 }
