@@ -11,7 +11,10 @@ use crate::{
 use anyhow::{Error, Result};
 use crossterm::event::{self, Event, KeyModifiers};
 use crossterm::event::{KeyCode, KeyEventKind};
+use presage::Manager;
 use presage::libsignal_service::Profile;
+use presage::manager::Registered;
+use presage_store_sqlite::SqliteStore;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui_image::picker::Picker;
@@ -24,6 +27,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::{fs, io};
 use tokio::runtime::Builder;
 use tokio::sync::{Mutex, RwLock};
+use tracing::error;
 
 use image::ImageFormat;
 use std::thread;
@@ -97,7 +101,7 @@ pub enum NetworkStatus {
 pub enum EventApp {
     KeyInput(event::KeyEvent),
     ContactsList(Vec<(String, String)>),
-    LinkingFinished(bool),
+    LinkingFinished((bool, Option<Manager<SqliteStore, Registered>>)),
     LinkingError(String),
     NetworkStatusChanged(NetworkStatus),
 
@@ -253,18 +257,20 @@ impl App {
                     .unwrap_or(0);
                 Ok(false)
             }
-            EventApp::LinkingFinished(result) => {
+            EventApp::LinkingFinished((result, manager_optional)) => {
                 match result {
                     true => {
                         self.linking_status = LinkingStatus::Linked;
                         if let Some(rx) = self.rx_thread.take() {
-                            let new_manager: AsyncRegisteredManager =
-                                match create_registered_manager().await {
+                            let new_manager: AsyncRegisteredManager = match manager_optional {
+                                Some(manager) => Arc::new(RwLock::new(manager)),
+                                None => match create_registered_manager().await {
                                     Ok(manager) => Arc::new(RwLock::new(manager)),
                                     Err(_) => {
                                         return Err(io::Error::other("Failed to create manager"));
                                     }
-                                };
+                                },
+                            };
                             let new_manager_mutex = Arc::clone(&new_manager);
 
                             self.manager = Some(new_manager);
@@ -689,6 +695,12 @@ pub async fn handle_synchronization(
     manager_mutex: AsyncRegisteredManager,
     current_contacts_mutex: AsyncContactsMap,
 ) {
+    let mut manager = manager_mutex.write().await;
+    match contacts::initial_sync(&mut manager).await {
+        Ok(_) => {}
+        Err(e) => error!("Initial contact sync failed: {e}"),
+    }
+    drop(manager);
     let mut previous_contacts: Vec<(String, String)> = Vec::new();
     loop {
         let new_mutex = Arc::clone(&manager_mutex);
@@ -932,8 +944,11 @@ pub async fn handle_linking_device(tx: mpsc::Sender<EventApp>, device_name: Stri
     let result = devices::link_new_device_tui(device_name).await;
 
     match result {
-        Ok(_) => {
-            if tx.send(EventApp::LinkingFinished(true)).is_err() {
+        Ok(manager) => {
+            if tx
+                .send(EventApp::LinkingFinished((true, Some(manager))))
+                .is_err()
+            {
                 eprintln!("Failed to send linking status");
             }
         }

@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-presage = { git = "https://github.com/whisperfish/presage" }
-presage-store-sqlite = { git = "https://github.com/whisperfish/presage" }
+presage = { git = "https://github.com/whisperfish/presage", rev = "adbfc0aeb98082450dc3209a0002e9ff7e71eae3" }
+presage-store-sqlite = { git = "https://github.com/whisperfish/presage", rev = "adbfc0aeb98082450dc3209a0002e9ff7e71eae3" }
 tokio = { version = "1.42", features = ["macros", "rt-multi-thread", "io-std", "io-util"] }
 anyhow = "1.0.95"
 futures = "0.3.31"
@@ -25,6 +25,9 @@ chrono = "0.4.40"
 viuer = { version = "0.9.0", features = ["print-file"] }
 dirs = "6.0.0"
 serde = { version = "1.0.219", features = ["derive"] }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+tracing-appender = "0.2.3"
 
 [patch.crates-io]
 curve25519-dalek = { git = 'https://github.com/signalapp/curve25519-dalek', tag = 'signal-curve25519-4.1.3' }

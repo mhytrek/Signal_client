@@ -12,6 +12,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+pub async fn initial_sync(manager: &mut Manager<SqliteStore, Registered>) -> Result<()> {
+    let current_contacts_mutex: AsyncContactsMap =
+        Arc::new(Mutex::new(get_contacts(manager).await?));
+    sync_contacts(manager, current_contacts_mutex).await
+}
+
 async fn sync_contacts(
     manager: &mut Manager<SqliteStore, Registered>,
     current_contacts_mutex: AsyncContactsMap,
