@@ -1,11 +1,12 @@
 use crate::{
     contacts::list_contacts_cli,
+    groups::list_groups_cli,
     messages::receive::{MessageDto, list_messages_cli, receive_messages_cli},
     profile::{get_my_profile_avatar_cli, get_profile_cli},
 };
 use anyhow::Result;
 use chrono::{DateTime, Local, Utc};
-use presage::model::contacts::Contact;
+use presage::model::{contacts::Contact, groups::Group};
 use viuer::{Config, print_from_file};
 
 fn print_contact(contact: &Contact) {
@@ -23,6 +24,30 @@ pub async fn print_contacts() -> Result<()> {
         print_contact(&contact);
         println!("================");
     }
+    Ok(())
+}
+
+fn print_group(group: &Group) {
+    println!("Name: {}", group.title);
+    if let Some(desc) = &group.description {
+        println!("Description: {desc}");
+    }
+}
+
+pub async fn print_groups() -> Result<()> {
+    let groups = list_groups_cli().await?;
+
+    let groups = groups
+        .into_iter()
+        .flatten()
+        .map(|(_, group)| group)
+        .collect::<Vec<_>>();
+
+    for group in groups {
+        print_group(&group);
+        println!("================");
+    }
+
     Ok(())
 }
 
