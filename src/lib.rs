@@ -16,6 +16,7 @@ pub mod config;
 pub mod contacts;
 pub mod devices;
 pub mod env;
+pub mod groups;
 pub mod logger;
 pub mod messages;
 pub mod paths;
