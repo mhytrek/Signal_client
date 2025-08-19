@@ -1,11 +1,12 @@
 use crate::{
     contacts::list_contacts_cli,
-    messages::receive::{MessageDto, list_messages_cli, receive_messages_cli},
+    groups::list_groups_cli,
+    messages::receive::{MessageDto, contact, group, receive_messages_cli},
     profile::{get_my_profile_avatar_cli, get_profile_cli},
 };
 use anyhow::Result;
 use chrono::{DateTime, Local, Utc};
-use presage::model::contacts::Contact;
+use presage::model::{contacts::Contact, groups::Group};
 use viuer::{Config, print_from_file};
 
 fn print_contact(contact: &Contact) {
@@ -23,6 +24,30 @@ pub async fn print_contacts() -> Result<()> {
         print_contact(&contact);
         println!("================");
     }
+    Ok(())
+}
+
+fn print_group(group: &Group) {
+    println!("Name: {}", group.title);
+    if let Some(desc) = &group.description {
+        println!("Description: {desc}");
+    }
+}
+
+pub async fn print_groups() -> Result<()> {
+    let groups = list_groups_cli().await?;
+
+    let groups = groups
+        .into_iter()
+        .flatten()
+        .map(|(_, group)| group)
+        .collect::<Vec<_>>();
+
+    for group in groups {
+        print_group(&group);
+        println!("================");
+    }
+
     Ok(())
 }
 
@@ -49,10 +74,22 @@ fn print_message(message: &MessageDto) {
         }
     }
 }
-pub async fn print_messages(recipient: String, from: String) -> Result<()> {
-    let mut messages = list_messages_cli(recipient, from).await?;
+
+pub async fn print_messages_from_contact(recipient: String, from: Option<String>) -> Result<()> {
+    let mut messages = contact::list_messages_cli(recipient, from).await?;
 
     // reversing the order of messages to print them out from the oldest to the latest
+    messages.reverse();
+
+    for message in messages {
+        print_message(&message);
+    }
+    Ok(())
+}
+
+pub async fn print_messages_from_group(group: String, from: Option<String>) -> Result<()> {
+    let mut messages = group::list_messages_cli(group, from).await?;
+
     messages.reverse();
 
     for message in messages {

@@ -15,11 +15,19 @@ async fn main() -> Result<()> {
         Command::SyncContacts => contacts::sync_contacts_cli().await?,
         Command::LinkDevice(args) => devices::link_new_device_cli(args.device_name).await?,
         Command::ListContacts => cli::print_contacts().await?,
+        Command::ListGroups => cli::print_groups().await?,
         Command::RunApp => tui::run_tui().await?,
         Command::SendMessage(args) => {
-            messages::send::send_message_cli(args.recipient, args.text_message).await?
+            messages::send::contact::send_message_cli(args.recipient, args.text_message).await?
         }
-        Command::ListMessages(args) => cli::print_messages(args.recipient, args.from).await?,
+        Command::SendToGroup(args) => {
+            messages::send::group::send_message_cli(args.group, args.text_message).await?
+        }
+        Command::ListMessages(args) => match (args.contact, args.group) {
+            (Some(c), None) => cli::print_messages_from_contact(c, args.from).await?,
+            (None, Some(g)) => cli::print_messages_from_group(g, args.from).await?,
+            _ => unreachable!(),
+        },
         Command::Receive => cli::print_received_message().await?,
         Command::GetProfile => cli::print_profile().await?,
         Command::SendAttachment(args) => {

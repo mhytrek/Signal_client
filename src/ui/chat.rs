@@ -5,7 +5,7 @@ use ratatui::{
 };
 
 use crate::{
-    app::App,
+    app::{App, RecipientId},
     messages::receive::MessageDto,
     ui::{
         input::render_input_and_attachment,
@@ -26,12 +26,14 @@ pub fn render_chat(frame: &mut Frame, app: &App, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(3)])
         .split(area);
 
-    let messages = match app
-        .contact_messages
-        .get(&app.contacts[app.contact_selected].0)
-    {
+    let recipient = &app.recipients[app.selected_recipient].0;
+    let messages = match recipient.id() {
+        RecipientId::Contact(uuid) => app.contact_messages.get(&uuid.to_string()),
+        RecipientId::Group(master_key) => app.group_messages.get(&master_key),
+    };
+    let messages = match messages {
         Some(msgs) => msgs,
-        None => &Vec::<MessageDto>::new(),
+        None => &vec![],
     };
 
     if !messages.is_empty() {
@@ -223,7 +225,12 @@ fn render_messages(
         }
 
         let mut x_pos = vertical_chunks[0].x;
-        if app.contacts[app.contact_selected].0 != msg.uuid.to_string() {
+        let id = app.recipients[app.selected_recipient].0.id();
+        let uuid_string = match id {
+            RecipientId::Group(_) => String::new(), // TODO:
+            RecipientId::Contact(uuid) => uuid.to_string(),
+        };
+        if uuid_string != msg.uuid.to_string() {
             x_pos = vertical_chunks[0].x + vertical_chunks[0].width - width;
         }
 
