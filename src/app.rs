@@ -31,6 +31,7 @@ use tracing::error;
 
 use image::ImageFormat;
 use std::thread;
+use uuid;
 
 #[derive(PartialEq)]
 pub enum CurrentScreen {
@@ -66,11 +67,30 @@ pub struct ContactInfo {
     pub has_avatar: bool,
 }
 
+#[derive(Clone, Debug)]
+pub enum MessageContent {
+    Text(String),
+    Attachment { text: String, path: String },
+}
+
+#[derive(Clone, Debug)]
+pub struct QueuedMessage {
+    pub id: String,
+    pub recipient: String,
+    pub content: MessageContent,
+    pub timestamp: u64,
+    pub retry_count: u32,
+    pub max_retries: u32,
+    pub next_retry_at: std::time::SystemTime,
+}
+
 pub struct App {
     pub contacts: Vec<(String, String, String)>, // contact_uuid, contact_name, input for this contact
 
     pub contact_selected: usize,
     pub message_selected: usize,
+
+    pub message_queue: std::collections::VecDeque<QueuedMessage>,
 
     // New fields for contact info
     pub selected_contact_info: Option<ContactInfo>,
@@ -131,10 +151,16 @@ pub enum EventApp {
     ReceiveMessage,
     QrCodeGenerated,
     Resize(u16, u16),
+
+    // for message retry + queuing
+    MessageQueued(QueuedMessage),
+    MessageSent(String), // message id
+    MessageFailed(String, String), // message id, error
+    RetryQueuedMessages,
 }
 pub enum EventSend {
-    SendText(String, String),
-    SendAttachment(String, String, String),
+    SendText(String, String, Option<String>), // recipient, text, message_id
+    SendAttachment(String, String, String, Option<String>), // recipient, text, path, message_id
     GetMessagesForContact(String),
     GetContactInfo(String),
 }
@@ -147,6 +173,9 @@ impl App {
         App {
             linking_status,
             contacts: vec![],
+
+            message_queue: std::collections::VecDeque::new(),
+
             contact_selected: 0,
             message_selected: 0,
             character_index: 0,
@@ -375,6 +404,57 @@ impl App {
             }
             EventApp::QrCodeGenerated => Ok(false),
             EventApp::Resize(_, _) => Ok(false),
+            EventApp::MessageSent(message_id) => {
+                self.message_queue.retain(|msg| msg.id != message_id);
+                Ok(false)
+            }
+            EventApp::MessageFailed(message_id, error) => {
+                if let Some(msg) = self.message_queue.iter_mut().find(|m| m.id == message_id) {
+                    msg.retry_count += 1;
+                    if msg.retry_count < msg.max_retries {
+                        let delay_secs = 2_u64.pow(msg.retry_count);
+                        msg.next_retry_at = std::time::SystemTime::now() +
+                            std::time::Duration::from_secs(delay_secs);
+                    } else {
+                        self.message_queue.retain(|m| m.id != message_id);
+                    }
+                    self.message_selected = self.message_selected.max(
+                        self.contact_messages
+                            .get(&self.contacts[self.contact_selected].0)
+                            .map(|msgs| msgs.len())
+                            .unwrap_or(0)
+                    );
+                }
+                Ok(false)
+            }
+            EventApp::RetryQueuedMessages => {
+                let now = std::time::SystemTime::now();
+                let mut to_retry = Vec::new();
+
+                for msg in &self.message_queue {
+                    if msg.retry_count > 0 && msg.next_retry_at <= now {
+                        to_retry.push(msg.clone());
+                    }
+                }
+
+                for msg in to_retry {
+                    match &msg.content {
+                        MessageContent::Text(text) => {
+                            tx.send(EventSend::SendText(msg.recipient.clone(), text.clone(), Some(msg.id))).unwrap();
+                        }
+                        MessageContent::Attachment { text, path } => {
+                            tx.send(EventSend::SendAttachment(
+                                msg.recipient.clone(),
+                                text.clone(),
+                                path.clone(),
+                                Some(msg.id),
+                            )).unwrap();
+                        }
+                    }
+                }
+                Ok(false)
+            }
+            _=> Ok(false),
         }
     }
 
@@ -414,27 +494,56 @@ impl App {
                 return;
             }
         }
+
         if let Some((_uuid, name, input)) = self.contacts.get_mut(self.contact_selected) {
             let message_text = input.trim().to_string();
             let has_text = !message_text.is_empty();
 
             if has_text || has_attachment {
-                if has_attachment {
-                    tx.send(EventSend::SendAttachment(
-                        name.clone(),
-                        message_text.clone(),
-                        self.attachment_path.clone(),
-                    ))
-                    .unwrap();
-                    self.attachment_path.clear();
-                    self.attachment_error = None;
+                let message_id = uuid::Uuid::new_v4().to_string();
+                let content = if has_attachment {
+                    MessageContent::Attachment {
+                        text: message_text.clone(),
+                        path: self.attachment_path.clone(),
+                    }
                 } else {
-                    tx.send(EventSend::SendText(name.clone(), message_text.clone()))
-                        .unwrap();
+                    MessageContent::Text(message_text.clone())
+                };
+
+                let queued_message = QueuedMessage {
+                    id: message_id,
+                    recipient: name.clone(),
+                    content,
+                    timestamp: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis() as u64,
+                    retry_count: 0,
+                    max_retries: 3,
+                    next_retry_at: std::time::SystemTime::now(),
+                };
+
+                self.message_queue.push_back(queued_message.clone());
+
+                match &queued_message.content {
+                    MessageContent::Text(text) => {
+                        tx.send(EventSend::SendText(name.clone(), text.clone(), Some(queued_message.id.clone()))).unwrap();
+                    }
+                    MessageContent::Attachment { text, path } => {
+                        tx.send(EventSend::SendAttachment(
+                            name.clone(),
+                            text.clone(),
+                            path.clone(),
+                            Some(queued_message.id.clone()),
+                        )).unwrap();
+                    }
                 }
 
+                if has_attachment {
+                    self.attachment_path.clear();
+                    self.attachment_error = None;
+                }
                 self.character_index = 0;
-
                 input.clear();
             }
         }
@@ -740,6 +849,14 @@ pub async fn init_background_threads(
         })
         .unwrap();
 
+    let tx_retry = tx_thread.clone();
+    thread::spawn(move || {
+        loop {
+            thread::sleep(std::time::Duration::from_secs(5)); // Check every 5 seconds
+            let _ = tx_retry.send(EventApp::RetryQueuedMessages);
+        }
+    });
+
     Ok(())
 }
 
@@ -916,65 +1033,60 @@ pub async fn handle_background_events(
     loop {
         if let Ok(event) = rx.recv() {
             match event {
-                EventSend::SendText(recipient, text) => {
+                EventSend::SendText(recipient, text, message_id) => {
                     match send_message_tui(
                         recipient.clone(),
                         text.clone(),
                         Arc::clone(&manager_mutex),
                         Arc::clone(&current_contacts_mutex),
-                    )
-                    .await
-                    {
+                    ).await {
                         Ok(_) => {
-                            let _ = tx_status
-                                .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                            let _ = tx_status.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                            if let Some(id) = message_id {
+                                let _ = tx_status.send(EventApp::MessageSent(id));
+                            }
                         }
                         Err(e) => {
+                            if let Some(id) = message_id {
+                                let _ = tx_status.send(EventApp::MessageFailed(id, e.to_string()));
+                            }
                             if is_connection_error(&e) {
                                 let _ = tx_status.send(EventApp::NetworkStatusChanged(
-                                    NetworkStatus::Disconnected(
-                                        "Cannot send: WiFi disconnected".to_string(),
-                                    ),
+                                    NetworkStatus::Disconnected("Cannot send: WiFi disconnected".to_string()),
                                 ));
-                            } else {
-                                println!("Error sending message: {e:?}");
                             }
                         }
                     }
-
                     let _ = contacts::sync_contacts_tui(
                         Arc::clone(&manager_mutex),
                         Arc::clone(&current_contacts_mutex),
-                    )
-                    .await;
+                    ).await;
                 }
-                EventSend::SendAttachment(recipient, text, attachment_path) => {
+                EventSend::SendAttachment(recipient, text, attachment_path, message_id) => {
                     match send_attachment_tui(
                         recipient.clone(),
                         text.clone(),
                         attachment_path,
                         Arc::clone(&manager_mutex),
                         Arc::clone(&current_contacts_mutex),
-                    )
-                    .await
-                    {
+                    ).await {
                         Ok(_) => {
-                            let _ = tx_status
-                                .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                            let _ = tx_status.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                            if let Some(id) = message_id {
+                                let _ = tx_status.send(EventApp::MessageSent(id));
+                            }
                         }
                         Err(e) => {
+                            if let Some(id) = message_id {
+                                let _ = tx_status.send(EventApp::MessageFailed(id, e.to_string()));
+                            }
                             if is_connection_error(&e) {
                                 let _ = tx_status.send(EventApp::NetworkStatusChanged(
-                                    NetworkStatus::Disconnected(
-                                        "Cannot send: WiFi disconnected".to_string(),
-                                    ),
+                                    NetworkStatus::Disconnected("Cannot send: WiFi disconnected".to_string()),
                                 ));
-                            } else {
-                                println!("Error sending attachment: {e:?}");
                             }
                         }
                     }
-
                     let _ = contacts::sync_contacts_tui(
                         Arc::clone(&manager_mutex),
                         Arc::clone(&current_contacts_mutex),

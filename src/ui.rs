@@ -23,6 +23,7 @@ use crate::{
     app::{App, CurrentScreen, InputFocus, LinkingStatus, NetworkStatus},
     paths::QRCODE,
 };
+use crate::app::{MessageContent, QueuedMessage};
 
 /// Main UI rendering function.
 pub fn ui(frame: &mut Frame, app: &mut App) {
@@ -141,7 +142,7 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(3)])
         .split(area);
 
-    let messages: Vec<ListItem> = match &app
+    let mut messages: Vec<ListItem> = match &app
         .contact_messages
         .get(&app.contacts[app.contact_selected].0)
     {
@@ -177,6 +178,50 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
             .collect(),
         None => vec![],
     };
+
+    let current_contact_name = &app.contacts[app.contact_selected].1;
+    let failed_queued_messages: Vec<&QueuedMessage> = app
+        .message_queue
+        .iter()
+        .filter(|msg| msg.recipient == *current_contact_name && msg.retry_count > 0)
+        .collect();
+
+    if !failed_queued_messages.is_empty() {
+        // Dodaj separator
+        let separator_style = Style::default()
+            .fg(app.config.get_accent_color())
+            .add_modifier(Modifier::ITALIC);
+        messages.push(ListItem::new(
+            Line::from("─── Failed Messages (Retrying) ───")
+                .style(separator_style)
+                .centered(),
+        ));
+
+        for queued_msg in failed_queued_messages {
+
+            let content = match &queued_msg.content {
+                MessageContent::Text(text) => text.clone(),
+                MessageContent::Attachment { text, path } => {
+                    if text.is_empty() {
+                        format!("{}", path.split('/').last().unwrap_or(path))
+                    } else {
+                        format!("{} {}", text, path.split('/').last().unwrap_or(path))
+                    }
+                }
+            };
+
+            let queued_style = Style::default()
+                .fg(Color::Red)
+                .add_modifier(Modifier::ITALIC);
+
+            let formatted_content = format!(" 🔄 {}", content);
+            messages.push(ListItem::new(
+                Line::from(formatted_content)
+                    .style(queued_style)
+                    .right_aligned(),
+            ));
+        }
+    }
 
     let chat_window = List::new(messages.clone()).block(
         Block::default()
@@ -217,10 +262,17 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
 
     let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
 
-    let mut scrollbar_state = ScrollbarState::new(messages.len()).position(app.message_selected);
+    // Automatyczne przewijanie na dół - ustaw message_selected na ostatnią pozycję
+    let actual_message_selected = if messages.is_empty() {
+        0
+    } else {
+        (messages.len().saturating_sub(1)).max(app.message_selected)
+    };
+
+    let mut scrollbar_state = ScrollbarState::new(messages.len()).position(actual_message_selected);
 
     let mut list_state = ListState::default();
-    list_state.select(Some(app.message_selected));
+    list_state.select(Some(actual_message_selected));
 
     frame.render_stateful_widget(chat_window, vertical_chunks[0], &mut list_state);
     frame.render_widget(input_window, input_area_chunks[0]);
@@ -251,6 +303,7 @@ fn render_chat_and_contact(frame: &mut Frame, app: &App, area: Rect) {
         }
     }
 }
+
 
 /// Renders a popup with given text
 fn render_popup(frame: &mut Frame, area: Rect, text: &str) {

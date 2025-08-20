@@ -247,3 +247,52 @@ pub async fn send_attachment_cli(
     )
     .await
 }
+
+/// sends attachment to recipient with retry strategy ( phone number or name ), for usage with CLI
+pub async fn send_attachment_cli_with_retry(
+    recipient: String,
+    text_message: String,
+    attachment_path: String,
+) -> Result<()> {
+    const MAX_RETRIES: u32 = 3;
+    let mut retry_count = 0;
+
+    loop {
+        match send_attachment_cli(recipient.clone(), text_message.clone(), attachment_path.clone()).await {
+            Ok(_) => return Ok(()),
+            Err(e) if retry_count < MAX_RETRIES && is_connection_error(&e) => {
+                retry_count += 1;
+                let delay = std::time::Duration::from_secs(2_u64.pow(retry_count));
+                println!("Send failed (attempt {}/{}), retrying in {:?}...", retry_count, MAX_RETRIES, delay);
+                tokio::time::sleep(delay).await;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+/// sends message to recipient with retry strategy ( phone number or name ), for usage with CLI
+pub async fn send_message_cli_with_retry(recipient: String, text_message: String) -> Result<()> {
+    const MAX_RETRIES: u32 = 3;
+    let mut retry_count = 0;
+
+    loop {
+        match send_message_cli(recipient.clone(), text_message.clone()).await {
+            Ok(_) => return Ok(()),
+            Err(e) if retry_count < MAX_RETRIES && is_connection_error(&e) => {
+                retry_count += 1;
+                let delay = std::time::Duration::from_secs(2_u64.pow(retry_count));
+                println!("Send failed (attempt {}/{}), retrying in {:?}...", retry_count, MAX_RETRIES, delay);
+                tokio::time::sleep(delay).await;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+pub(crate) fn is_connection_error(e: &anyhow::Error) -> bool {
+    let msg = e.to_string().to_lowercase();
+    ["connection", "network", "websocket", "timeout"]
+        .iter()
+        .any(|keyword| msg.contains(keyword))
+}
