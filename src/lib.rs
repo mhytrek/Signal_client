@@ -27,7 +27,6 @@ pub mod ui;
 pub mod sending {}
 
 pub type AsyncContactsMap = Arc<Mutex<HashMap<Uuid, Contact>>>;
-pub type AsyncGroupMap = Arc<Mutex<HashMap<GroupMasterKeyBytes, Group>>>;
 
 pub async fn open_store(path: &str) -> Result<SqliteStore, SqliteStoreError> {
     let options = SqliteConnectOptions::from_str(path)?.create_if_missing(true);
