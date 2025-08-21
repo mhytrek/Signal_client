@@ -181,7 +181,6 @@ fn render_chat(frame: &mut Frame, app: &App, area: Rect) {
             &widths,
             &vertical_chunks,
             app,
-            available_height,
         );
 
         render_scrollbar(frame, app, messages.len(), &vertical_chunks);
@@ -731,25 +730,33 @@ fn calculate_last_visible_start(heights: &[u16], available_height: u16) -> usize
     last_visible_start
 }
 
+#[derive(Debug)]
+enum Visibility {
+    Full,         // fully visible
+    Partial(u16), // only last N lines visible
+}
+
 // returns list of indexes of visible messages
 fn get_visible_messages(
     heights: &[u16],
     available_height: u16,
     start_index: usize,
     y_start: u16,
-) -> Vec<(usize, bool)> {
+) -> Vec<(usize, Visibility)> {
     let mut y_cursor = y_start;
-    let mut visible_msgs = Vec::new(); // index, is_fully_visible
+    let mut visible_msgs = Vec::new();
 
-    for (idx, h) in heights.iter().enumerate().skip(start_index) {
-        if y_cursor == available_height {
+    for (idx, &h) in heights.iter().enumerate().skip(start_index) {
+        if y_cursor >= available_height {
             break;
         } else if y_cursor + h > available_height {
-            visible_msgs.push((idx, false));
+            let remaining = available_height.saturating_sub(y_cursor);
+            visible_msgs.push((idx, Visibility::Partial(remaining)));
             break;
+        } else {
+            visible_msgs.push((idx, Visibility::Full));
+            y_cursor += h;
         }
-        visible_msgs.push((idx, true));
-        y_cursor += h;
     }
 
     visible_msgs.reverse();
@@ -760,82 +767,75 @@ fn get_visible_messages(
 fn render_messages(
     frame: &mut Frame,
     messages: &[MessageDto],
-    visible_msgs: &[(usize, bool)],
+    visible_msgs: &[(usize, Visibility)],
     heights: &[u16],
     widths: &[u16],
     vertical_chunks: &[Rect],
     app: &App,
-    available_height: u16,
 ) {
     let mut y_pos = 0;
 
-    for &(idx, is_fully_visible) in visible_msgs {
+    for &(idx, ref visibility) in visible_msgs {
         let msg = &messages[idx];
         let datetime_local = get_local_timestamp(msg.timestamp);
-        let mut x_pos: u16;
         let width = widths[idx];
         let mut height = heights[idx];
         let para: Paragraph;
 
-        if is_fully_visible {
-            para = Paragraph::new(msg.text.clone())
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(BorderType::Rounded)
-                        .title(datetime_local.format("%Y-%m-%d %H:%M:%S").to_string()),
-                )
-                .wrap(Wrap { trim: false });
-        } else {
-            let remaining_height = available_height.saturating_sub(y_pos);
+        match visibility {
+            Visibility::Full => {
+                para = Paragraph::new(msg.text.clone())
+                    .block(
+                        Block::default()
+                            .borders(Borders::ALL)
+                            .border_type(BorderType::Rounded)
+                            .title(datetime_local.format("%Y-%m-%d %H:%M:%S").to_string()),
+                    )
+                    .wrap(Wrap { trim: false });
+            }
+            Visibility::Partial(remaining_height) => {
+                let max_text_lines = remaining_height.saturating_sub(1);
+                let mut buffer = Vec::new();
+                let mut used_lines = 0;
 
-            let max_text_lines = remaining_height.saturating_sub(1);
+                for line in msg.text.lines().rev() {
+                    let mut current_line = line;
+                    while !current_line.is_empty() {
+                        let take = current_line
+                            .chars()
+                            .take(width as usize - 4)
+                            .collect::<String>();
 
-            let mut visible_text = String::new();
-            let mut used_lines = 0;
+                        if used_lines >= max_text_lines {
+                            break;
+                        }
 
-            for line in msg.text.lines() {
-                let mut current_line = line;
-                while !current_line.is_empty() {
-                    let take = current_line
-                        .chars()
-                        .take(width as usize - 4)
-                        .collect::<String>();
-
-                    if used_lines + 1 > max_text_lines {
+                        buffer.push(take.clone());
+                        used_lines += 1;
+                        current_line = &current_line[take.len()..];
+                    }
+                    if used_lines >= max_text_lines {
                         break;
                     }
-
-                    visible_text.push_str(&take);
-                    visible_text.push('\n');
-                    used_lines += 1;
-
-                    current_line = &current_line[take.len()..];
                 }
-                if used_lines >= max_text_lines {
-                    break;
-                }
+
+                buffer.reverse();
+                let visible_text = buffer.join("\n");
+
+                height = *remaining_height;
+                para = Paragraph::new(visible_text)
+                    .block(
+                        Block::default()
+                            .borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM)
+                            .border_type(BorderType::Rounded),
+                    )
+                    .wrap(Wrap { trim: false });
             }
-
-            height = used_lines + 1;
-            para = Paragraph::new(visible_text)
-                .block(
-                    Block::default()
-                        .borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM)
-                        .border_type(BorderType::Rounded),
-                )
-                .wrap(Wrap { trim: false });
         }
 
-        x_pos = vertical_chunks[0].x;
-
+        let mut x_pos = vertical_chunks[0].x;
         if app.contacts[app.contact_selected].0 != msg.uuid.to_string() {
             x_pos = vertical_chunks[0].x + vertical_chunks[0].width - width;
-        }
-
-        let max_allowed_height = vertical_chunks[0].height.saturating_sub(y_pos);
-        if height > max_allowed_height {
-            height = max_allowed_height;
         }
 
         let msg_area = Rect {
