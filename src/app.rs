@@ -1,6 +1,7 @@
 use crate::contacts::get_contacts_tui;
 use crate::messages::receive::{self, MessageDto, list_messages_tui};
-use crate::messages::send::{send_attachment_tui, send_message_tui};
+use crate::messages::send::contact::send_message_tui;
+use crate::messages::send::send_attachment_tui;
 use crate::paths::QRCODE;
 use crate::profile::get_profile_tui;
 use crate::ui::render_ui;
