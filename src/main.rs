@@ -18,7 +18,7 @@ async fn main() -> Result<()> {
         Command::ListGroups => cli::print_groups().await?,
         Command::RunApp => tui::run_tui().await?,
         Command::SendMessage(args) => {
-            messages::send::send_message_cli(args.recipient, args.text_message).await?
+            messages::send::contact::send_message_cli(args.recipient, args.text_message).await?
         }
         Command::ListMessages(args) => cli::print_messages(args.recipient, args.from).await?,
         Command::Receive => cli::print_received_message().await?,

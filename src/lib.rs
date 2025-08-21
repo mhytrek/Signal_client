@@ -1,8 +1,8 @@
 use anyhow::{Error, Result};
 use presage::{
-    libsignal_service::prelude::Uuid,
+    libsignal_service::{prelude::Uuid, zkgroup::GroupMasterKeyBytes},
     manager::{Manager, Registered},
-    model::{contacts::Contact, identity::OnNewIdentity},
+    model::{contacts::Contact, groups::Group, identity::OnNewIdentity},
 };
 use presage_store_sqlite::{SqliteConnectOptions, SqliteStore, SqliteStoreError};
 use std::sync::Arc;
@@ -27,6 +27,7 @@ pub mod ui;
 pub mod sending {}
 
 pub type AsyncContactsMap = Arc<Mutex<HashMap<Uuid, Contact>>>;
+pub type AsyncGroupMap = Arc<Mutex<HashMap<GroupMasterKeyBytes, Group>>>;
 
 pub async fn open_store(path: &str) -> Result<SqliteStore, SqliteStoreError> {
     let options = SqliteConnectOptions::from_str(path)?.create_if_missing(true);
