@@ -1,10 +1,16 @@
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Result, anyhow};
-use presage::proto::{DataMessage, GroupContextV2, data_message};
+use presage::proto::{DataMessage, GroupContextV2};
 use presage::store::ContentsStore;
 use presage::{Manager, libsignal_service::zkgroup::GroupMasterKeyBytes, manager::Registered};
 use presage_store_sqlite::SqliteStore;
+use tokio::sync::Mutex;
+
+use crate::contacts::get_contacts_cli;
+use crate::messages::receive::receiving_loop;
+use crate::{AsyncContactsMap, create_registered_manager};
 
 async fn find_master_key(
     group_name: String,
@@ -23,10 +29,24 @@ async fn find_master_key(
     Ok(key)
 }
 
+pub async fn send_message_cli(group_name: String, text_message: String) -> Result<()> {
+    let mut manager = create_registered_manager().await?;
+    let current_contacts_mutex: AsyncContactsMap =
+        Arc::new(Mutex::new(get_contacts_cli(&manager).await?));
+    send_message(
+        &mut manager,
+        group_name,
+        text_message,
+        current_contacts_mutex,
+    )
+    .await
+}
+
 async fn send_message(
     manager: &mut Manager<SqliteStore, Registered>,
     group_name: String,
     text_message: String,
+    current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
     let master_key = find_master_key(group_name, manager).await?;
@@ -35,7 +55,10 @@ async fn send_message(
         None => return Err(anyhow!("Group with given name not found!")),
     };
 
-    let data_message = create_data_message(text_message, master_key, timestamp);
+    let data_message = create_data_message(text_message, &master_key, timestamp);
+
+    let messages = manager.receive_messages().await?;
+    receiving_loop(messages, manager, None, current_contacts_mutex).await?;
 
     send(manager, &master_key, data_message, timestamp).await
 }
@@ -54,7 +77,7 @@ pub async fn send(
 
 pub fn create_data_message(
     text_message: String,
-    master_key: GroupMasterKeyBytes,
+    master_key: &GroupMasterKeyBytes,
     timestamp: u64,
 ) -> DataMessage {
     let master_key = master_key.to_vec();

@@ -1,8 +1,8 @@
 use anyhow::{Error, Result};
 use presage::{
-    libsignal_service::{prelude::Uuid, zkgroup::GroupMasterKeyBytes},
+    libsignal_service::prelude::Uuid,
     manager::{Manager, Registered},
-    model::{contacts::Contact, groups::Group, identity::OnNewIdentity},
+    model::{contacts::Contact, identity::OnNewIdentity},
 };
 use presage_store_sqlite::{SqliteConnectOptions, SqliteStore, SqliteStoreError};
 use std::sync::Arc;
