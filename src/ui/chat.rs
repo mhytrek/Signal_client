@@ -1,28 +1,16 @@
-use std::{
-    fs::{self},
-    path::Path,
-};
-
-use chrono::{DateTime, Local, Utc};
-use qrcode::QrCode;
-use ratatui::{layout::Alignment, symbols::scrollbar};
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Margin, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span, Text},
-    widgets::{
-        Block, BorderType, Borders, List, ListItem, ListState, Padding, Paragraph, Scrollbar,
-        ScrollbarOrientation, ScrollbarState, Wrap,
-    },
+    layout::{Constraint, Direction, Layout, Rect},
+    widgets::{Block, BorderType, Borders, Paragraph, Wrap},
 };
-use ratatui_image::{Resize, StatefulImage};
-use tui_qrcode::{Colors, QrCodeWidget};
 
 use crate::{
-    app::{App, CurrentScreen, InputFocus, LinkingStatus, NetworkStatus},
+    app::App,
     messages::receive::MessageDto,
-    paths::QRCODE, ui::{input::render_input_and_attachment, utils::{get_local_timestamp, render_scrollbar}},
+    ui::{
+        input::render_input_and_attachment,
+        utils::{get_local_timestamp, render_scrollbar},
+    },
 };
 
 #[derive(Debug)]
@@ -79,14 +67,16 @@ pub fn render_chat(frame: &mut Frame, app: &App, area: Rect) {
         let content_lenght = messages.len();
         let scrollbar_position = content_lenght - app.message_selected;
 
-        render_scrollbar(frame, scrollbar_position, content_lenght, vertical_chunks[0]);
+        render_scrollbar(
+            frame,
+            scrollbar_position,
+            content_lenght,
+            vertical_chunks[0],
+        );
     }
 
     render_input_and_attachment(frame, app, &vertical_chunks);
 }
-
-
-
 
 // calculates the heights and widths of the messages
 fn calculate_message_sizes(
@@ -137,8 +127,6 @@ fn calculate_last_visible_start(heights: &[u16], available_height: u16) -> usize
 
     last_visible_start
 }
-
-
 
 // returns list of indexes of visible messages
 fn get_visible_messages(

@@ -1,28 +1,20 @@
-use std::{
-    fs::{self},
-    path::Path,
-};
-
-use chrono::{DateTime, Local, Utc};
-use qrcode::QrCode;
-use ratatui::layout::Alignment;
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Margin, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span, Text},
-    widgets::{
-        Block, BorderType, Borders, List, ListItem, ListState, Padding, Paragraph, Scrollbar,
-        ScrollbarOrientation, ScrollbarState, Wrap,
-    },
+    layout::{Constraint, Direction, Layout, Rect},
+    style::Style,
+    text::{Line, Span},
+    widgets::{Block, Borders, Paragraph},
 };
-use ratatui_image::{Resize, StatefulImage};
-use tui_qrcode::{Colors, QrCodeWidget};
 
 use crate::{
-    app::{App, CurrentScreen, InputFocus, LinkingStatus, NetworkStatus},
-    messages::receive::MessageDto,
-    paths::QRCODE, ui::{chat::render_chat, contact_list::{render_contact_info_compact, render_contact_list}, linking::{render_qrcode, render_textarea}, options::render_options, utils::{render_paragraph, render_popup}},
+    app::{App, CurrentScreen, LinkingStatus, NetworkStatus},
+    ui::{
+        chat::render_chat,
+        contact_list::{render_contact_info_compact, render_contact_list},
+        linking::{render_qrcode, render_textarea},
+        options::render_options,
+        utils::{render_paragraph, render_popup},
+    },
 };
 
 /// Main UI rendering function.
@@ -146,10 +138,3 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
 
     frame.render_widget(key_notes_footer, area);
 }
-
-
-
-
-
-
-

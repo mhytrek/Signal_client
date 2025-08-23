@@ -1,29 +1,13 @@
-use std::{
-    fs::{self},
-    path::Path,
-};
-
-use chrono::{DateTime, Local, Utc};
-use qrcode::QrCode;
 use ratatui::layout::Alignment;
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Margin, Rect},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::{Line, Span, Text},
-    widgets::{
-        Block, BorderType, Borders, List, ListItem, ListState, Padding, Paragraph, Scrollbar,
-        ScrollbarOrientation, ScrollbarState, Wrap,
-    },
+    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Padding, Paragraph, Wrap},
 };
 use ratatui_image::{Resize, StatefulImage};
-use tui_qrcode::{Colors, QrCodeWidget};
 
-use crate::{
-    app::{App, CurrentScreen, InputFocus, LinkingStatus, NetworkStatus},
-    messages::receive::MessageDto,
-    paths::QRCODE, ui::{input::render_input_and_attachment, utils::{get_local_timestamp, render_scrollbar}},
-};
+use crate::{app::App, ui::utils::render_scrollbar};
 
 /// Renders the contact list in the left chunk of the screen
 pub fn render_contact_list(frame: &mut Frame, app: &App, area: Rect) {
@@ -56,11 +40,7 @@ pub fn render_contact_list(frame: &mut Frame, app: &App, area: Rect) {
 
     frame.render_stateful_widget(chat_list_widget, area, &mut list_state);
     render_scrollbar(frame, app.contact_selected, list_items.len(), area);
-
-
 }
-
-
 
 /// Renders contact information screen
 pub fn render_contact_info_compact(frame: &mut Frame, app: &mut App, area: Rect) {

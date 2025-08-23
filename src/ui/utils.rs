@@ -1,30 +1,14 @@
-use std::{
-    fs::{self},
-    path::Path,
-};
-
 use chrono::{DateTime, Local, Utc};
-use qrcode::QrCode;
-use ratatui::layout::Alignment;
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Margin, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span, Text},
+    style::{Color, Style},
+    text::Text,
     widgets::{
-        Block, BorderType, Borders, List, ListItem, ListState, Padding, Paragraph, Scrollbar,
-        ScrollbarOrientation, ScrollbarState, Wrap,
+        Block, BorderType, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
+        Wrap,
     },
 };
-use ratatui_image::{Resize, StatefulImage};
-use tui_qrcode::{Colors, QrCodeWidget};
-
-use crate::{
-    app::{App, CurrentScreen, InputFocus, LinkingStatus, NetworkStatus},
-    messages::receive::MessageDto,
-    paths::QRCODE,
-};
-
 
 // renders scrollbar
 // pub fn render_scrollbar(frame: &mut Frame, app: &App, total_messages: usize, vertical_chunks: &[Rect]) {
@@ -44,11 +28,10 @@ use crate::{
 // }
 
 // renders scrollbar
-pub fn render_scrollbar(frame: &mut Frame, position: usize, content_length:usize, area: Rect) {
+pub fn render_scrollbar(frame: &mut Frame, position: usize, content_length: usize, area: Rect) {
     let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
 
-    let mut scrollbar_state =
-        ScrollbarState::new(content_length).position(position);
+    let mut scrollbar_state = ScrollbarState::new(content_length).position(position);
 
     frame.render_stateful_widget(
         scrollbar,

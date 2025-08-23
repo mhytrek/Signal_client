@@ -1,29 +1,12 @@
-use std::{
-    fs::{self},
-    path::Path,
-};
-
-use chrono::{DateTime, Local, Utc};
-use qrcode::QrCode;
-use ratatui::layout::Alignment;
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Margin, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span, Text},
-    widgets::{
-        Block, BorderType, Borders, List, ListItem, ListState, Padding, Paragraph, Scrollbar,
-        ScrollbarOrientation, ScrollbarState, Wrap,
-    },
+    layout::{Constraint, Direction, Layout, Rect},
+    style::{Color, Style},
+    text::Text,
+    widgets::{Block, Borders, Paragraph},
 };
-use ratatui_image::{Resize, StatefulImage};
-use tui_qrcode::{Colors, QrCodeWidget};
 
-use crate::{
-    app::{App, CurrentScreen, InputFocus, LinkingStatus, NetworkStatus},
-    messages::receive::MessageDto,
-    paths::QRCODE,
-};
+use crate::app::{App, CurrentScreen, InputFocus};
 // renders input and attachment boxes
 pub fn render_input_and_attachment(frame: &mut Frame, app: &App, vertical_chunks: &[Rect]) {
     let input_area_chunks = Layout::default()
