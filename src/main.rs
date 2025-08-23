@@ -23,7 +23,11 @@ async fn main() -> Result<()> {
         Command::SendToGroup(args) => {
             messages::send::group::send_message_cli(args.group, args.text_message).await?
         }
-        Command::ListMessages(args) => cli::print_messages(args.recipient, args.from).await?,
+        Command::ListMessages(args) => match (args.contact, args.group) {
+            (Some(c), None) => cli::print_messages(c, args.from).await?,
+            (None, Some(_g)) => todo!(),
+            _ => unreachable!(),
+        },
         Command::Receive => cli::print_received_message().await?,
         Command::GetProfile => cli::print_profile().await?,
         Command::SendAttachment(args) => {

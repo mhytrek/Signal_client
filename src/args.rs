@@ -1,4 +1,4 @@
-use clap::{Args, Parser, Subcommand};
+use clap::{ArgGroup, Args, Parser, Subcommand};
 
 #[derive(Parser)]
 pub struct Cli {
@@ -69,11 +69,28 @@ pub struct SendToGroupArgs {
     pub text_message: String,
 }
 
+// #[derive(Args)]
+// pub struct ListMessagesArgs {
+//     /// Uuid of the contact that the message history should be shown
+//     #[arg(short, long)]
+//     pub recipient: String,
+//
+//     /// The timestamp from which messages start being displayed
+//     pub from: String,
+// }
 #[derive(Args)]
+#[command(group(
+    ArgGroup::new("recipient")
+        .required(true)
+))]
 pub struct ListMessagesArgs {
     /// Uuid of the contact that the message history should be shown
-    #[arg(short, long)]
-    pub recipient: String,
+    #[arg(short, long, group = "recipient")]
+    pub contact: Option<String>,
+
+    /// Name of the group that the message history should be shown
+    #[arg(short, long, group = "recipient")]
+    pub group: Option<String>,
 
     /// The timestamp from which messages start being displayed
     pub from: String,
