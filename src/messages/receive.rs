@@ -1,5 +1,4 @@
 use std::env;
-use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -12,9 +11,8 @@ use presage::manager::Manager;
 use presage::manager::Registered;
 use presage::model::messages::Received;
 use presage::proto::{DataMessage, SyncMessage, sync_message::Sent};
-use presage::store::Thread;
 use presage::store::{ContentExt, ContentsStore};
-use presage_store_sqlite::{SqliteStore, SqliteStoreError};
+use presage_store_sqlite::SqliteStore;
 use tokio::sync::Mutex;
 
 use crate::AsyncContactsMap;
@@ -22,6 +20,9 @@ use crate::AsyncRegisteredManager;
 use crate::contacts::get_contacts_cli;
 use crate::create_registered_manager;
 use crate::env::SIGNAL_DISPLAY_FLAGS;
+
+pub mod contact;
+pub mod group;
 
 pub struct MessageDto {
     pub uuid: Uuid,
@@ -68,23 +69,7 @@ pub async fn receiving_loop(
     check_contacts(manager, current_contacts_mutex).await
 }
 
-async fn list_messages(
-    manager: &Manager<SqliteStore, Registered>,
-    recipient: String,
-    from: String,
-) -> Result<Vec<Result<Content, SqliteStoreError>>> {
-    let recipient_uuid = Uuid::from_str(&recipient)?;
-    let thread = Thread::Contact(recipient_uuid);
-    let from_u64 = u64::from_str(&from)?;
-
-    Ok(manager
-        .store()
-        .messages(&thread, from_u64..)
-        .await?
-        .collect())
-}
-
-///format Content to a MessageDto or returns None
+/// Format Content to a MessageDto or returns None
 pub fn format_message(content: &Content) -> Option<MessageDto> {
     let timestamp: u64 = content.timestamp();
     let uuid = content.metadata.sender.raw_uuid();
@@ -144,26 +129,6 @@ pub fn format_message(content: &Content) -> Option<MessageDto> {
     })
 }
 
-/// Returns iterator over stored messeges from certain time for given contact uuid, for use in TUI
-pub async fn list_messages_tui(
-    recipient: String,
-    from: String,
-    manager_mutex: AsyncRegisteredManager,
-) -> Result<Vec<MessageDto>> {
-    let manager = manager_mutex.read().await;
-
-    let messages = list_messages(&manager, recipient, from).await?;
-
-    let mut result = Vec::new();
-
-    for message in messages.into_iter().flatten() {
-        if let Some(formatted_message) = format_message(&message) {
-            result.push(formatted_message);
-        }
-    }
-    Ok(result)
-}
-
 /// Function to receive messages for TUI interface
 pub async fn receive_messages_tui(
     manager_mutex: AsyncRegisteredManager,
@@ -190,21 +155,6 @@ pub async fn receive_messages_tui(
         }
     }
 
-    Ok(result)
-}
-
-/// Returns iterator over stored messeges from certain time for given contact uuid, for use in CLI
-pub async fn list_messages_cli(recipient: String, from: String) -> Result<Vec<MessageDto>> {
-    let manager = create_registered_manager().await?;
-    let messages = list_messages(&manager, recipient, from).await?;
-
-    let mut result = Vec::new();
-
-    for message in messages.into_iter().flatten() {
-        if let Some(formatted_message) = format_message(&message) {
-            result.push(formatted_message);
-        }
-    }
     Ok(result)
 }
 

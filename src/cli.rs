@@ -1,7 +1,7 @@
 use crate::{
     contacts::list_contacts_cli,
     groups::list_groups_cli,
-    messages::receive::{MessageDto, list_messages_cli, receive_messages_cli},
+    messages::receive::{MessageDto, contact, receive_messages_cli},
     profile::{get_my_profile_avatar_cli, get_profile_cli},
 };
 use anyhow::Result;
@@ -74,8 +74,9 @@ fn print_message(message: &MessageDto) {
         }
     }
 }
-pub async fn print_messages(recipient: String, from: String) -> Result<()> {
-    let mut messages = list_messages_cli(recipient, from).await?;
+
+pub async fn print_messages_from_contact(recipient: String, from: String) -> Result<()> {
+    let mut messages = contact::list_messages_cli(recipient, from).await?;
 
     // reversing the order of messages to print them out from the oldest to the latest
     messages.reverse();
@@ -84,6 +85,10 @@ pub async fn print_messages(recipient: String, from: String) -> Result<()> {
         print_message(&message);
     }
     Ok(())
+}
+
+pub async fn print_messages_from_group(group: String, from: String) -> Result<()> {
+    todo!();
 }
 
 pub async fn print_received_message() -> Result<()> {
