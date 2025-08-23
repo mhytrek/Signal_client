@@ -30,6 +30,16 @@ async fn find_master_key(
     Ok(key)
 }
 
+pub async fn send_message_tui(
+    manager: &mut Manager<SqliteStore, Registered>,
+    group_name: String,
+    text_message: String,
+) -> Result<()> {
+    let current_contacts_mutex: AsyncContactsMap =
+        Arc::new(Mutex::new(get_contacts_cli(manager).await?));
+    send_message(manager, group_name, text_message, current_contacts_mutex).await
+}
+
 pub async fn send_message_cli(group_name: String, text_message: String) -> Result<()> {
     let mut manager = create_registered_manager().await?;
     let current_contacts_mutex: AsyncContactsMap =
