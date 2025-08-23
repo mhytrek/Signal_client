@@ -7,6 +7,7 @@ use presage::store::ContentsStore;
 use presage::{Manager, libsignal_service::zkgroup::GroupMasterKeyBytes, manager::Registered};
 use presage_store_sqlite::SqliteStore;
 use tokio::sync::Mutex;
+use tracing::error;
 
 use crate::contacts::get_contacts_cli;
 use crate::messages::receive::receiving_loop;
@@ -17,7 +18,7 @@ async fn find_master_key(
     manager: &mut Manager<SqliteStore, Registered>,
 ) -> Result<Option<GroupMasterKeyBytes>> {
     // WARN: Right now it assumes that all groups have unique names this is. This has to be handled
-    // differently in future.
+    // correctly in future.
     let group = manager
         .store()
         .groups()
@@ -60,7 +61,11 @@ async fn send_message(
     let messages = manager.receive_messages().await?;
     receiving_loop(messages, manager, None, current_contacts_mutex).await?;
 
-    send(manager, &master_key, data_message, timestamp).await
+    let send_result = send(manager, &master_key, data_message, timestamp).await;
+    if let Err(e) = send_result {
+        error!("{e}");
+    }
+    Ok(())
 }
 
 pub async fn send(
@@ -70,7 +75,7 @@ pub async fn send(
     timestamp: u64,
 ) -> Result<()> {
     manager
-        .send_message_to_group(recipient, data_message, timestamp)
+        .send_message_to_group(recipient, data_message.clone(), timestamp)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to send message: {}", e))
 }
