@@ -25,3 +25,20 @@ pub async fn list_groups_tui(
     let manager = manager_mutex.read().await;
     list_groups(&manager).await
 }
+
+pub async fn find_master_key(
+    group_name: String,
+    manager: &mut Manager<SqliteStore, Registered>,
+) -> Result<Option<GroupMasterKeyBytes>> {
+    // WARN: Right now it assumes that all groups have unique names this is. This has to be handled
+    // correctly in future.
+    let group = manager
+        .store()
+        .groups()
+        .await?
+        .filter_map(|g| g.ok())
+        .find(|(_, group)| group.title == group_name);
+
+    let key = group.map(|g| g.0);
+    Ok(key)
+}

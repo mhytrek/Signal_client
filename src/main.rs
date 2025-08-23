@@ -25,7 +25,7 @@ async fn main() -> Result<()> {
         }
         Command::ListMessages(args) => match (args.contact, args.group) {
             (Some(c), None) => cli::print_messages_from_contact(c, args.from).await?,
-            (None, Some(_g)) => todo!(),
+            (None, Some(g)) => cli::print_messages_from_group(g, args.from).await?,
             _ => unreachable!(),
         },
         Command::Receive => cli::print_received_message().await?,

@@ -17,11 +17,14 @@ use crate::{
 pub async fn list_messages(
     manager: &Manager<SqliteStore, Registered>,
     recipient: String,
-    from: String,
+    from: Option<String>,
 ) -> Result<Vec<Result<Content, SqliteStoreError>>> {
     let recipient_uuid = Uuid::from_str(&recipient)?;
     let thread = Thread::Contact(recipient_uuid);
-    let from_u64 = u64::from_str(&from)?;
+    let from_u64: u64 = match from {
+        Some(f) => u64::from_str(&f)?,
+        None => 0,
+    };
 
     Ok(manager
         .store()
@@ -38,7 +41,7 @@ pub async fn list_messages_tui(
 ) -> Result<Vec<MessageDto>> {
     let manager = manager_mutex.read().await;
 
-    let messages = list_messages(&manager, recipient, from).await?;
+    let messages = list_messages(&manager, recipient, Some(from)).await?;
 
     let mut result = Vec::new();
 
@@ -51,7 +54,7 @@ pub async fn list_messages_tui(
 }
 
 /// Returns iterator over stored messeges from certain time for given contact uuid, for use in CLI
-pub async fn list_messages_cli(recipient: String, from: String) -> Result<Vec<MessageDto>> {
+pub async fn list_messages_cli(recipient: String, from: Option<String>) -> Result<Vec<MessageDto>> {
     let manager = create_registered_manager().await?;
     let messages = list_messages(&manager, recipient, from).await?;
 

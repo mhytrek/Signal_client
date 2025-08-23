@@ -93,7 +93,7 @@ pub struct ListMessagesArgs {
     pub group: Option<String>,
 
     /// The timestamp from which messages start being displayed
-    pub from: String,
+    pub from: Option<String>,
 }
 
 #[derive(Args)]
