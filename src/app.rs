@@ -3,7 +3,7 @@ use crate::messages::receive::{self, MessageDto, list_messages_tui};
 use crate::messages::send::{send_attachment_tui, send_message_tui};
 use crate::paths::QRCODE;
 use crate::profile::get_profile_tui;
-use crate::ui::ui;
+use crate::ui::render_ui;
 use crate::{
     AsyncContactsMap, AsyncRegisteredManager, config::Config, contacts, create_registered_manager,
     devices,
@@ -210,7 +210,7 @@ impl App {
         });
 
         loop {
-            terminal.draw(|f| ui(f, self))?;
+            terminal.draw(|f| render_ui(f, self))?;
 
             if let Ok(event) = self.rx_tui.recv()
                 && self.handle_event(event, &self.tx_tui.clone()).await?

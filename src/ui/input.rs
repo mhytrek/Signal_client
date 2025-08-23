@@ -1,0 +1,78 @@
+use std::{
+    fs::{self},
+    path::Path,
+};
+
+use chrono::{DateTime, Local, Utc};
+use qrcode::QrCode;
+use ratatui::layout::Alignment;
+use ratatui::{
+    Frame,
+    layout::{Constraint, Direction, Layout, Margin, Rect},
+    style::{Color, Modifier, Style},
+    text::{Line, Span, Text},
+    widgets::{
+        Block, BorderType, Borders, List, ListItem, ListState, Padding, Paragraph, Scrollbar,
+        ScrollbarOrientation, ScrollbarState, Wrap,
+    },
+};
+use ratatui_image::{Resize, StatefulImage};
+use tui_qrcode::{Colors, QrCodeWidget};
+
+use crate::{
+    app::{App, CurrentScreen, InputFocus, LinkingStatus, NetworkStatus},
+    messages::receive::MessageDto,
+    paths::QRCODE,
+};
+// renders input and attachment boxes
+pub fn render_input_and_attachment(frame: &mut Frame, app: &App, vertical_chunks: &[Rect]) {
+    let input_area_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Ratio(3, 5), Constraint::Ratio(2, 5)])
+        .split(vertical_chunks[1]);
+
+    let input_window = Paragraph::new(app.contacts[app.contact_selected].2.clone())
+        .block(Block::default().title("Input").borders(Borders::ALL));
+
+    let attachment_title = match &app.attachment_error {
+        Some(error) => format!("Attachment Path - ERROR: {error}"),
+        None => "Attachment Path".to_string(),
+    };
+
+    let attachment_style = match &app.attachment_error {
+        Some(_) => Style::default().fg(Color::Red),
+        None => Style::default(),
+    };
+
+    let attachment_border_style = match &app.attachment_error {
+        Some(_) => Style::default().fg(Color::Red),
+        None => Style::default(),
+    };
+
+    let attachment_window =
+        Paragraph::new(Text::styled(app.attachment_path.clone(), attachment_style)).block(
+            Block::default()
+                .title(attachment_title)
+                .borders(Borders::ALL)
+                .border_style(attachment_border_style),
+        );
+    frame.render_widget(input_window, input_area_chunks[0]);
+    frame.render_widget(attachment_window, input_area_chunks[1]);
+
+    if let CurrentScreen::Writing = app.current_screen {
+        match app.input_focus {
+            InputFocus::Message => {
+                frame.set_cursor_position((
+                    input_area_chunks[0].x + app.character_index as u16 + 1,
+                    input_area_chunks[0].y + 1,
+                ));
+            }
+            InputFocus::Attachment => {
+                frame.set_cursor_position((
+                    input_area_chunks[1].x + app.attachment_path.len() as u16 + 1,
+                    input_area_chunks[1].y + 1,
+                ));
+            }
+        }
+    }
+}
