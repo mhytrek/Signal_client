@@ -1,5 +1,5 @@
 use crate::contacts::get_contacts_tui;
-use crate::messages::receive::{self, MessageDto, list_messages_tui};
+use crate::messages::receive::{self, MessageDto, contact};
 use crate::messages::send::contact::send_message_tui;
 use crate::messages::send::send_attachment_tui;
 use crate::paths::QRCODE;
@@ -967,7 +967,8 @@ pub async fn handle_background_events(
                 }
                 EventSend::GetMessagesForContact(uuid_str) => {
                     let result =
-                        list_messages_tui(uuid_str.clone(), "0".to_string(), &mut manager).await;
+                        contact::list_messages_tui(uuid_str.clone(), "0".to_string(), new_mutex)
+                            .await;
                     let messages = match result {
                         Ok(list) => {
                             let _ = tx_status
