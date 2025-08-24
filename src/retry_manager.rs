@@ -42,6 +42,12 @@ impl OutgoingMessage {
             return false;
         }
 
+        if let DeliveryStatus::Failed(ref reason) = self.status {
+            if reason.to_lowercase().contains("websocket closing while waiting") {
+                return false;
+            }
+        }
+
         if self.retry_count >= max_retries {
             return false;
         }
@@ -110,6 +116,12 @@ impl RetryManager {
         }
     }
 
+    pub fn mark_sending(&mut self, message_id: &str) {
+        if let Some(msg) = self.outgoing_messages.get_mut(message_id) {
+            msg.mark_sending();
+        }
+    }
+
     pub fn mark_failed(&mut self, message_id: &str, reason: String) {
         if let Some(msg) = self.outgoing_messages.get_mut(message_id) {
             msg.mark_failed(reason);
@@ -121,13 +133,11 @@ impl RetryManager {
 
         for msg in self.outgoing_messages.values_mut() {
             if msg.should_retry(self.max_retries, self.retry_delay_seconds) {
-                msg.mark_sending();
                 retry_messages.push(msg.clone());
             }
         }
         retry_messages
     }
-
     pub fn cleanup_old_messages(&mut self) {
         let cutoff = OutgoingMessage::current_timestamp() - (24 * 60 * 60 * 1000); // 24 hours
 
