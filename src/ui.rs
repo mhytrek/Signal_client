@@ -186,7 +186,6 @@ fn render_chat(frame: &mut Frame, app: &App, area: Rect) {
     render_input_and_attachment(frame, app, &vertical_chunks);
 }
 
-// renders input and attachment boxes
 fn render_input_and_attachment(frame: &mut Frame, app: &App, vertical_chunks: &[Rect]) {
     let input_area_chunks = Layout::default()
         .direction(Direction::Horizontal)
@@ -240,7 +239,6 @@ fn render_input_and_attachment(frame: &mut Frame, app: &App, vertical_chunks: &[
     }
 }
 
-// renders scrollbar
 fn render_scrollbar(frame: &mut Frame, app: &App, total_messages: usize, vertical_chunks: &[Rect]) {
     let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
 
@@ -677,8 +675,7 @@ fn get_local_timestamp(millis: u64) -> DateTime<Local> {
     datetime_utc.with_timezone(&Local)
 }
 
-// calculates the heights and widths of the messages
-fn calculate_message_sizes(
+fn calculate_message_dimensions(
     messages: &[MessageDto],
     max_width: usize,
     msg_padding: u16,
@@ -711,7 +708,7 @@ fn calculate_message_sizes(
     (heights, widths)
 }
 
-// calculates which message would be the las visible
+// calculates which message would be the last visible
 fn calculate_last_visible_start(heights: &[u16], available_height: u16) -> usize {
     let mut used_height = 0;
     let mut last_visible_start = 0;
@@ -733,7 +730,6 @@ enum Visibility {
     Partial(u16), // only last N lines visible
 }
 
-// returns list of indexes of visible messages
 fn get_visible_messages(
     heights: &[u16],
     available_height: u16,
@@ -760,7 +756,6 @@ fn get_visible_messages(
     visible_msgs
 }
 
-//renders visible messages
 fn render_messages(
     frame: &mut Frame,
     messages: &[MessageDto],
