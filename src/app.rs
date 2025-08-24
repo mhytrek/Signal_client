@@ -32,11 +32,11 @@ use tokio::sync::Mutex;
 use tokio_util::task::LocalPoolHandle;
 use tracing::error;
 
+use crate::retry_manager::{OutgoingMessage, RetryManager};
 use image::ImageFormat;
 use std::thread;
 use std::time::Duration;
 use tokio::time::interval;
-use crate::retry_manager::{OutgoingMessage, RetryManager};
 
 #[derive(PartialEq)]
 pub enum RecipientId {
@@ -504,7 +504,11 @@ impl App {
                 let outgoing = OutgoingMessage::new(
                     recipient.id(), //to check
                     message_text.clone(),
-                    if has_attachment { Some(self.attachment_path.clone()) } else { None }
+                    if has_attachment {
+                        Some(self.attachment_path.clone())
+                    } else {
+                        None
+                    },
                 );
 
                 if let Ok(mut manager) = self.retry_manager.try_lock() {
@@ -1063,10 +1067,7 @@ pub async fn handle_background_events(
 
             // Handle regular events
             event = async {
-                match rx.recv() {
-                    Ok(event) => Some(event),
-                    Err(_) => None,
-                }
+                rx.recv().ok()
             } => {
                         let manager_internal = manager.clone();
         let tx_status_internal = tx_status.clone();
@@ -1184,67 +1185,24 @@ pub async fn handle_background_events(
                     local_pool.spawn_pinned(move || async move {
                         let contacts = contacts_mutex.lock().await;
 
-                        if let Ok(uuid) = uuid_str.parse()
-                            && let Some(contact) = contacts.get(&uuid)
-                        {
-                            let contact_info = ContactInfo {
-                                uuid: contact.uuid.to_string(),
-                                name: contact.name.clone(),
-                                phone_number: contact.phone_number.as_ref().map(|p| p.to_string()),
-                                verified_state: contact.verified.state,
-                                expire_timer: contact.expire_timer,
-                                has_avatar: contact.avatar.is_some(),
-                            };
-                            let _ = tx_status_internal
-                                .send(EventApp::ContactInfoReceived(contact_info));
+                            if let Ok(uuid) = uuid_str.parse() {
+                                if let Some(contact) = contacts.get(&uuid) {
+                                    let contact_info = ContactInfo {
+                                        uuid: contact.uuid.to_string(),
+                                        name: contact.name.clone(),
+                                        phone_number: contact.phone_number.as_ref().map(|p| p.to_string()),
+                                        verified_state: contact.verified.state,
+                                        expire_timer: contact.expire_timer,
+                                        has_avatar: contact.avatar.is_some(),
+                                    };
+                                    let _ = tx_status_internal.send(EventApp::ContactInfoReceived(contact_info));
 
-                            if let Some(ref avatar_attachment) = contact.avatar {
-                                let avatar_bytes: Vec<u8> = avatar_attachment.reader.to_vec();
-                                let _ = tx_status_internal
-                                    .send(EventApp::ContactAvatarReceived(avatar_bytes));
-                            }
+                                    if let Some(ref avatar_attachment) = contact.avatar {
+                                        let avatar_bytes: Vec<u8> = avatar_attachment.reader.to_vec();
+                                        let _ = tx_status_internal.send(EventApp::ContactAvatarReceived(avatar_bytes));
+                                    }
+                                }
                         }
-                    });
-                }
-            }
-        }
-    }
-}
-
-        async fn handle_send_text_event(
-            recipient: RecipientId,
-            text: String,
-            manager: &mut Manager<SqliteStore, Registered>,
-            current_contacts_mutex: &AsyncContactsMap,
-            tx_status: &mpsc::Sender<EventApp>,
-            retry_manager: &Arc<Mutex<RetryManager>>,
-            local_pool: &LocalPoolHandle,
-        ) {
-            // Create retry tracking entry
-            let outgoing_msg = OutgoingMessage::new(recipient.clone(), text.clone(), None);
-            let message_id = {
-                let mut retry_mgr = retry_manager.lock().await;
-                retry_mgr.add_message(outgoing_msg)
-            };
-
-            // Clone variables for the spawned task
-            let recipient_clone = recipient.clone();
-            let text_clone = text.clone();
-            let tx_status_clone = tx_status.clone();
-            let retry_manager_clone = Arc::clone(retry_manager);
-            let current_contacts_clone = Arc::clone(current_contacts_mutex);
-
-            // Spawn the send operation
-            local_pool.spawn_pinned(move || async move {
-                // Attempt to send based on recipient type
-                let send_result = match recipient_clone {
-                    RecipientId::Contact(uuid) => {
-                        send::contact::send_message_tui(
-                            uuid.to_string(),
-                            text_clone,
-                            manager, // Note: This might need adjustment based on your manager structure
-                        )
-                            .await
                     }
                     RecipientId::Group(master_key) => {
                         send::group::send_message_tui(

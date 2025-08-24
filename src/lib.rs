@@ -21,9 +21,9 @@ pub mod logger;
 pub mod messages;
 pub mod paths;
 pub mod profile;
+mod retry_manager;
 pub mod tui;
 pub mod ui;
-mod retry_manager;
 
 pub mod sending {}
 
