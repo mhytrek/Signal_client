@@ -7,7 +7,6 @@ use tracing_subscriber::{EnvFilter, fmt::writer::BoxMakeWriter};
 use crate::env::{SIGNAL_LOGGER_LEVEL, SIGNAL_ONSCREEN_LOGGER};
 
 pub fn init_logger() {
-    // let logger_level = env::var(SIGNAL_LOGGER_LEVEL).unwrap_or(String::new());
     let filter = EnvFilter::builder()
         .with_default_directive(LevelFilter::INFO.into())
         .with_env_var(SIGNAL_LOGGER_LEVEL)
@@ -21,7 +20,7 @@ pub fn init_logger() {
             .with_ansi(true)
             .init();
     } else {
-        let file_writer = rolling::hourly(".", "signal_client.log");
+        let file_writer = rolling::hourly("logs", "signal_client.log");
         let (non_blocking, _guard) = tracing_appender::non_blocking(file_writer);
 
         tracing_subscriber::fmt()
