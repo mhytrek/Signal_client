@@ -23,6 +23,7 @@ pub mod paths;
 pub mod profile;
 pub mod tui;
 pub mod ui;
+mod retry_manager;
 
 pub mod sending {}
 
