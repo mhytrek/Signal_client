@@ -5,8 +5,9 @@ use std::path::PathBuf;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Config {
-    pub color_mode: bool,  // true for color, false for black-and-white
-    pub show_images: bool, // true to show images, false to hide them
+    pub color_mode: bool,       // true for color, false for black-and-white
+    pub show_images: bool,      // true to show images, false to hide them
+    pub compact_messages: bool, // true to have compact messages display
 }
 
 impl Default for Config {
@@ -14,6 +15,7 @@ impl Default for Config {
         Config {
             color_mode: true,
             show_images: true,
+            compact_messages: false,
         }
     }
 }
@@ -60,6 +62,10 @@ impl Config {
     /// Toggle image display
     pub fn toggle_show_images(&mut self) {
         self.show_images = !self.show_images;
+    }
+
+    pub fn toggle_compact_messages(&mut self) {
+        self.compact_messages = !self.compact_messages
     }
 
     /// Get primary color based on color mode

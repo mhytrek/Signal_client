@@ -356,17 +356,9 @@ impl App {
                 self.avatar_cache = Some(avatar_data);
                 Ok(false)
             }
-            EventApp::GetMessageHistory(uuid_str, mut messages) => {
-                // reversing the order of messages to print them out from the oldest to the latest
-                messages.reverse();
+            EventApp::GetMessageHistory(uuid_str, messages) => {
                 self.contact_messages.insert(uuid_str, messages);
-                self.message_selected = match self
-                    .contact_messages
-                    .get(&self.contacts[self.contact_selected].0)
-                {
-                    Some(msgs) => msgs.len().max(0),
-                    None => 0,
-                };
+                self.message_selected = 0;
                 Ok(false)
             }
             EventApp::ReceiveMessage => {
@@ -519,7 +511,7 @@ impl App {
                     }
                 },
 
-                KeyCode::Down => {
+                KeyCode::Up => {
                     let last_message = match self
                         .contact_messages
                         .get(&self.contacts[self.contact_selected].0)
@@ -532,7 +524,7 @@ impl App {
                         self.message_selected += 1;
                     }
                 }
-                KeyCode::Up => {
+                KeyCode::Down => {
                     if self.message_selected > 0 {
                         self.message_selected -= 1;
                     }
@@ -567,6 +559,12 @@ impl App {
                             self.avatar_image = None;
                         } else if self.avatar_cache.is_some() {
                             self.load_avatar();
+                        }
+                    }
+                    2 => {
+                        self.config.toggle_compact_messages();
+                        if let Err(e) = self.config.save() {
+                            eprintln!("Failed to save config: {e:?}");
                         }
                     }
                     _ => {}
