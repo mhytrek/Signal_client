@@ -160,7 +160,7 @@ fn render_chat(frame: &mut Frame, app: &App, area: Rect) {
         let min_width = 21; // hardcoded date format width
 
         let (heights, widths) =
-            calculate_message_sizes(messages, max_width, msg_padding, min_width);
+            calculate_message_dimensions(messages, max_width, msg_padding, min_width);
         let last_visible_start = calculate_last_visible_start(&heights, available_height);
         let start_index = app.message_selected.min(last_visible_start);
         let visible_msgs = get_visible_messages(
