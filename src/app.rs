@@ -7,13 +7,15 @@ use crate::profile::get_profile_tui;
 use crate::ui::render_ui;
 use crate::{
     AsyncContactsMap, AsyncRegisteredManager, config::Config, contacts, create_registered_manager,
-    devices,
+    devices, groups,
 };
 use anyhow::{Error, Result};
 use crossterm::event::{self, Event, KeyModifiers};
 use crossterm::event::{KeyCode, KeyEventKind};
 use presage::Manager;
 use presage::libsignal_service::Profile;
+use presage::libsignal_service::prelude::Uuid;
+use presage::libsignal_service::zkgroup::GroupMasterKeyBytes;
 use presage::manager::Registered;
 use presage_store_sqlite::SqliteStore;
 use ratatui::Terminal;
@@ -32,6 +34,63 @@ use tracing::error;
 
 use image::ImageFormat;
 use std::thread;
+
+pub enum DisplayId {
+    Contact(Uuid),
+    Group(GroupMasterKeyBytes),
+}
+
+pub trait DisplayEntity {
+    fn display_name(&self) -> &str;
+    fn id(&self) -> DisplayId;
+}
+
+#[derive(Clone)]
+pub struct DisplayContact {
+    display_name: String,
+    uuid: Uuid,
+}
+
+impl DisplayContact {
+    fn new(display_name: String, uuid: Uuid) -> Self {
+        Self { display_name, uuid }
+    }
+}
+
+impl DisplayEntity for DisplayContact {
+    fn display_name(&self) -> &str {
+        &self.display_name
+    }
+
+    fn id(&self) -> DisplayId {
+        DisplayId::Contact(self.uuid.clone())
+    }
+}
+
+#[derive(Clone)]
+pub struct DisplayGroup {
+    display_name: String,
+    master_key: GroupMasterKeyBytes,
+}
+
+impl DisplayGroup {
+    fn new(display_name: String, master_key: GroupMasterKeyBytes) -> Self {
+        Self {
+            display_name,
+            master_key,
+        }
+    }
+}
+
+impl DisplayEntity for DisplayGroup {
+    fn display_name(&self) -> &str {
+        &self.display_name
+    }
+
+    fn id(&self) -> DisplayId {
+        DisplayId::Group(self.master_key.clone())
+    }
+}
 
 #[derive(PartialEq)]
 pub enum CurrentScreen {
@@ -68,7 +127,7 @@ pub struct ContactInfo {
 }
 
 pub struct App {
-    pub contacts: Vec<(String, String, String)>, // contact_uuid, contact_name, input for this contact
+    pub contacts: Vec<(Box<dyn DisplayEntity>, String)>, // contact_uuid, contact_name, input for this contact
 
     pub contact_selected: usize,
     pub message_selected: usize,
@@ -795,15 +854,27 @@ pub async fn handle_synchronization(
             }
         };
 
-        let new_mutex = Arc::clone(&manager_mutex);
-        let result = contacts::list_contacts_tui(new_mutex).await;
+        let contacts_result = contacts::list_contacts_tui(manager_mutex.clone()).await;
+        let groups_result = groups::list_groups_tui(manager_mutex.clone()).await;
 
-        let contacts = match result {
+        let contacts = match contacts_result {
             Ok(list) => list,
-            Err(_) => continue,
+            // TODO: (@jbrs) Handle that differently so the groups can be checked
+            Err(_) => {
+                error!("{e}");
+                continue;
+            }
         };
 
-        let contact_names: Vec<(String, String)> = contacts
+        let groups = match groups_result {
+            Ok(list) => list,
+            Err(e) => {
+                error!("{e}");
+                continue;
+            }
+        };
+
+        let contact_displays: Vec<Box<DisplayContact>> = contacts
             .into_iter()
             .filter_map(|contact_res| {
                 let contact = contact_res.ok()?;
@@ -818,19 +889,40 @@ pub async fn handle_synchronization(
                     uuid_str.clone()
                 };
 
-                Some((uuid_str, display_name))
+                let display_contact = Box::new(DisplayContact::new(display_name, contact.uuid));
+
+                Some(display_contact)
             })
             .collect();
 
-        if contact_names != previous_contacts {
-            if tx
-                .send(EventApp::ContactsList(contact_names.clone()))
-                .is_err()
-            {
+        let group_displays: Vec<Box<DisplayGroup>> = groups
+            .into_iter()
+            .filter_map(|groups_res| {
+                let (group_master_key, group) = groups_res.ok()?;
+
+                let display_name = group.title;
+                let display_group = Box::new(DisplayGroup::new(display_name, group_master_key));
+
+                Some(display_group)
+            })
+            .collect();
+
+        let display_entities: Vec<Box<dyn DisplayEntity>> = contact_displays
+            .into_iter()
+            .map(|c| c as Box<dyn DisplayEntity>)
+            .chain(
+                group_displays
+                    .into_iter()
+                    .map(|g| g as Box<dyn DisplayEntity>),
+            )
+            .collect();
+
+        if contact_displays != previous_contacts {
+            if tx.send(EventApp::ContactsList(&contact_displays)).is_err() {
                 break;
             }
 
-            previous_contacts = contact_names;
+            previous_contacts = contact_displays;
         }
 
         if !messages.is_empty() && tx.send(EventApp::ReceiveMessage).is_err() {}
