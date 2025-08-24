@@ -35,17 +35,24 @@ use tracing::error;
 use image::ImageFormat;
 use std::thread;
 
+#[derive(PartialEq)]
 pub enum DisplayId {
     Contact(Uuid),
     Group(GroupMasterKeyBytes),
 }
 
-pub trait DisplayEntity {
+impl Default for DisplayId {
+    fn default() -> Self {
+        Self::Contact(Uuid::nil())
+    }
+}
+
+pub trait DisplayRecipient: Send {
     fn display_name(&self) -> &str;
     fn id(&self) -> DisplayId;
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct DisplayContact {
     display_name: String,
     uuid: Uuid,
@@ -57,7 +64,7 @@ impl DisplayContact {
     }
 }
 
-impl DisplayEntity for DisplayContact {
+impl DisplayRecipient for DisplayContact {
     fn display_name(&self) -> &str {
         &self.display_name
     }
@@ -67,7 +74,7 @@ impl DisplayEntity for DisplayContact {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct DisplayGroup {
     display_name: String,
     master_key: GroupMasterKeyBytes,
@@ -82,7 +89,7 @@ impl DisplayGroup {
     }
 }
 
-impl DisplayEntity for DisplayGroup {
+impl DisplayRecipient for DisplayGroup {
     fn display_name(&self) -> &str {
         &self.display_name
     }
@@ -540,6 +547,7 @@ impl App {
             }
         }
         if let Some((recipient, input)) = self.recipients.get_mut(self.selected_recipient) {
+            let name = recipient.display_name();
             let message_text = input.trim().to_string();
             let has_text = !message_text.is_empty();
 
