@@ -1,7 +1,7 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum DeliveryStatus {
@@ -83,6 +83,12 @@ pub struct RetryManager {
     retry_delay_seconds: u64,
 }
 
+impl Default for RetryManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RetryManager {
     pub fn new() -> Self {
         Self {
@@ -126,8 +132,9 @@ impl RetryManager {
         let cutoff = OutgoingMessage::current_timestamp() - (24 * 60 * 60 * 1000); // 24 hours
 
         self.outgoing_messages.retain(|_, msg| {
-            msg.created_at > cutoff ||
-                (!matches!(msg.status, DeliveryStatus::Sent) && msg.retry_count < self.max_retries)
+            msg.created_at > cutoff
+                || (!matches!(msg.status, DeliveryStatus::Sent)
+                    && msg.retry_count < self.max_retries)
         });
     }
 
@@ -139,6 +146,8 @@ impl RetryManager {
     }
 
     pub fn get_message_status(&self, message_id: &str) -> Option<&DeliveryStatus> {
-        self.outgoing_messages.get(message_id).map(|msg| &msg.status)
+        self.outgoing_messages
+            .get(message_id)
+            .map(|msg| &msg.status)
     }
 }

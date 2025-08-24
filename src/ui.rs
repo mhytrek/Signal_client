@@ -318,9 +318,9 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
                         Style::default().fg(app.config.get_error_color())
                     } else {
                         Style::default().fg(app.config.get_primary_color())
-                    }
+                    },
                 )
-            },
+            }
             CurrentScreen::Options => Span::styled(
                 "(q) to exit | (↑ ↓) to navigate | (ENTER/SPACE) to toggle option",
                 Style::default().fg(app.config.get_primary_color()),

@@ -29,11 +29,11 @@ use tokio::runtime::Builder;
 use tokio::sync::{Mutex, RwLock};
 use tracing::error;
 
+use crate::retry_manager::{OutgoingMessage, RetryManager};
 use image::ImageFormat;
 use std::thread;
 use std::time::Duration;
 use tokio::time::interval;
-use crate::retry_manager::{OutgoingMessage, RetryManager};
 
 #[derive(PartialEq)]
 pub enum CurrentScreen {
@@ -205,13 +205,13 @@ impl App {
 
                 self.manager = Some(new_manager);
 
-                if let Err(e) =
-                    init_background_threads(
-                        self.tx_thread.clone(),
-                        rx,
-                        new_manager_mutex,
-                        Arc::clone(&self.retry_manager),
-                    ).await
+                if let Err(e) = init_background_threads(
+                    self.tx_thread.clone(),
+                    rx,
+                    new_manager_mutex,
+                    Arc::clone(&self.retry_manager),
+                )
+                .await
                 {
                     eprintln!("Failed to init threads: {e:?}");
                 }
@@ -430,7 +430,11 @@ impl App {
                 let outgoing = OutgoingMessage::new(
                     name.clone(),
                     message_text.clone(),
-                    if has_attachment { Some(self.attachment_path.clone()) } else { None }
+                    if has_attachment {
+                        Some(self.attachment_path.clone())
+                    } else {
+                        None
+                    },
                 );
 
                 if let Ok(mut manager) = self.retry_manager.try_lock() {
@@ -438,11 +442,16 @@ impl App {
                 }
 
                 if has_attachment {
-                    tx.send(EventSend::SendAttachment(name.clone(), message_text, self.attachment_path.clone()))
-                        .unwrap();
+                    tx.send(EventSend::SendAttachment(
+                        name.clone(),
+                        message_text,
+                        self.attachment_path.clone(),
+                    ))
+                    .unwrap();
                     self.attachment_path.clear();
                 } else {
-                    tx.send(EventSend::SendText(name.clone(), message_text)).unwrap();
+                    tx.send(EventSend::SendText(name.clone(), message_text))
+                        .unwrap();
                 }
 
                 input.clear();
@@ -998,10 +1007,7 @@ pub async fn handle_background_events(
 
             // Handle regular events
             event = async {
-                match rx.recv() {
-                    Ok(event) => Some(event),
-                    Err(_) => None,
-                }
+                rx.recv().ok()
             } => {
                 if let Some(event) = event {
                     match event {
@@ -1115,8 +1121,8 @@ pub async fn handle_background_events(
                             let contacts_mutex = Arc::clone(&current_contacts_mutex);
                             let contacts = contacts_mutex.lock().await;
 
-                            if let Ok(uuid) = uuid_str.parse() {
-                                if let Some(contact) = contacts.get(&uuid) {
+                            if let Ok(uuid) = uuid_str.parse()
+                                && let Some(contact) = contacts.get(&uuid) {
                                     let contact_info = ContactInfo {
                                         uuid: contact.uuid.to_string(),
                                         name: contact.name.clone(),
@@ -1132,7 +1138,6 @@ pub async fn handle_background_events(
                                         let _ = tx_status.send(EventApp::ContactAvatarReceived(avatar_bytes));
                                     }
                                 }
-                            }
                         }
                     }
                 } else {
