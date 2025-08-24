@@ -16,6 +16,7 @@ use presage::store::Thread;
 use presage::store::{ContentExt, ContentsStore};
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
 use tokio::sync::Mutex;
+use tracing::trace;
 
 use crate::AsyncContactsMap;
 use crate::AsyncRegisteredManager;
@@ -36,7 +37,9 @@ async fn loop_no_contents(messages: impl Stream<Item = Received>) {
         match received {
             Received::QueueEmpty => break,
             Received::Contacts => {}
-            Received::Content(_) => {}
+            Received::Content(content) => {
+                trace!("{:#?}", content.body);
+            }
         }
     }
 }
@@ -48,6 +51,7 @@ async fn loop_with_contents(messages: impl Stream<Item = Received>, contents: &m
             Received::QueueEmpty => break,
             Received::Contacts => {}
             Received::Content(content) => {
+                trace!("{:#?}", content.body);
                 contents.push(*content);
             }
         }
