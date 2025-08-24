@@ -35,6 +35,63 @@ use tracing::error;
 use image::ImageFormat;
 use std::thread;
 
+pub enum DisplayId {
+    Contact(Uuid),
+    Group(GroupMasterKeyBytes),
+}
+
+pub trait DisplayEntity {
+    fn display_name(&self) -> &str;
+    fn id(&self) -> DisplayId;
+}
+
+#[derive(Clone)]
+pub struct DisplayContact {
+    display_name: String,
+    uuid: Uuid,
+}
+
+impl DisplayContact {
+    fn new(display_name: String, uuid: Uuid) -> Self {
+        Self { display_name, uuid }
+    }
+}
+
+impl DisplayEntity for DisplayContact {
+    fn display_name(&self) -> &str {
+        &self.display_name
+    }
+
+    fn id(&self) -> DisplayId {
+        DisplayId::Contact(self.uuid.clone())
+    }
+}
+
+#[derive(Clone)]
+pub struct DisplayGroup {
+    display_name: String,
+    master_key: GroupMasterKeyBytes,
+}
+
+impl DisplayGroup {
+    fn new(display_name: String, master_key: GroupMasterKeyBytes) -> Self {
+        Self {
+            display_name,
+            master_key,
+        }
+    }
+}
+
+impl DisplayEntity for DisplayGroup {
+    fn display_name(&self) -> &str {
+        &self.display_name
+    }
+
+    fn id(&self) -> DisplayId {
+        DisplayId::Group(self.master_key.clone())
+    }
+}
+
 #[derive(PartialEq)]
 pub enum RecipientId {
     Contact(Uuid),
