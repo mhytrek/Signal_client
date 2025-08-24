@@ -2,11 +2,10 @@ target/
 store/
 .vscode/
 assets/
+logs/
 
 # Tags for vim
 tags
 
 store.db
 store.db-journal
-
-signal_client.log*
