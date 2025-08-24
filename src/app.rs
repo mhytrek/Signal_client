@@ -36,17 +36,24 @@ use tracing::error;
 use image::ImageFormat;
 use std::thread;
 
+#[derive(PartialEq)]
 pub enum DisplayId {
     Contact(Uuid),
     Group(GroupMasterKeyBytes),
 }
 
-pub trait DisplayEntity {
+impl Default for DisplayId {
+    fn default() -> Self {
+        Self::Contact(Uuid::nil())
+    }
+}
+
+pub trait DisplayRecipient: Send {
     fn display_name(&self) -> &str;
     fn id(&self) -> DisplayId;
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct DisplayContact {
     display_name: String,
     uuid: Uuid,
@@ -58,7 +65,7 @@ impl DisplayContact {
     }
 }
 
-impl DisplayEntity for DisplayContact {
+impl DisplayRecipient for DisplayContact {
     fn display_name(&self) -> &str {
         &self.display_name
     }
@@ -68,7 +75,7 @@ impl DisplayEntity for DisplayContact {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct DisplayGroup {
     display_name: String,
     master_key: GroupMasterKeyBytes,
@@ -83,7 +90,7 @@ impl DisplayGroup {
     }
 }
 
-impl DisplayEntity for DisplayGroup {
+impl DisplayRecipient for DisplayGroup {
     fn display_name(&self) -> &str {
         &self.display_name
     }
@@ -128,9 +135,9 @@ pub struct ContactInfo {
 }
 
 pub struct App {
-    pub contacts: Vec<(Box<dyn DisplayEntity>, String)>, // contact_uuid, contact_name, input for this contact
+    pub recipients: Vec<(Box<dyn DisplayRecipient>, String)>, // contact_uuid, contact_name, input for this contact
 
-    pub contact_selected: usize,
+    pub selected_recipient: usize,
     pub message_selected: usize,
 
     // New fields for contact info
@@ -177,7 +184,7 @@ pub enum NetworkStatus {
 
 pub enum EventApp {
     KeyInput(event::KeyEvent),
-    ContactsList(Vec<(String, String)>),
+    ContactsList(Vec<Box<dyn DisplayRecipient>>),
     LinkingFinished((bool, Option<Manager<SqliteStore, Registered>>)),
     LinkingError(String),
     NetworkStatusChanged(NetworkStatus),
@@ -207,8 +214,8 @@ impl App {
         let picker = Picker::from_query_stdio().ok();
         App {
             linking_status,
-            contacts: vec![],
-            contact_selected: 0,
+            recipients: vec![],
+            selected_recipient: 0,
             message_selected: 0,
             character_index: 0,
             current_screen: CurrentScreen::LinkingNewDevice,
@@ -338,27 +345,27 @@ impl App {
                 self.linking_status = LinkingStatus::Error(error_msg);
                 Ok(false)
             }
-            EventApp::ContactsList(contacts) => {
+            EventApp::ContactsList(recipients) => {
                 if self.current_screen == CurrentScreen::Syncing {
                     self.current_screen = CurrentScreen::Main;
                 }
                 // This is added because contacts change order in the contact list
                 // and if that happens the same contact should remain selected
-                let selected_uuid = self
-                    .contacts
-                    .get(self.contact_selected)
-                    .map(|contact| contact.0.clone())
+                let selected_id = self
+                    .recipients
+                    .get(self.selected_recipient)
+                    .map(|contact| contact.0.id())
                     .unwrap_or_default();
 
-                self.contacts = contacts
+                self.recipients = recipients
                     .into_iter()
-                    .map(|(uuid, name)| (uuid, name, String::new()))
+                    .map(|recipient| (recipient, String::new()))
                     .collect();
 
-                self.contact_selected = self
-                    .contacts
+                self.selected_recipient = self
+                    .recipients
                     .iter()
-                    .position(|c| c.0 == selected_uuid)
+                    .position(|c| c.0.id() == selected_id)
                     .unwrap_or(0);
                 Ok(false)
             }
@@ -427,14 +434,14 @@ impl App {
     }
 
     fn enter_char(&mut self, new_char: char) {
-        if let Some((_, _, input)) = self.contacts.get_mut(self.contact_selected) {
+        if let Some((_, input)) = self.recipients.get_mut(self.selected_recipient) {
             input.push(new_char);
             self.character_index += 1;
         }
     }
 
     fn delete_char(&mut self) {
-        if let Some((_, _, input)) = self.contacts.get_mut(self.contact_selected)
+        if let Some((_, input)) = self.recipients.get_mut(self.selected_recipient)
             && self.character_index > 0
         {
             input.pop();
@@ -462,14 +469,15 @@ impl App {
                 return;
             }
         }
-        if let Some((_uuid, name, input)) = self.contacts.get_mut(self.contact_selected) {
+        if let Some((recipient, input)) = self.recipients.get_mut(self.selected_recipient) {
+            let name = recipient.display_name();
             let message_text = input.trim().to_string();
             let has_text = !message_text.is_empty();
 
             if has_text || has_attachment {
                 if has_attachment {
                     tx.send(EventSend::SendAttachment(
-                        name.clone(),
+                        name.to_string(),
                         message_text.clone(),
                         self.attachment_path.clone(),
                     ))
@@ -477,7 +485,7 @@ impl App {
                     self.attachment_path.clear();
                     self.attachment_error = None;
                 } else {
-                    tx.send(EventSend::SendText(name.clone(), message_text.clone()))
+                    tx.send(EventSend::SendText(name.to_string(), message_text.clone()))
                         .unwrap();
                 }
 
@@ -489,10 +497,13 @@ impl App {
     }
 
     fn synchronize_messages_for_selected_contact(&mut self) {
+        let contact_uuid = match self.recipients[self.selected_recipient].0.id() {
+            DisplayId::Contact(uuid) => uuid.to_string(),
+            // TODO: (@jbrs) Handle this
+            DisplayId::Group(_) => return,
+        };
         self.tx_tui
-            .send(EventSend::GetMessagesForContact(
-                self.contacts[self.contact_selected].0.clone(),
-            ))
+            .send(EventSend::GetMessagesForContact(contact_uuid))
             .unwrap();
     }
 
@@ -511,17 +522,22 @@ impl App {
                 KeyCode::Char('q') | KeyCode::Esc => self.current_screen = Exiting,
                 KeyCode::Char('e') => self.current_screen = Options,
                 KeyCode::Down | KeyCode::Char('s') => {
-                    if self.contact_selected < self.contacts.len() - 1 {
-                        self.contact_selected += 1;
+                    if self.selected_recipient < self.recipients.len() - 1 {
+                        self.selected_recipient += 1;
                     }
                 }
                 KeyCode::Up | KeyCode::Char('w') => {
-                    if self.contact_selected > 0 {
-                        self.contact_selected -= 1;
+                    if self.selected_recipient > 0 {
+                        self.selected_recipient -= 1;
                     }
                 }
                 KeyCode::Char('i') => {
-                    let contact_uuid = self.contacts[self.contact_selected].0.clone();
+                    let selected_recipient_id = self.recipients[self.selected_recipient].0.id();
+                    let contact_uuid = match selected_recipient_id {
+                        DisplayId::Contact(uuid) => uuid.to_string(),
+                        // TODO: (@jbrs) Handle this correctly
+                        DisplayId::Group(_) => return Ok(false),
+                    };
                     self.tx_tui
                         .send(EventSend::GetContactInfo(contact_uuid))
                         .unwrap();
@@ -568,10 +584,12 @@ impl App {
                 },
 
                 KeyCode::Up => {
-                    let last_message = match self
-                        .contact_messages
-                        .get(&self.contacts[self.contact_selected].0)
-                    {
+                    let contact_uuid = match self.recipients[self.selected_recipient].0.id() {
+                        DisplayId::Contact(uuid) => uuid.to_string(),
+                        // TODO: (@jbrs) Handle this
+                        DisplayId::Group(_) => return Ok(false),
+                    };
+                    let last_message = match self.contact_messages.get(&contact_uuid) {
                         Some(msgs) => msgs.len(),
                         None => 0,
                     };
@@ -831,7 +849,9 @@ pub async fn handle_synchronization(
         Ok(_) => {}
         Err(e) => error!("Initial contact sync failed: {e}"),
     }
-    let mut previous_contacts: Vec<(String, String)> = Vec::new();
+    drop(manager);
+    let mut previous_contacts: Vec<Box<DisplayContact>> = Vec::new();
+    let mut previous_groups: Vec<Box<DisplayGroup>> = Vec::new();
     loop {
         let new_contacts_mutex = Arc::clone(&current_contacts_mutex);
 
@@ -856,7 +876,7 @@ pub async fn handle_synchronization(
         let contacts = match contacts_result {
             Ok(list) => list,
             // TODO: (@jbrs) Handle that differently so the groups can be checked
-            Err(_) => {
+            Err(e) => {
                 error!("{e}");
                 continue;
             }
@@ -903,22 +923,31 @@ pub async fn handle_synchronization(
             })
             .collect();
 
-        let display_entities: Vec<Box<dyn DisplayEntity>> = contact_displays
-            .into_iter()
-            .map(|c| c as Box<dyn DisplayEntity>)
+        let contacts_differ = contact_displays != previous_contacts;
+        let groups_differ = group_displays != previous_groups;
+
+        let display_recipients: Vec<Box<dyn DisplayRecipient>> = contact_displays
+            .iter()
+            .cloned()
+            .map(|c| c as Box<dyn DisplayRecipient>)
             .chain(
                 group_displays
-                    .into_iter()
-                    .map(|g| g as Box<dyn DisplayEntity>),
+                    .iter()
+                    .cloned()
+                    .map(|g| g as Box<dyn DisplayRecipient>),
             )
             .collect();
 
-        if contact_displays != previous_contacts {
-            if tx.send(EventApp::ContactsList(&contact_displays)).is_err() {
+        if contacts_differ || groups_differ {
+            if tx.send(EventApp::ContactsList(display_recipients)).is_err() {
                 break;
             }
-
-            previous_contacts = contact_displays;
+            if contacts_differ {
+                previous_contacts = contact_displays;
+            }
+            if groups_differ {
+                previous_groups = group_displays;
+            }
         }
 
         if !messages.is_empty() && tx.send(EventApp::ReceiveMessage).is_err() {}
