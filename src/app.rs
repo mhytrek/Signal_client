@@ -27,7 +27,7 @@ use std::sync::mpsc::{self, Sender};
 use std::{fs, io};
 use tokio::runtime::Builder;
 use tokio::sync::{Mutex, RwLock};
-use tracing::error;
+use tracing::{error, info};
 
 use crate::retry_manager::{OutgoingMessage, RetryManager};
 use image::ImageFormat;
@@ -687,6 +687,14 @@ fn is_connection_error(e: &Error) -> bool {
         .any(|keyword| msg.contains(keyword))
 }
 
+fn is_delivery_confirmation_timeout(e: &Error) -> bool {
+    let msg = e.to_string().to_lowercase();
+    msg.contains("websocket closing while waiting for a response") ||
+        msg.contains("websocket closing") && msg.contains("waiting") ||
+        msg.contains("websocket closing") && msg.contains("sending") ||
+        msg.contains("timeout") && msg.contains("response")
+}
+
 /// spawn thread to sync contacts and to send messeges
 pub async fn init_background_threads(
     tx_thread: mpsc::Sender<EventApp>,
@@ -946,12 +954,8 @@ pub async fn handle_background_events(
     tx_status: mpsc::Sender<EventApp>,
     retry_manager: Arc<Mutex<RetryManager>>,
 ) {
-    // Set up retry timer - check every 30 seconds
     let mut retry_interval = interval(Duration::from_secs(30));
-    // Set up cleanup timer - clean old messages every hour
     let mut cleanup_interval = interval(Duration::from_secs(3600));
-
-    // Track current message being sent for retry purposes
 
     loop {
         tokio::select! {
@@ -998,28 +1002,24 @@ pub async fn handle_background_events(
                 drop(manager);
             }
 
-            // Handle cleanup timer
             _ = cleanup_interval.tick() => {
                 let mut manager = retry_manager.lock().await;
                 manager.cleanup_old_messages();
                 drop(manager);
             }
 
-            // Handle regular events
             event = async {
                 rx.recv().ok()
             } => {
                 if let Some(event) = event {
                     match event {
                         EventSend::SendText(recipient, text) => {
-                            // Create retry tracking entry
                             let outgoing_msg = OutgoingMessage::new(recipient.clone(), text.clone(), None);
                             let message_id = {
                                 let mut manager = retry_manager.lock().await;
                                 manager.add_message(outgoing_msg)
                             };
 
-                            // Attempt to send
                             match send_message_tui(
                                 recipient.clone(),
                                 text.clone(),
@@ -1030,16 +1030,23 @@ pub async fn handle_background_events(
                                     let mut manager = retry_manager.lock().await;
                                     manager.mark_sent(&message_id);
                                     let _ = tx_status.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
-                                    let _ = tx_status.send(EventApp::ReceiveMessage);
+                                    // let _ = tx_status.send(EventApp::ReceiveMessage);
                                 }
                                 Err(e) => {
+                                    info!("new error: {}", e);
                                     let mut manager = retry_manager.lock().await;
-                                    manager.mark_failed(&message_id, e.to_string());
 
-                                    if is_connection_error(&e) {
-                                        let _ = tx_status.send(EventApp::NetworkStatusChanged(
-                                            NetworkStatus::Disconnected("Cannot send".to_string())
-                                        ));
+                                    if is_delivery_confirmation_timeout(&e) {
+                                        manager.mark_sent(&message_id);
+                                        info!("Message likely delivered despite confirmation timeout");
+                                    } else {
+                                        manager.mark_failed(&message_id, e.to_string());
+
+                                        if is_connection_error(&e) {
+                                            let _ = tx_status.send(EventApp::NetworkStatusChanged(
+                                                NetworkStatus::Disconnected("Cannot send".to_string())
+                                            ));
+                                        }
                                     }
                                 }
                             }
@@ -1072,16 +1079,22 @@ pub async fn handle_background_events(
                                     let mut manager = retry_manager.lock().await;
                                     manager.mark_sent(&message_id);
                                     let _ = tx_status.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
-                                    let _ = tx_status.send(EventApp::ReceiveMessage);
+                                    // let _ = tx_status.send(EventApp::ReceiveMessage);
                                 }
                                 Err(e) => {
                                     let mut manager = retry_manager.lock().await;
-                                    manager.mark_failed(&message_id, e.to_string());
 
-                                    if is_connection_error(&e) {
-                                        let _ = tx_status.send(EventApp::NetworkStatusChanged(
-                                            NetworkStatus::Disconnected("Cannot send".to_string())
-                                        ));
+                                    if is_delivery_confirmation_timeout(&e) {
+                                        manager.mark_sent(&message_id);
+                                        info!("Message likely delivered despite confirmation timeout");
+                                    } else {
+                                        manager.mark_failed(&message_id, e.to_string());
+
+                                        if is_connection_error(&e) {
+                                            let _ = tx_status.send(EventApp::NetworkStatusChanged(
+                                                NetworkStatus::Disconnected("Cannot send".to_string())
+                                            ));
+                                        }
                                     }
                                 }
                             }
