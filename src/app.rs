@@ -23,7 +23,7 @@ use std::collections::HashMap;
 use std::io::Stderr;
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Sender};
 use std::{fs, io};
 use tokio::runtime::Builder;
 use tokio::sync::{Mutex, RwLock};
@@ -31,6 +31,9 @@ use tracing::error;
 
 use image::ImageFormat;
 use std::thread;
+use std::time::Duration;
+use tokio::time::interval;
+use crate::retry_manager::{OutgoingMessage, RetryManager};
 
 #[derive(PartialEq)]
 pub enum CurrentScreen {
@@ -86,6 +89,9 @@ pub struct App {
     pub attachment_path: String,
     pub attachment_error: Option<String>,
 
+    pub retry_manager: Arc<Mutex<RetryManager>>,
+    pub message_id_map: HashMap<String, String>,
+
     pub input_focus: InputFocus,
 
     pub profile: Option<Profile>,
@@ -137,6 +143,7 @@ pub enum EventSend {
     SendAttachment(String, String, String),
     GetMessagesForContact(String),
     GetContactInfo(String),
+    // RetryFailedMessages,
 }
 
 impl App {
@@ -157,6 +164,9 @@ impl App {
             attachment_path: String::new(),
             attachment_error: None,
             input_focus: InputFocus::Message,
+
+            retry_manager: Arc::new(Mutex::new(RetryManager::new())),
+            message_id_map: HashMap::new(),
 
             profile: None,
             avatar_cache: None,
@@ -196,7 +206,12 @@ impl App {
                 self.manager = Some(new_manager);
 
                 if let Err(e) =
-                    init_background_threads(self.tx_thread.clone(), rx, new_manager_mutex).await
+                    init_background_threads(
+                        self.tx_thread.clone(),
+                        rx,
+                        new_manager_mutex,
+                        Arc::clone(&self.retry_manager),
+                    ).await
                 {
                     eprintln!("Failed to init threads: {e:?}");
                 }
@@ -335,6 +350,7 @@ impl App {
                                 self.tx_thread.clone(),
                                 rx,
                                 new_manager_mutex,
+                                Arc::clone(&self.retry_manager),
                             )
                             .await
                             {
@@ -406,28 +422,31 @@ impl App {
                 return;
             }
         }
-        if let Some((_uuid, name, input)) = self.contacts.get_mut(self.contact_selected) {
+        if let Some((_, name, input)) = self.contacts.get_mut(self.contact_selected) {
             let message_text = input.trim().to_string();
-            let has_text = !message_text.is_empty();
+            let has_attachment = !self.attachment_path.trim().is_empty();
 
-            if has_text || has_attachment {
-                if has_attachment {
-                    tx.send(EventSend::SendAttachment(
-                        name.clone(),
-                        message_text.clone(),
-                        self.attachment_path.clone(),
-                    ))
-                    .unwrap();
-                    self.attachment_path.clear();
-                    self.attachment_error = None;
-                } else {
-                    tx.send(EventSend::SendText(name.clone(), message_text.clone()))
-                        .unwrap();
+            if !message_text.is_empty() || has_attachment {
+                let outgoing = OutgoingMessage::new(
+                    name.clone(),
+                    message_text.clone(),
+                    if has_attachment { Some(self.attachment_path.clone()) } else { None }
+                );
+
+                if let Ok(mut manager) = self.retry_manager.try_lock() {
+                    let _message_id = manager.add_message(outgoing.clone());
                 }
 
-                self.character_index = 0;
+                if has_attachment {
+                    tx.send(EventSend::SendAttachment(name.clone(), message_text, self.attachment_path.clone()))
+                        .unwrap();
+                    self.attachment_path.clear();
+                } else {
+                    tx.send(EventSend::SendText(name.clone(), message_text)).unwrap();
+                }
 
                 input.clear();
+                self.character_index = 0;
             }
         }
     }
@@ -485,6 +504,9 @@ impl App {
                 KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     self.synchronize_messages_for_selected_contact();
                 }
+                // KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                //     tx.send(EventSend::RetryFailedMessages).unwrap();
+                // }
                 KeyCode::Esc | KeyCode::Left => self.current_screen = Main,
                 KeyCode::Tab => {
                     self.input_focus = match self.input_focus {
@@ -661,6 +683,7 @@ pub async fn init_background_threads(
     tx_thread: mpsc::Sender<EventApp>,
     rx_thread: mpsc::Receiver<EventSend>,
     manager: AsyncRegisteredManager,
+    retry_manager: Arc<Mutex<RetryManager>>,
 ) -> Result<()> {
     let new_manager_mutex = Arc::clone(&manager);
     let current_contacts_mutex: AsyncContactsMap =
@@ -690,6 +713,7 @@ pub async fn init_background_threads(
     let rx_sending_thread = rx_thread;
     let new_contacts = Arc::clone(&current_contacts_mutex);
     let tx_status_clone = tx_thread.clone();
+    let retry_manager_clone = Arc::clone(&retry_manager);
     thread::Builder::new()
         .name(String::from("background_events_thread"))
         .stack_size(1024 * 1024 * 8)
@@ -705,6 +729,7 @@ pub async fn init_background_threads(
                     new_manager,
                     new_contacts,
                     tx_status_clone,
+                    retry_manager_clone,
                 )
                 .await;
             })
@@ -906,130 +931,212 @@ pub async fn handle_synchronization(
 // }
 
 pub async fn handle_background_events(
-    rx: Receiver<EventSend>,
+    rx: std::sync::mpsc::Receiver<EventSend>,
     manager_mutex: AsyncRegisteredManager,
     current_contacts_mutex: AsyncContactsMap,
     tx_status: mpsc::Sender<EventApp>,
+    retry_manager: Arc<Mutex<RetryManager>>,
 ) {
+    // Set up retry timer - check every 30 seconds
+    let mut retry_interval = interval(Duration::from_secs(30));
+    // Set up cleanup timer - clean old messages every hour
+    let mut cleanup_interval = interval(Duration::from_secs(3600));
+
+    // Track current message being sent for retry purposes
+
     loop {
-        if let Ok(event) = rx.recv() {
-            match event {
-                EventSend::SendText(recipient, text) => {
-                    match send_message_tui(
-                        recipient.clone(),
-                        text.clone(),
-                        Arc::clone(&manager_mutex),
-                        Arc::clone(&current_contacts_mutex),
-                    )
-                    .await
-                    {
-                        Ok(_) => {
-                            let _ = tx_status
-                                .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
-                        }
-                        Err(e) => {
-                            if is_connection_error(&e) {
-                                let _ = tx_status.send(EventApp::NetworkStatusChanged(
-                                    NetworkStatus::Disconnected(
-                                        "Cannot send: WiFi disconnected".to_string(),
-                                    ),
-                                ));
-                            } else {
-                                println!("Error sending message: {e:?}");
-                            }
-                        }
-                    }
+        tokio::select! {
+            _ = retry_interval.tick() => {
+                let mut manager = retry_manager.lock().await;
+                let messages_to_retry = manager.get_messages_to_retry();
 
-                    let _ = contacts::sync_contacts_tui(
-                        Arc::clone(&manager_mutex),
-                        Arc::clone(&current_contacts_mutex),
-                    )
-                    .await;
-                }
-                EventSend::SendAttachment(recipient, text, attachment_path) => {
-                    match send_attachment_tui(
-                        recipient.clone(),
-                        text.clone(),
-                        attachment_path,
-                        Arc::clone(&manager_mutex),
-                        Arc::clone(&current_contacts_mutex),
-                    )
-                    .await
-                    {
-                        Ok(_) => {
-                            let _ = tx_status
-                                .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
-                        }
-                        Err(e) => {
-                            if is_connection_error(&e) {
-                                let _ = tx_status.send(EventApp::NetworkStatusChanged(
-                                    NetworkStatus::Disconnected(
-                                        "Cannot send: WiFi disconnected".to_string(),
-                                    ),
-                                ));
-                            } else {
-                                println!("Error sending attachment: {e:?}");
-                            }
-                        }
-                    }
+                for msg in messages_to_retry {
 
-                    let _ = contacts::sync_contacts_tui(
-                        Arc::clone(&manager_mutex),
-                        Arc::clone(&current_contacts_mutex),
-                    )
-                    .await;
-                }
-                EventSend::GetMessagesForContact(uuid_str) => {
-                    let new_mutex = Arc::clone(&manager_mutex);
-                    let result =
-                        list_messages_tui(uuid_str.clone(), "0".to_string(), new_mutex).await;
-                    let messages = match result {
-                        Ok(list) => {
-                            let _ = tx_status
-                                .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
-                            list
-                        }
-                        Err(e) => {
-                            if is_connection_error(&e) {
-                                let _ = tx_status.send(EventApp::NetworkStatusChanged(
-                                    NetworkStatus::Disconnected(
-                                        "Cannot get messages from store: WiFi disconnected"
-                                            .to_string(),
-                                    ),
-                                ));
-                            }
-                            Vec::new()
-                        }
+                    let result = if let Some(attachment_path) = &msg.attachment_path {
+                        send_attachment_tui(
+                            msg.recipient.clone(),
+                            msg.text.clone(),
+                            attachment_path.clone(),
+                            Arc::clone(&manager_mutex),
+                            Arc::clone(&current_contacts_mutex),
+                        ).await
+                    } else {
+                        send_message_tui(
+                            msg.recipient.clone(),
+                            msg.text.clone(),
+                            Arc::clone(&manager_mutex),
+                            Arc::clone(&current_contacts_mutex),
+                        ).await
                     };
 
-                    if !messages.is_empty()
-                        && tx_status
-                            .send(EventApp::GetMessageHistory(uuid_str.clone(), messages))
-                            .is_err()
-                    {}
-                }
-                EventSend::GetContactInfo(uuid_str) => {
-                    let contacts_mutex = Arc::clone(&current_contacts_mutex);
-                    let contacts = contacts_mutex.lock().await;
+                    match result {
+                        Ok(_) => {
+                            manager.mark_sent(&msg.id);
+                            let _ = tx_status.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                        }
+                        Err(e) => {
+                            let error_msg = e.to_string();
+                            manager.mark_failed(&msg.id, error_msg.clone());
 
-                    if let Ok(uuid) = uuid_str.parse()
-                        && let Some(contact) = contacts.get(&uuid)
-                    {
-                        let contact_info = ContactInfo {
-                            uuid: contact.uuid.to_string(),
-                            name: contact.name.clone(),
-                            phone_number: contact.phone_number.as_ref().map(|p| p.to_string()),
-                            verified_state: contact.verified.state,
-                            expire_timer: contact.expire_timer,
-                            has_avatar: contact.avatar.is_some(),
-                        };
-                        let _ = tx_status.send(EventApp::ContactInfoReceived(contact_info));
-
-                        if let Some(ref avatar_attachment) = contact.avatar {
-                            let avatar_bytes: Vec<u8> = avatar_attachment.reader.to_vec();
-                            let _ = tx_status.send(EventApp::ContactAvatarReceived(avatar_bytes));
+                            if is_connection_error(&e) {
+                                let _ = tx_status.send(EventApp::NetworkStatusChanged(
+                                    NetworkStatus::Disconnected("Cannot send: WiFi disconnected".to_string())
+                                ));
+                            }
                         }
                     }
+                }
+                drop(manager);
+            }
+
+            // Handle cleanup timer
+            _ = cleanup_interval.tick() => {
+                let mut manager = retry_manager.lock().await;
+                manager.cleanup_old_messages();
+                drop(manager);
+            }
+
+            // Handle regular events
+            event = async {
+                match rx.recv() {
+                    Ok(event) => Some(event),
+                    Err(_) => None,
+                }
+            } => {
+                if let Some(event) = event {
+                    match event {
+                        EventSend::SendText(recipient, text) => {
+                            // Create retry tracking entry
+                            let outgoing_msg = OutgoingMessage::new(recipient.clone(), text.clone(), None);
+                            let message_id = {
+                                let mut manager = retry_manager.lock().await;
+                                manager.add_message(outgoing_msg)
+                            };
+
+                            // Attempt to send
+                            match send_message_tui(
+                                recipient.clone(),
+                                text.clone(),
+                                Arc::clone(&manager_mutex),
+                                Arc::clone(&current_contacts_mutex),
+                            ).await {
+                                Ok(_) => {
+                                    let mut manager = retry_manager.lock().await;
+                                    manager.mark_sent(&message_id);
+                                    let _ = tx_status.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                                    let _ = tx_status.send(EventApp::ReceiveMessage);
+                                }
+                                Err(e) => {
+                                    let mut manager = retry_manager.lock().await;
+                                    manager.mark_failed(&message_id, e.to_string());
+
+                                    if is_connection_error(&e) {
+                                        let _ = tx_status.send(EventApp::NetworkStatusChanged(
+                                            NetworkStatus::Disconnected("Cannot send".to_string())
+                                        ));
+                                    }
+                                }
+                            }
+
+                            let _ = contacts::sync_contacts_tui(
+                                Arc::clone(&manager_mutex),
+                                Arc::clone(&current_contacts_mutex),
+                            ).await;
+                        }
+
+                        EventSend::SendAttachment(recipient, text, attachment_path) => {
+                            let outgoing_msg = OutgoingMessage::new(
+                                recipient.clone(),
+                                text.clone(),
+                                Some(attachment_path.clone())
+                            );
+                            let message_id = {
+                                let mut manager = retry_manager.lock().await;
+                                manager.add_message(outgoing_msg)
+                            };
+
+                            match send_attachment_tui(
+                                recipient.clone(),
+                                text.clone(),
+                                attachment_path,
+                                Arc::clone(&manager_mutex),
+                                Arc::clone(&current_contacts_mutex),
+                            ).await {
+                                Ok(_) => {
+                                    let mut manager = retry_manager.lock().await;
+                                    manager.mark_sent(&message_id);
+                                    let _ = tx_status.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                                    let _ = tx_status.send(EventApp::ReceiveMessage);
+                                }
+                                Err(e) => {
+                                    let mut manager = retry_manager.lock().await;
+                                    manager.mark_failed(&message_id, e.to_string());
+
+                                    if is_connection_error(&e) {
+                                        let _ = tx_status.send(EventApp::NetworkStatusChanged(
+                                            NetworkStatus::Disconnected("Cannot send".to_string())
+                                        ));
+                                    }
+                                }
+                            }
+
+                            let _ = contacts::sync_contacts_tui(
+                                Arc::clone(&manager_mutex),
+                                Arc::clone(&current_contacts_mutex),
+                            ).await;
+                        }
+
+                        EventSend::GetMessagesForContact(uuid_str) => {
+                            let new_mutex = Arc::clone(&manager_mutex);
+                            let result = list_messages_tui(uuid_str.clone(), "0".to_string(), new_mutex).await;
+                            let messages = match result {
+                                Ok(list) => {
+                                    let _ = tx_status.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                                    list
+                                }
+                                Err(e) => {
+                                    if is_connection_error(&e) {
+                                        let _ = tx_status.send(EventApp::NetworkStatusChanged(
+                                            NetworkStatus::Disconnected(
+                                                "Cannot get messages from store: WiFi disconnected".to_string(),
+                                            ),
+                                        ));
+                                    }
+                                    Vec::new()
+                                }
+                            };
+
+                            if !messages.is_empty() {
+                                let _ = tx_status.send(EventApp::GetMessageHistory(uuid_str.clone(), messages));
+                            }
+                        }
+
+                        EventSend::GetContactInfo(uuid_str) => {
+                            let contacts_mutex = Arc::clone(&current_contacts_mutex);
+                            let contacts = contacts_mutex.lock().await;
+
+                            if let Ok(uuid) = uuid_str.parse() {
+                                if let Some(contact) = contacts.get(&uuid) {
+                                    let contact_info = ContactInfo {
+                                        uuid: contact.uuid.to_string(),
+                                        name: contact.name.clone(),
+                                        phone_number: contact.phone_number.as_ref().map(|p| p.to_string()),
+                                        verified_state: contact.verified.state,
+                                        expire_timer: contact.expire_timer,
+                                        has_avatar: contact.avatar.is_some(),
+                                    };
+                                    let _ = tx_status.send(EventApp::ContactInfoReceived(contact_info));
+
+                                    if let Some(ref avatar_attachment) = contact.avatar {
+                                        let avatar_bytes: Vec<u8> = avatar_attachment.reader.to_vec();
+                                        let _ = tx_status.send(EventApp::ContactAvatarReceived(avatar_bytes));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    break;
                 }
             }
         }
