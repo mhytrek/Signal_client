@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use anyhow::{Result, anyhow};
+use anyhow::{Ok, Result, anyhow};
 use presage::{
     Manager,
     libsignal_service::{prelude::Content, zkgroup::GroupMasterKeyBytes},
@@ -10,7 +10,7 @@ use presage::{
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
 
 use crate::{
-    create_registered_manager,
+    AsyncRegisteredManager, create_registered_manager,
     groups::find_master_key,
     messages::receive::{MessageDto, format_message},
 };
@@ -54,4 +54,22 @@ pub async fn list_messages_cli(recipient: String, from: Option<String>) -> Resul
         }
     }
     Ok(result)
+}
+
+pub async fn list_messages_tui(
+    manager_mutex: AsyncRegisteredManager,
+    master_key: GroupMasterKeyBytes,
+    from: Option<String>,
+) -> Result<Vec<MessageDto>> {
+    let manager = manager_mutex.read().await;
+
+    let messages = list_messages(&manager, master_key, from).await?;
+
+    let mut formatted_messages = vec![];
+    for message in messages.into_iter().flatten() {
+        if let Some(formatted_message) = format_message(&message) {
+            formatted_messages.push(formatted_message);
+        }
+    }
+    Ok(formatted_messages)
 }

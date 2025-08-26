@@ -11,25 +11,36 @@ use tracing::error;
 use crate::contacts::get_contacts_cli;
 use crate::groups::find_master_key;
 use crate::messages::receive::receiving_loop;
-use crate::{AsyncContactsMap, create_registered_manager};
+use crate::{AsyncContactsMap, AsyncRegisteredManager, create_registered_manager};
 
 pub async fn send_message_tui(
-    manager: &mut Manager<SqliteStore, Registered>,
-    group_name: String,
+    master_key: GroupMasterKeyBytes,
     text_message: String,
+    manager_mutex: AsyncRegisteredManager,
+    current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
-    let current_contacts_mutex: AsyncContactsMap =
-        Arc::new(Mutex::new(get_contacts_cli(manager).await?));
-    send_message(manager, group_name, text_message, current_contacts_mutex).await
+    let mut manager = manager_mutex.write().await;
+    send_message(
+        &mut manager,
+        master_key,
+        text_message,
+        current_contacts_mutex,
+    )
+    .await
 }
 
 pub async fn send_message_cli(group_name: String, text_message: String) -> Result<()> {
     let mut manager = create_registered_manager().await?;
     let current_contacts_mutex: AsyncContactsMap =
         Arc::new(Mutex::new(get_contacts_cli(&manager).await?));
+    let master_key = find_master_key(group_name, &mut manager).await?;
+    let master_key = match master_key {
+        Some(mk) => mk,
+        None => return Err(anyhow!("Group doesn't exist.")),
+    };
     send_message(
         &mut manager,
-        group_name,
+        master_key,
         text_message,
         current_contacts_mutex,
     )
@@ -38,16 +49,11 @@ pub async fn send_message_cli(group_name: String, text_message: String) -> Resul
 
 async fn send_message(
     manager: &mut Manager<SqliteStore, Registered>,
-    group_name: String,
+    master_key: GroupMasterKeyBytes,
     text_message: String,
     current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
-    let master_key = find_master_key(group_name, manager).await?;
-    let master_key = match master_key {
-        Some(mk) => mk,
-        None => return Err(anyhow!("Group with given name not found!")),
-    };
 
     let data_message = create_data_message(text_message, &master_key, timestamp);
 
@@ -83,6 +89,8 @@ pub fn create_data_message(
         body: Some(text_message),
         group_v2: Some(GroupContextV2 {
             master_key: Some(master_key),
+
+            // NOTE: This needs to be checked what does it do
             revision: Some(0),
             ..Default::default()
         }),

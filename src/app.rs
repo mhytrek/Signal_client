@@ -1,6 +1,6 @@
 use crate::contacts::get_contacts_tui;
-use crate::messages::receive::{self, MessageDto, contact};
-use crate::messages::send::contact::send_message_tui;
+use crate::messages::receive::{self, MessageDto};
+use crate::messages::send;
 use crate::messages::send::send_attachment_tui;
 use crate::paths::QRCODE;
 use crate::profile::get_profile_tui;
@@ -36,12 +36,12 @@ use image::ImageFormat;
 use std::thread;
 
 #[derive(PartialEq)]
-pub enum DisplayId {
+pub enum RecipientId {
     Contact(Uuid),
     Group(GroupMasterKeyBytes),
 }
 
-impl Default for DisplayId {
+impl Default for RecipientId {
     fn default() -> Self {
         Self::Contact(Uuid::nil())
     }
@@ -49,7 +49,7 @@ impl Default for DisplayId {
 
 pub trait DisplayRecipient: Send {
     fn display_name(&self) -> &str;
-    fn id(&self) -> DisplayId;
+    fn id(&self) -> RecipientId;
 }
 
 #[derive(Clone, PartialEq)]
@@ -69,8 +69,8 @@ impl DisplayRecipient for DisplayContact {
         &self.display_name
     }
 
-    fn id(&self) -> DisplayId {
-        DisplayId::Contact(self.uuid.clone())
+    fn id(&self) -> RecipientId {
+        RecipientId::Contact(self.uuid)
     }
 }
 
@@ -94,8 +94,8 @@ impl DisplayRecipient for DisplayGroup {
         &self.display_name
     }
 
-    fn id(&self) -> DisplayId {
-        DisplayId::Group(self.master_key.clone())
+    fn id(&self) -> RecipientId {
+        RecipientId::Group(self.master_key)
     }
 }
 
@@ -162,6 +162,7 @@ pub struct App {
     pub avatar_image: Option<StatefulProtocol>,
 
     pub contact_messages: HashMap<String, Vec<MessageDto>>,
+    pub group_messages: HashMap<GroupMasterKeyBytes, Vec<MessageDto>>,
 
     pub config: Config,
     pub config_selected: usize,
@@ -194,15 +195,17 @@ pub enum EventApp {
     ContactInfoReceived(ContactInfo),
     ContactAvatarReceived(Vec<u8>),
 
-    GetMessageHistory(String, Vec<MessageDto>),
+    GetContactMessageHistory(String, Vec<MessageDto>),
+    GetGroupMessageHistory(GroupMasterKeyBytes, Vec<MessageDto>),
     ReceiveMessage,
     QrCodeGenerated,
     Resize(u16, u16),
 }
 pub enum EventSend {
-    SendText(String, String),
-    SendAttachment(String, String, String),
+    SendText(RecipientId, String),
+    SendAttachment(RecipientId, String, String),
     GetMessagesForContact(String),
+    GetMessagesForGroup(GroupMasterKeyBytes),
     GetContactInfo(String),
 }
 
@@ -220,6 +223,7 @@ impl App {
             current_screen: CurrentScreen::LinkingNewDevice,
             textarea: String::new(),
             contact_messages: HashMap::new(),
+            group_messages: HashMap::new(),
             network_status: NetworkStatus::Connected,
             attachment_path: String::new(),
             attachment_error: None,
@@ -423,13 +427,18 @@ impl App {
                 self.avatar_cache = Some(avatar_data);
                 Ok(false)
             }
-            EventApp::GetMessageHistory(uuid_str, messages) => {
+            EventApp::GetContactMessageHistory(uuid_str, messages) => {
                 self.contact_messages.insert(uuid_str, messages);
                 self.message_selected = 0;
                 Ok(false)
             }
+            EventApp::GetGroupMessageHistory(master_key, messages) => {
+                self.group_messages.insert(master_key, messages);
+                self.message_selected = 0;
+                Ok(false)
+            }
             EventApp::ReceiveMessage => {
-                self.synchronize_messages_for_selected_contact();
+                self.synchronize_messages_for_selected_recipient();
                 Ok(false)
             }
             EventApp::QrCodeGenerated => Ok(false),
@@ -474,14 +483,13 @@ impl App {
             }
         }
         if let Some((recipient, input)) = self.recipients.get_mut(self.selected_recipient) {
-            let name = recipient.display_name();
             let message_text = input.trim().to_string();
             let has_text = !message_text.is_empty();
 
             if has_text || has_attachment {
                 if has_attachment {
                     tx.send(EventSend::SendAttachment(
-                        name.to_string(),
+                        recipient.id(),
                         message_text.clone(),
                         self.attachment_path.clone(),
                     ))
@@ -489,7 +497,7 @@ impl App {
                     self.attachment_path.clear();
                     self.attachment_error = None;
                 } else {
-                    tx.send(EventSend::SendText(name.to_string(), message_text.clone()))
+                    tx.send(EventSend::SendText(recipient.id(), message_text.clone()))
                         .unwrap();
                 }
 
@@ -500,15 +508,19 @@ impl App {
         }
     }
 
-    fn synchronize_messages_for_selected_contact(&mut self) {
-        let contact_uuid = match self.recipients[self.selected_recipient].0.id() {
-            DisplayId::Contact(uuid) => uuid.to_string(),
-            // TODO: (@jbrs) Handle this
-            DisplayId::Group(_) => return,
-        };
-        self.tx_tui
-            .send(EventSend::GetMessagesForContact(contact_uuid))
-            .unwrap();
+    // TODO: These unwraps must be handled gracefully
+    fn synchronize_messages_for_selected_recipient(&mut self) {
+        let recipient_id = self.recipients[self.selected_recipient].0.id();
+        match recipient_id {
+            RecipientId::Contact(uuid) => self
+                .tx_tui
+                .send(EventSend::GetMessagesForContact(uuid.to_string()))
+                .unwrap(),
+            RecipientId::Group(master_key) => self
+                .tx_tui
+                .send(EventSend::GetMessagesForGroup(master_key))
+                .unwrap(),
+        }
     }
 
     fn handle_key_event(
@@ -520,7 +532,7 @@ impl App {
         match self.current_screen {
             Main => match key.code {
                 KeyCode::Right | KeyCode::Char('d') => {
-                    self.synchronize_messages_for_selected_contact();
+                    self.synchronize_messages_for_selected_recipient();
                     self.current_screen = Writing;
                 }
                 KeyCode::Char('q') | KeyCode::Esc => self.current_screen = Exiting,
@@ -538,9 +550,9 @@ impl App {
                 KeyCode::Char('i') => {
                     let selected_recipient_id = self.recipients[self.selected_recipient].0.id();
                     let contact_uuid = match selected_recipient_id {
-                        DisplayId::Contact(uuid) => uuid.to_string(),
-                        // TODO: (@jbrs) Handle this correctly
-                        DisplayId::Group(_) => return Ok(false),
+                        RecipientId::Contact(uuid) => uuid.to_string(),
+                        // TODO: (@jbrs) Get group info
+                        RecipientId::Group(_) => return Ok(false),
                     };
                     self.tx_tui
                         .send(EventSend::GetContactInfo(contact_uuid))
@@ -559,7 +571,7 @@ impl App {
             },
             Writing => match key.code {
                 KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    self.synchronize_messages_for_selected_contact();
+                    self.synchronize_messages_for_selected_recipient();
                 }
                 KeyCode::Esc | KeyCode::Left => self.current_screen = Main,
                 KeyCode::Tab => {
@@ -570,7 +582,7 @@ impl App {
                 }
                 KeyCode::Enter => {
                     self.submit_message(tx);
-                    self.synchronize_messages_for_selected_contact();
+                    self.synchronize_messages_for_selected_recipient();
                 }
                 KeyCode::Char(to_insert) => match self.input_focus {
                     InputFocus::Message => self.enter_char(to_insert),
@@ -588,14 +600,19 @@ impl App {
                 },
 
                 KeyCode::Up => {
-                    let contact_uuid = match self.recipients[self.selected_recipient].0.id() {
-                        DisplayId::Contact(uuid) => uuid.to_string(),
-                        // TODO: (@jbrs) Handle this
-                        DisplayId::Group(_) => return Ok(false),
-                    };
-                    let last_message = match self.contact_messages.get(&contact_uuid) {
-                        Some(msgs) => msgs.len(),
-                        None => 0,
+                    let recipient_id = self.recipients[self.selected_recipient].0.id();
+
+                    let last_message = match recipient_id {
+                        RecipientId::Contact(uuid) => self
+                            .contact_messages
+                            .get(&uuid.to_string())
+                            .map(|msgs| msgs.len())
+                            .unwrap_or(0),
+                        RecipientId::Group(master_key) => self
+                            .group_messages
+                            .get(&master_key)
+                            .map(|msgs| msgs.len())
+                            .unwrap_or(0),
                     };
 
                     if last_message > 0 && self.message_selected < last_message - 1 {
@@ -1036,14 +1053,27 @@ pub async fn handle_background_events(
         if let Ok(event) = rx.recv() {
             match event {
                 EventSend::SendText(recipient, text) => {
-                    match send_message_tui(
-                        recipient.clone(),
-                        text.clone(),
-                        Arc::clone(&manager_mutex),
-                        Arc::clone(&current_contacts_mutex),
-                    )
-                    .await
-                    {
+                    let send_result = match recipient {
+                        RecipientId::Contact(uuid) => {
+                            send::contact::send_message_tui(
+                                uuid.to_string(),
+                                text,
+                                manager_mutex.clone(),
+                                current_contacts_mutex.clone(),
+                            )
+                            .await
+                        }
+                        RecipientId::Group(master_key) => {
+                            send::group::send_message_tui(
+                                master_key,
+                                text,
+                                manager_mutex.clone(),
+                                current_contacts_mutex.clone(),
+                            )
+                            .await
+                        }
+                    };
+                    match send_result {
                         Ok(_) => {
                             let _ = tx_status
                                 .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
@@ -1061,15 +1091,22 @@ pub async fn handle_background_events(
                         }
                     }
 
-                    let _ = contacts::sync_contacts_tui(
+                    let sync_result = contacts::sync_contacts_tui(
                         Arc::clone(&manager_mutex),
                         Arc::clone(&current_contacts_mutex),
                     )
                     .await;
+                    if let Err(e) = sync_result {
+                        error!("{e}");
+                    }
                 }
                 EventSend::SendAttachment(recipient, text, attachment_path) => {
+                    let uuid = match recipient {
+                        RecipientId::Contact(uuid) => uuid.to_string(),
+                        RecipientId::Group(_) => todo!(),
+                    };
                     match send_attachment_tui(
-                        recipient.clone(),
+                        uuid,
                         text.clone(),
                         attachment_path,
                         Arc::clone(&manager_mutex),
@@ -1094,24 +1131,34 @@ pub async fn handle_background_events(
                         }
                     }
 
-                    let _ = contacts::sync_contacts_tui(
+                    let sync_result = contacts::sync_contacts_tui(
                         Arc::clone(&manager_mutex),
                         Arc::clone(&current_contacts_mutex),
                     )
                     .await;
+                    if let Err(e) = sync_result {
+                        error!("{e}");
+                    }
                 }
                 EventSend::GetMessagesForContact(uuid_str) => {
                     let new_mutex = Arc::clone(&manager_mutex);
-                    let result =
-                        contact::list_messages_tui(uuid_str.clone(), "0".to_string(), new_mutex)
-                            .await;
+                    let result = receive::contact::list_messages_tui(
+                        uuid_str.clone(),
+                        "0".to_string(),
+                        new_mutex,
+                    )
+                    .await;
                     let messages = match result {
                         Ok(list) => {
-                            let _ = tx_status
+                            let send_status = tx_status
                                 .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                            if let Err(e) = send_status {
+                                error!("{e}");
+                            }
                             list
                         }
                         Err(e) => {
+                            error!("{e}");
                             if is_connection_error(&e) {
                                 let _ = tx_status.send(EventApp::NetworkStatusChanged(
                                     NetworkStatus::Disconnected(
@@ -1124,9 +1171,48 @@ pub async fn handle_background_events(
                         }
                     };
 
+                    // TODO: Log this error
                     if !messages.is_empty()
                         && tx_status
-                            .send(EventApp::GetMessageHistory(uuid_str.clone(), messages))
+                            .send(EventApp::GetContactMessageHistory(
+                                uuid_str.clone(),
+                                messages,
+                            ))
+                            .is_err()
+                    {}
+                }
+                EventSend::GetMessagesForGroup(master_key) => {
+                    let new_mutex = manager_mutex.clone();
+                    let result =
+                        receive::group::list_messages_tui(new_mutex, master_key, None).await;
+
+                    let messages = match result {
+                        Ok(list) => {
+                            let send_status = tx_status
+                                .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                            if let Err(e) = send_status {
+                                error!("{e}");
+                            }
+                            list
+                        }
+                        Err(e) => {
+                            error!("{e}");
+                            if is_connection_error(&e) {
+                                let _ = tx_status.send(EventApp::NetworkStatusChanged(
+                                    NetworkStatus::Disconnected(
+                                        "Cannot get messages from store: WiFi disconnected"
+                                            .to_string(),
+                                    ),
+                                ));
+                            }
+                            Vec::new()
+                        }
+                    };
+
+                    // TODO: Log this error
+                    if !messages.is_empty()
+                        && tx_status
+                            .send(EventApp::GetGroupMessageHistory(master_key, messages))
                             .is_err()
                     {}
                 }
