@@ -69,15 +69,6 @@ pub struct SendToGroupArgs {
     pub text_message: String,
 }
 
-// #[derive(Args)]
-// pub struct ListMessagesArgs {
-//     /// Uuid of the contact that the message history should be shown
-//     #[arg(short, long)]
-//     pub recipient: String,
-//
-//     /// The timestamp from which messages start being displayed
-//     pub from: String,
-// }
 #[derive(Args)]
 #[command(group(
     ArgGroup::new("recipient")
