@@ -30,7 +30,7 @@ pub async fn find_master_key(
     group_name: String,
     manager: &mut Manager<SqliteStore, Registered>,
 ) -> Result<Option<GroupMasterKeyBytes>> {
-    // WARN: Right now it assumes that all groups have unique names this is. This has to be handled
+    // TODO: Right now it assumes that all groups have unique names this is. This has to be handled
     // correctly in future.
     let group = manager
         .store()
