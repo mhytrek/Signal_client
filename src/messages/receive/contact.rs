@@ -43,14 +43,14 @@ pub async fn list_messages_tui(
 
     let messages = list_messages(&manager, recipient, Some(from)).await?;
 
-    let mut result = Vec::new();
+    let mut formatted_messages = Vec::new();
 
     for message in messages.into_iter().flatten() {
         if let Some(formatted_message) = format_message(&message) {
-            result.push(formatted_message);
+            formatted_messages.push(formatted_message);
         }
     }
-    Ok(result)
+    Ok(formatted_messages)
 }
 
 /// Returns iterator over stored messeges from certain time for given contact uuid, for use in CLI
