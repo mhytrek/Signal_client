@@ -36,12 +36,12 @@ use image::ImageFormat;
 use std::thread;
 
 #[derive(PartialEq)]
-pub enum DisplayId {
+pub enum RecipientId {
     Contact(Uuid),
     Group(GroupMasterKeyBytes),
 }
 
-impl Default for DisplayId {
+impl Default for RecipientId {
     fn default() -> Self {
         Self::Contact(Uuid::nil())
     }
@@ -49,7 +49,7 @@ impl Default for DisplayId {
 
 pub trait DisplayRecipient: Send {
     fn display_name(&self) -> &str;
-    fn id(&self) -> DisplayId;
+    fn id(&self) -> RecipientId;
 }
 
 #[derive(Clone, PartialEq)]
@@ -69,8 +69,8 @@ impl DisplayRecipient for DisplayContact {
         &self.display_name
     }
 
-    fn id(&self) -> DisplayId {
-        DisplayId::Contact(self.uuid.clone())
+    fn id(&self) -> RecipientId {
+        RecipientId::Contact(self.uuid)
     }
 }
 
@@ -94,8 +94,8 @@ impl DisplayRecipient for DisplayGroup {
         &self.display_name
     }
 
-    fn id(&self) -> DisplayId {
-        DisplayId::Group(self.master_key.clone())
+    fn id(&self) -> RecipientId {
+        RecipientId::Group(self.master_key)
     }
 }
 
@@ -547,7 +547,6 @@ impl App {
             }
         }
         if let Some((recipient, input)) = self.recipients.get_mut(self.selected_recipient) {
-            let name = recipient.display_name();
             let message_text = input.trim().to_string();
             let has_text = !message_text.is_empty();
 
