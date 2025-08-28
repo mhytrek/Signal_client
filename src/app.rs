@@ -783,7 +783,7 @@ fn is_delivery_confirmation_timeout(e: &Error) -> bool {
         msg.contains("timeout") && msg.contains("response")
 }
 
-/// spawn thread to sync contacts and to send messeges
+/// Spawn thread to sync contacts and to send messeges
 pub async fn init_background_threads(
     tx_thread: mpsc::Sender<EventApp>,
     rx_thread: mpsc::Receiver<EventSend>,
