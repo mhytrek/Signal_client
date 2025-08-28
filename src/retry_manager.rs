@@ -42,10 +42,12 @@ impl OutgoingMessage {
             return false;
         }
 
-        if let DeliveryStatus::Failed(ref reason) = self.status {
-            if reason.to_lowercase().contains("websocket closing while waiting") {
-                return false;
-            }
+        if let DeliveryStatus::Failed(ref reason) = self.status
+            && reason
+                .to_lowercase()
+                .contains("websocket closing while waiting")
+        {
+            return false;
         }
 
         if self.retry_count >= max_retries {
@@ -155,7 +157,7 @@ impl RetryManager {
             .count()
     }
 
-    pub fn get_message_status(&self, message_id: &str) -> Option<&DeliveryStatus> {
+    pub fn message_status(&self, message_id: &str) -> Option<&DeliveryStatus> {
         self.outgoing_messages
             .get(message_id)
             .map(|msg| &msg.status)
