@@ -1086,7 +1086,7 @@ pub async fn handle_background_events(
 
                                     if is_delivery_confirmation_timeout(&e) {
                                         manager.mark_sent(&message_id);
-                                        info!("Message likely delivered despite confirmation timeout");
+                                        warn!("Message likely delivered despite confirmation timeout");
                                     } else {
                                         manager.mark_failed(&message_id, e.to_string());
 
