@@ -31,7 +31,7 @@ async fn main() -> Result<()> {
         Command::Receive => cli::print_received_message().await?,
         Command::GetProfile => cli::print_profile().await?,
         Command::SendAttachment(args) => {
-            messages::send::send_attachment_cli(
+            messages::send::contact::send_attachment_cli(
                 args.recipient,
                 args.text_message,
                 args.attachment_path,

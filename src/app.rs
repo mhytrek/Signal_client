@@ -1,7 +1,6 @@
 use crate::contacts::get_contacts_tui;
 use crate::messages::receive::{self, MessageDto};
 use crate::messages::send;
-use crate::messages::send::send_attachment_tui;
 use crate::paths::QRCODE;
 use crate::profile::get_profile_tui;
 use crate::ui::render_ui;
@@ -1169,7 +1168,7 @@ pub async fn handle_background_events(
                         RecipientId::Contact(uuid) => uuid.to_string(),
                         RecipientId::Group(_) => todo!(),
                     };
-                    match send_attachment_tui(
+                    match send::contact::send_attachment_tui(
                         uuid,
                         text.clone(),
                         attachment_path,
