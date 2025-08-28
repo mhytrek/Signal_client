@@ -1117,18 +1117,21 @@ pub async fn handle_background_events(
                                 if let Err(e) = send_status {
                                     error!("{e}");
                                 }
-                                list
-                            }
-                            Err(e) => {
-                                error!("{e}");
-                                if is_connection_error(&e) {
-                                    let _ =
-                                        tx_status_internal.send(EventApp::NetworkStatusChanged(
-                                            NetworkStatus::Disconnected(
-                                                "Cannot get messages from store: WiFi disconnected"
-                                                    .to_string(),
-                                            ),
-                                        ));
+                                Err(e) => {
+                                    let mut manager = retry_manager.lock().await;
+
+                                    if is_delivery_confirmation_timeout(&e) {
+                                        manager.mark_sent(&message_id);
+                                        warn!("Message likely delivered despite confirmation timeout");
+                                    } else {
+                                        manager.mark_failed(&message_id, e.to_string());
+
+                                        if is_connection_error(&e) {
+                                            let _ = tx_status_internal.send(EventApp::NetworkStatusChanged(
+                                                NetworkStatus::Disconnected("Cannot send".to_string())
+                                            ));
+                                        }
+                                    }
                                 }
                                 vec![]
                             }
