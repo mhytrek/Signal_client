@@ -197,6 +197,7 @@ pub struct ContactInfo {
 }
 
 pub struct App {
+    pub self_uuid: Option<Uuid>,
     pub recipients: Vec<(Box<dyn DisplayRecipient>, String)>, // contact_uuid, contact_name, input for this contact
 
     pub selected_recipient: usize,
@@ -278,6 +279,7 @@ impl App {
         let (tx_tui, rx_thread) = mpsc::channel();
         let picker = Picker::from_query_stdio().ok();
         App {
+            self_uuid: None,
             linking_status,
             recipients: vec![],
             selected_recipient: 0,
@@ -325,6 +327,10 @@ impl App {
                         return Err(io::Error::other("Failed to create manager"));
                     }
                 };
+                let manager = new_manager.read().await;
+                // TODO: Handle this error
+                self.self_uuid = Some(manager.whoami().await.unwrap().aci);
+                drop(manager);
                 let new_manager_mutex = Arc::clone(&new_manager);
 
                 self.manager = Some(new_manager);

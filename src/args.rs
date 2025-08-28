@@ -32,6 +32,9 @@ pub enum Command {
     /// Send attachment
     SendAttachment(SendAttachmentArgs),
 
+    /// Send attachment to group
+    SendAttachmentToGroup(SendAttachmentToGroupArgs),
+
     /// Prints messages from given point in time
     ListMessages(ListMessagesArgs),
 
@@ -90,6 +93,20 @@ pub struct ListMessagesArgs {
 #[derive(Args)]
 pub struct SendAttachmentArgs {
     /// Uuid of the contact that the message should be send to
+    #[arg(short, long)]
+    pub recipient: String,
+
+    /// Content of the message
+    #[arg(short, long, default_value_t = String::from(""))]
+    pub text_message: String,
+
+    /// Full path to attachment
+    pub attachment_path: String,
+}
+
+#[derive(Args)]
+pub struct SendAttachmentToGroupArgs {
+    /// Group name
     #[arg(short, long)]
     pub recipient: String,
 

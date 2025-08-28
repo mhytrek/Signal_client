@@ -160,16 +160,21 @@ pub async fn send_attachment_tui(
 
 /// Sends attachment to recipient ( phone number or name ), for usage with CLI
 pub async fn send_attachment_cli(
-    recipient: GroupMasterKeyBytes,
+    recipient: String,
     text_message: String,
     attachment_path: String,
 ) -> Result<()> {
     let mut manager = create_registered_manager().await?;
     let current_contacts_mutex: AsyncContactsMap =
         Arc::new(Mutex::new(get_contacts_cli(&manager).await?));
+    let master_key = find_master_key(recipient, &mut manager).await?;
+    let master_key = match master_key {
+        Some(mk) => mk,
+        None => return Err(anyhow!("Group not found.")),
+    };
     send_attachment(
         &mut manager,
-        recipient,
+        master_key,
         text_message,
         attachment_path,
         current_contacts_mutex,

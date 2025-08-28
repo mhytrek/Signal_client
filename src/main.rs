@@ -38,6 +38,14 @@ async fn main() -> Result<()> {
             )
             .await?
         }
+        Command::SendAttachmentToGroup(args) => {
+            messages::send::group::send_attachment_cli(
+                args.recipient,
+                args.text_message,
+                args.attachment_path,
+            )
+            .await?;
+        }
     }
 
     Ok(())
