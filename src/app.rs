@@ -1164,19 +1164,29 @@ pub async fn handle_background_events(
                     }
                 }
                 EventSend::SendAttachment(recipient, text, attachment_path) => {
-                    let uuid = match recipient {
-                        RecipientId::Contact(uuid) => uuid.to_string(),
-                        RecipientId::Group(_) => todo!(),
+                    let send_result = match recipient {
+                        RecipientId::Contact(uuid) => {
+                            send::contact::send_attachment_tui(
+                                uuid.to_string(),
+                                text,
+                                attachment_path,
+                                manager_mutex.clone(),
+                                current_contacts_mutex.clone(),
+                            )
+                            .await
+                        }
+                        RecipientId::Group(master_key) => {
+                            send::group::send_attachment_tui(
+                                master_key,
+                                text,
+                                attachment_path,
+                                manager_mutex.clone(),
+                                current_contacts_mutex.clone(),
+                            )
+                            .await
+                        }
                     };
-                    match send::contact::send_attachment_tui(
-                        uuid,
-                        text.clone(),
-                        attachment_path,
-                        Arc::clone(&manager_mutex),
-                        Arc::clone(&current_contacts_mutex),
-                    )
-                    .await
-                    {
+                    match send_result {
                         Ok(_) => {
                             let _ = tx_status
                                 .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
