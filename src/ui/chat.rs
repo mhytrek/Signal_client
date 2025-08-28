@@ -44,7 +44,7 @@ pub fn render_chat(frame: &mut Frame, app: &App, area: Rect) {
         let min_width = 21; // hardcoded date format width
 
         let (heights, widths) =
-            calculate_message_sizes(messages, max_width, msg_padding, min_width);
+            calculate_message_dimensions(messages, max_width, msg_padding, min_width);
         let last_visible_start = calculate_last_visible_start(&heights, available_height);
         let start_index = app.message_selected.min(last_visible_start);
         let visible_msgs = get_visible_messages(
@@ -78,8 +78,7 @@ pub fn render_chat(frame: &mut Frame, app: &App, area: Rect) {
     render_input_and_attachment(frame, app, &vertical_chunks);
 }
 
-// calculates the heights and widths of the messages
-fn calculate_message_sizes(
+fn calculate_message_dimensions(
     messages: &[MessageDto],
     max_width: usize,
     msg_padding: u16,
@@ -112,7 +111,7 @@ fn calculate_message_sizes(
     (heights, widths)
 }
 
-// calculates which message would be the las visible
+// calculates which message would be the last visible
 fn calculate_last_visible_start(heights: &[u16], available_height: u16) -> usize {
     let mut used_height = 0;
     let mut last_visible_start = 0;
@@ -128,7 +127,6 @@ fn calculate_last_visible_start(heights: &[u16], available_height: u16) -> usize
     last_visible_start
 }
 
-// returns list of indexes of visible messages
 fn get_visible_messages(
     heights: &[u16],
     available_height: u16,
@@ -155,7 +153,6 @@ fn get_visible_messages(
     visible_msgs
 }
 
-//renders visible messages
 fn render_messages(
     frame: &mut Frame,
     messages: &[MessageDto],

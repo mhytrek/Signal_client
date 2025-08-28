@@ -10,24 +10,6 @@ use ratatui::{
     },
 };
 
-// renders scrollbar
-// pub fn render_scrollbar(frame: &mut Frame, app: &App, total_messages: usize, vertical_chunks: &[Rect]) {
-//     let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
-
-//     let mut scrollbar_state =
-//         ScrollbarState::new(total_messages).position(total_messages - app.message_selected);
-
-//     frame.render_stateful_widget(
-//         scrollbar,
-//         vertical_chunks[0].inner(Margin {
-//             vertical: 1,
-//             horizontal: 0,
-//         }),
-//         &mut scrollbar_state,
-//     );
-// }
-
-// renders scrollbar
 pub fn render_scrollbar(frame: &mut Frame, position: usize, content_length: usize, area: Rect) {
     let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
 
