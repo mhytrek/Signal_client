@@ -1033,7 +1033,7 @@ pub async fn handle_background_events(
                                     // let _ = tx_status.send(EventApp::ReceiveMessage);
                                 }
                                 Err(e) => {
-                                    info!("new error: {}", e);
+                                    error!("{e}");
                                     let mut manager = retry_manager.lock().await;
 
                                     if is_delivery_confirmation_timeout(&e) {
