@@ -1047,39 +1047,42 @@ async fn on_event(
                             retry_manager.mark_sent(&message_id);
                             warn!("Message likely delivered despite confirmation timeout.");
                             debug!("Message is saved manually in the store.");
-                            if let Ok(data_msg) = rx_data.await {
-                                let mut manager = manager_mutex.write().await;
+                            match rx_data.await {
+                                Ok(data_msg) => {
+                                    let mut manager = manager_mutex.write().await;
 
-                                let RegistrationData { device_id, .. } =
-                                    manager.registration_data();
+                                    let RegistrationData { device_id, .. } =
+                                        manager.registration_data();
 
-                                // TODO: Handle these unwraps
-                                let device_id = device_id.unwrap();
-                                let sender_uuid = manager.whoami().await.unwrap().aci;
+                                    // TODO: Handle these unwraps
+                                    let device_id = device_id.unwrap();
+                                    let sender_uuid = manager.whoami().await.unwrap().aci;
 
-                                // This will be handled differently when group chats arrive
-                                let recipient_uuid =
-                                    find_uuid(recipient, &mut manager).await.unwrap();
-                                let timestamp = data_msg.timestamp();
-                                let metadata = Metadata {
-                                    sender: ServiceId::Aci(sender_uuid.into()),
-                                    sender_device: device_id,
-                                    destination: ServiceId::Aci(recipient_uuid.into()),
-                                    timestamp,
-                                    needs_receipt: false,
-                                    unidentified_sender: false,
-                                    was_plaintext: false,
-                                    server_guid: None,
-                                };
-                                let content = Content::from_body(data_msg, metadata);
-                                unsafe {
-                                    let store_handle =
-                                        manager.store() as *const SqliteStore as *mut SqliteStore;
-                                    (*store_handle)
-                                        .save_message(&Thread::Contact(recipient_uuid), content)
-                                        .await
-                                        .unwrap();
+                                    // This will be handled differently when group chats arrive
+                                    let recipient_uuid =
+                                        find_uuid(recipient, &mut manager).await.unwrap();
+                                    let timestamp = data_msg.timestamp();
+                                    let metadata = Metadata {
+                                        sender: ServiceId::Aci(sender_uuid.into()),
+                                        sender_device: device_id,
+                                        destination: ServiceId::Aci(recipient_uuid.into()),
+                                        timestamp,
+                                        needs_receipt: false,
+                                        unidentified_sender: false,
+                                        was_plaintext: false,
+                                        server_guid: None,
+                                    };
+                                    let content = Content::from_body(data_msg, metadata);
+                                    unsafe {
+                                        let store_handle = manager.store() as *const SqliteStore
+                                            as *mut SqliteStore;
+                                        (*store_handle)
+                                            .save_message(&Thread::Contact(recipient_uuid), content)
+                                            .await
+                                            .unwrap();
+                                    }
                                 }
+                                Err(e) => error!("Did not receive failed DataMessage: {e}"),
                             }
                         } else {
                             retry_manager.mark_failed(&message_id, e.to_string());

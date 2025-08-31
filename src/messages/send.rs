@@ -120,7 +120,6 @@ pub async fn send_message_tui(
     current_contacts_mutex: AsyncContactsMap,
     result_sender: Option<oneshot::Sender<DataMessage>>,
 ) -> Result<()> {
-    // let mut manager = create_registered_manager().await?;
     let mut manager = manager_mutex.write().await;
     send_message(
         &mut manager,
