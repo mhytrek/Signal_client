@@ -16,7 +16,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, oneshot};
 
 /// finds contact uuid from string that can be contact_name or contact phone_number
 pub async fn find_uuid(
@@ -68,12 +68,22 @@ async fn send(
     recipient_addr: ServiceId,
     data_message: DataMessage,
     timestamp: u64,
+    result_sender: Option<oneshot::Sender<DataMessage>>,
 ) -> Result<()> {
-    manager
-        .send_message(recipient_addr, data_message, timestamp)
+    let send_result = manager
+        .send_message(recipient_addr, data_message.clone(), timestamp)
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to send message: {}", e))?;
-    Ok(())
+        .map_err(|e| anyhow::anyhow!("Failed to send message: {}", e));
+
+    match send_result {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            if let Some(sender) = result_sender {
+                sender.send(data_message).unwrap();
+            }
+            Err(e)
+        }
+    }
 }
 
 async fn send_message(
@@ -81,6 +91,7 @@ async fn send_message(
     recipient: String,
     text_message: String,
     current_contacts_mutex: AsyncContactsMap,
+    result_sender: Option<oneshot::Sender<DataMessage>>,
 ) -> Result<()> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
     let recipient_address = get_address(recipient, manager).await?;
@@ -89,7 +100,14 @@ async fn send_message(
     let messages = manager.receive_messages().await?;
     receiving_loop(messages, manager, None, current_contacts_mutex).await?;
 
-    send(manager, recipient_address, data_message, timestamp).await?;
+    send(
+        manager,
+        recipient_address,
+        data_message,
+        timestamp,
+        result_sender,
+    )
+    .await?;
 
     Ok(())
 }
@@ -100,6 +118,7 @@ pub async fn send_message_tui(
     text_message: String,
     manager_mutex: AsyncRegisteredManager,
     current_contacts_mutex: AsyncContactsMap,
+    result_sender: Option<oneshot::Sender<DataMessage>>,
 ) -> Result<()> {
     // let mut manager = create_registered_manager().await?;
     let mut manager = manager_mutex.write().await;
@@ -108,6 +127,7 @@ pub async fn send_message_tui(
         recipient,
         text_message,
         current_contacts_mutex,
+        result_sender,
     )
     .await
 }
@@ -122,6 +142,7 @@ pub async fn send_message_cli(recipient: String, text_message: String) -> Result
         recipient,
         text_message,
         current_contacts_mutex,
+        None,
     )
     .await
 }
@@ -205,7 +226,7 @@ async fn send_attachment(
     let messages = manager.receive_messages().await?;
     receiving_loop(messages, manager, None, current_contacts_mutex).await?;
 
-    send(manager, recipient_address, data_message, timestamp).await?;
+    send(manager, recipient_address, data_message, timestamp, None).await?;
 
     Ok(())
 }
