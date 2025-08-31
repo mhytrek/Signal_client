@@ -1,6 +1,6 @@
 use crate::contacts::get_contacts_tui;
 use crate::messages::receive::{self, MessageDto, list_messages_tui};
-use crate::messages::send::{send_attachment_tui, send_message_tui};
+use crate::messages::send::{find_uuid, send_attachment_tui, send_message_tui};
 use crate::paths::QRCODE;
 use crate::profile::get_profile_tui;
 use crate::ui::ui;
@@ -13,7 +13,11 @@ use crossterm::event::{self, Event, KeyModifiers};
 use crossterm::event::{KeyCode, KeyEventKind};
 use presage::Manager;
 use presage::libsignal_service::Profile;
-use presage::manager::Registered;
+use presage::libsignal_service::content::Metadata;
+use presage::libsignal_service::prelude::Content;
+use presage::libsignal_service::protocol::ServiceId;
+use presage::manager::{Registered, RegistrationData};
+use presage::store::{ContentsStore, Thread};
 use presage_store_sqlite::SqliteStore;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
@@ -26,8 +30,8 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Sender};
 use std::{fs, io};
 use tokio::runtime::Builder;
-use tokio::sync::{Mutex, RwLock};
-use tracing::{error, warn};
+use tokio::sync::{Mutex, RwLock, oneshot};
+use tracing::{debug, error, warn};
 
 use crate::retry_manager::{OutgoingMessage, RetryManager};
 use image::ImageFormat;
@@ -1002,9 +1006,9 @@ async fn on_cleanup_interval(retry_manager: Arc<Mutex<RetryManager>>) {
     manager.cleanup_old_messages();
 }
 
-async fn on_receive(
+async fn on_event(
     event: Option<EventSend>,
-    retry_manager: Arc<Mutex<RetryManager>>,
+    retry_manager_mutex: Arc<Mutex<RetryManager>>,
     manager_mutex: AsyncRegisteredManager,
     current_contacts_mutex: AsyncContactsMap,
     tx_status: &mpsc::Sender<EventApp>,
@@ -1014,21 +1018,22 @@ async fn on_receive(
             EventSend::SendText(recipient, text) => {
                 let outgoing_msg = OutgoingMessage::new(recipient.clone(), text.clone(), None);
                 let message_id = {
-                    let mut manager = retry_manager.lock().await;
+                    let mut manager = retry_manager_mutex.lock().await;
                     manager.add_message(outgoing_msg)
                 };
 
+                let (tx_data, rx_data) = oneshot::channel();
                 match send_message_tui(
                     recipient.clone(),
                     text.clone(),
                     Arc::clone(&manager_mutex),
                     Arc::clone(&current_contacts_mutex),
-                    None,
+                    Some(tx_data),
                 )
                 .await
                 {
                     Ok(_) => {
-                        let mut manager = retry_manager.lock().await;
+                        let mut manager = retry_manager_mutex.lock().await;
                         manager.mark_sent(&message_id);
                         let _ = tx_status
                             .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
@@ -1036,13 +1041,48 @@ async fn on_receive(
                     }
                     Err(e) => {
                         error!("{e}");
-                        let mut manager = retry_manager.lock().await;
+                        let mut retry_manager = retry_manager_mutex.lock().await;
 
                         if is_delivery_confirmation_timeout(&e) {
-                            manager.mark_sent(&message_id);
-                            warn!("Message likely delivered despite confirmation timeout");
+                            retry_manager.mark_sent(&message_id);
+                            warn!("Message likely delivered despite confirmation timeout.");
+                            debug!("Message is saved manually in the store.");
+                            if let Ok(data_msg) = rx_data.await {
+                                let mut manager = manager_mutex.write().await;
+
+                                let RegistrationData { device_id, .. } =
+                                    manager.registration_data();
+
+                                // TODO: Handle these unwraps
+                                let device_id = device_id.unwrap();
+                                let sender_uuid = manager.whoami().await.unwrap().aci;
+
+                                // This will be handled differently when group chats arrive
+                                let recipient_uuid =
+                                    find_uuid(recipient, &mut manager).await.unwrap();
+                                let timestamp = data_msg.timestamp();
+                                let metadata = Metadata {
+                                    sender: ServiceId::Aci(sender_uuid.into()),
+                                    sender_device: device_id,
+                                    destination: ServiceId::Aci(recipient_uuid.into()),
+                                    timestamp,
+                                    needs_receipt: false,
+                                    unidentified_sender: false,
+                                    was_plaintext: false,
+                                    server_guid: None,
+                                };
+                                let content = Content::from_body(data_msg, metadata);
+                                unsafe {
+                                    let store_handle =
+                                        manager.store() as *const SqliteStore as *mut SqliteStore;
+                                    (*store_handle)
+                                        .save_message(&Thread::Contact(recipient_uuid), content)
+                                        .await
+                                        .unwrap();
+                                }
+                            }
                         } else {
-                            manager.mark_failed(&message_id, e.to_string());
+                            retry_manager.mark_failed(&message_id, e.to_string());
 
                             if is_connection_error(&e) {
                                 let _ = tx_status.send(EventApp::NetworkStatusChanged(
@@ -1070,7 +1110,7 @@ async fn on_receive(
                     Some(attachment_path.clone()),
                 );
                 let message_id = {
-                    let mut manager = retry_manager.lock().await;
+                    let mut manager = retry_manager_mutex.lock().await;
                     manager.add_message(outgoing_msg)
                 };
 
@@ -1084,7 +1124,7 @@ async fn on_receive(
                 .await
                 {
                     Ok(_) => {
-                        let mut manager = retry_manager.lock().await;
+                        let mut manager = retry_manager_mutex.lock().await;
                         manager.mark_sent(&message_id);
                         let _ = tx_status
                             .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
@@ -1092,7 +1132,7 @@ async fn on_receive(
                     }
                     Err(e) => {
                         error!("Failed to send message: {}", e);
-                        let mut manager = retry_manager.lock().await;
+                        let mut manager = retry_manager_mutex.lock().await;
 
                         if is_delivery_confirmation_timeout(&e) {
                             manager.mark_sent(&message_id);
@@ -1205,7 +1245,7 @@ pub async fn handle_background_events(
             event = async {
                 rx.recv().ok()
             } => {
-                let should_break = on_receive(event, retry_manager.clone(), manager_mutex.clone(), current_contacts_mutex.clone(), &tx_status).await;
+                let should_break = on_event(event, retry_manager.clone(), manager_mutex.clone(), current_contacts_mutex.clone(), &tx_status).await;
                 if should_break {
                     break;
                 }
