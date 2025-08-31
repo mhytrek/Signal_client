@@ -115,15 +115,10 @@ pub async fn send_message_tui(
 /// sends text message to recipient ( phone number or name ), for usage with CLI
 pub async fn send_message_cli(recipient: String, text_message: String) -> Result<()> {
     let mut manager = create_registered_manager().await?;
+    let uuid = find_uuid(recipient, &mut manager).await?.to_string();
     let current_contacts_mutex: AsyncContactsMap =
         Arc::new(Mutex::new(get_contacts_cli(&manager).await?));
-    send_message(
-        &mut manager,
-        recipient,
-        text_message,
-        current_contacts_mutex,
-    )
-    .await
+    send_message(&mut manager, uuid, text_message, current_contacts_mutex).await
 }
 
 /// Create attachment spec from file path
