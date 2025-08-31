@@ -88,7 +88,7 @@ async fn list_messages(
         .collect())
 }
 
-///format Content to a MessageDto or returns None
+/// Format `Content` to a MessageDto or returns None
 pub fn format_message(content: &Content) -> Option<MessageDto> {
     let timestamp: u64 = content.timestamp();
     let uuid = content.metadata.sender.raw_uuid();

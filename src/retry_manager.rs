@@ -130,7 +130,7 @@ impl RetryManager {
         }
     }
 
-    pub fn get_messages_to_retry(&mut self) -> Vec<OutgoingMessage> {
+    pub fn messages_to_retry(&mut self) -> Vec<OutgoingMessage> {
         let mut retry_messages = Vec::new();
 
         for msg in self.outgoing_messages.values_mut() {
@@ -150,7 +150,7 @@ impl RetryManager {
         });
     }
 
-    pub fn get_failed_count(&self) -> usize {
+    pub fn failed_count(&self) -> usize {
         self.outgoing_messages
             .values()
             .filter(|msg| matches!(msg.status, DeliveryStatus::Failed(_)))

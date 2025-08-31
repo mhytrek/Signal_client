@@ -961,7 +961,7 @@ pub async fn handle_background_events(
         tokio::select! {
                     _ = retry_interval.tick() => {
                         let mut manager = retry_manager.lock().await;
-                        let messages_to_retry = manager.get_messages_to_retry();
+                        let messages_to_retry = manager.messages_to_retry();
 
                         for msg in messages_to_retry {
 
