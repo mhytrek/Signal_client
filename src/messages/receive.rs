@@ -24,11 +24,18 @@ use crate::contacts::get_contacts_cli;
 use crate::create_registered_manager;
 use crate::env::SIGNAL_DISPLAY_FLAGS;
 
+pub enum MessageStatus {
+    Sent,
+    Delivered,
+    Read,
+}
+
 pub struct MessageDto {
     pub uuid: Uuid,
     pub timestamp: u64,
     pub text: String,
     pub sender: bool,
+    pub status: MessageStatus,
 }
 
 async fn loop_no_contents(messages: impl Stream<Item = Received>) {
@@ -88,7 +95,7 @@ async fn list_messages(
         .collect())
 }
 
-///format Content to a MessageDto or returns None
+/// Format `Content` to a MessageDto or returns None
 pub fn format_message(content: &Content) -> Option<MessageDto> {
     let timestamp: u64 = content.timestamp();
     let uuid = content.metadata.sender.raw_uuid();
@@ -145,6 +152,7 @@ pub fn format_message(content: &Content) -> Option<MessageDto> {
         timestamp,
         text,
         sender,
+        status: MessageStatus::Sent,
     })
 }
 

@@ -295,7 +295,7 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
             ),
             CurrentScreen::Writing => {
                 let retry_info = if let Ok(manager) = app.retry_manager.try_lock() {
-                    let failed_count = manager.get_failed_count();
+                    let failed_count = manager.failed_count();
 
                     if failed_count > 0 {
                         format!(" | {} failed msgs", failed_count)
