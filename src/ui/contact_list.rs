@@ -12,18 +12,19 @@ use crate::{app::App, ui::utils::render_scrollbar};
 /// Renders the contact list in the left chunk of the screen
 pub fn render_contact_list(frame: &mut Frame, app: &App, area: Rect) {
     let list_items: Vec<ListItem> = app
-        .contacts
+        .recipients
         .iter()
         .enumerate()
-        .map(|(i, (_, name, _id))| {
+        .map(|(i, (recipient, _))| {
             let mut style = Style::default().fg(app.config.get_primary_color());
-            if i == app.contact_selected {
+            if i == app.selected_recipient {
                 style = style
                     .add_modifier(Modifier::BOLD)
                     .add_modifier(Modifier::UNDERLINED)
                     .fg(app.config.get_accent_color());
             }
-            ListItem::new(name.clone()).style(style)
+            let name = recipient.display_name().to_string();
+            ListItem::new(name).style(style)
         })
         .collect();
 
@@ -36,10 +37,10 @@ pub fn render_contact_list(frame: &mut Frame, app: &App, area: Rect) {
     );
 
     let mut list_state = ListState::default();
-    list_state.select(Some(app.contact_selected));
+    list_state.select(Some(app.selected_recipient));
 
     frame.render_stateful_widget(chat_list_widget, area, &mut list_state);
-    render_scrollbar(frame, app.contact_selected, list_items.len(), area);
+    render_scrollbar(frame, app.selected_recipient, list_items.len(), area);
 }
 
 /// Renders contact information screen
