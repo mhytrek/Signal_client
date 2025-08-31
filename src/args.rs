@@ -37,7 +37,7 @@ pub struct LinkDeviceArgs {
 
 #[derive(Args)]
 pub struct SendMessageArgs {
-    /// Uuid of the contact that the message should be send to
+    /// Name, phone number or UUID of the contact that the message should be send to
     #[arg(short, long)]
     pub recipient: String,
     /// Content of the message
