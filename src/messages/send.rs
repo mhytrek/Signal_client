@@ -17,6 +17,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
+use tracing::error;
 
 /// finds contact uuid from string that can be contact_name or contact phone_number
 pub async fn find_uuid(
@@ -69,6 +70,7 @@ async fn send(
     data_message: DataMessage,
     timestamp: u64,
 ) -> Result<()> {
+    error!("HERE");
     manager
         .send_message(recipient_addr, data_message, timestamp)
         .await
@@ -80,14 +82,10 @@ async fn send_message(
     manager: &mut Manager<SqliteStore, Registered>,
     recipient: String,
     text_message: String,
-    current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
     let recipient_address = get_address(recipient, manager).await?;
     let data_message = create_data_message(text_message, timestamp)?;
-
-    let messages = manager.receive_messages().await?;
-    receiving_loop(messages, manager, None, current_contacts_mutex).await?;
 
     send(manager, recipient_address, data_message, timestamp).await?;
 
@@ -99,25 +97,16 @@ pub async fn send_message_tui(
     recipient: String,
     text_message: String,
     mut manager: Manager<SqliteStore, Registered>,
-    current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
     // let mut manager = create_registered_manager().await?;
-    send_message(
-        &mut manager,
-        recipient,
-        text_message,
-        current_contacts_mutex,
-    )
-    .await
+    send_message(&mut manager, recipient, text_message).await
 }
 
 /// sends text message to recipient ( phone number or name ), for usage with CLI
 pub async fn send_message_cli(recipient: String, text_message: String) -> Result<()> {
     let mut manager = create_registered_manager().await?;
     let uuid = find_uuid(recipient, &mut manager).await?.to_string();
-    let current_contacts_mutex: AsyncContactsMap =
-        Arc::new(Mutex::new(get_contacts_cli(&manager).await?));
-    send_message(&mut manager, uuid, text_message, current_contacts_mutex).await
+    send_message(&mut manager, uuid, text_message).await
 }
 
 /// Create attachment spec from file path

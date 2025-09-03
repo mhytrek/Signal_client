@@ -24,6 +24,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::{fs, io};
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
+// use tokio_util::task::LocalPoolHandle;
 use tracing::error;
 
 use image::ImageFormat;
@@ -657,10 +658,15 @@ pub async fn init_background_threads(
     let current_contacts_mutex: AsyncContactsMap =
         Arc::new(Mutex::new(get_contacts_tui(&mut manager).await?));
 
+    // let local_pool = LocalPoolHandle::new(4);
+
     //spawn thread to sync contacts and new messages
     let tx_synchronization_events = tx_thread.clone();
     let new_manager = manager.clone();
     let new_contacts = Arc::clone(&current_contacts_mutex);
+    // local_pool.spawn_pinned(async move || {
+    //     handle_synchronization(tx_synchronization_events, new_manager, new_contacts).await;
+    // });
     thread::Builder::new()
         .name(String::from("synchronization_thread"))
         .stack_size(1024 * 1024 * 8)
@@ -681,6 +687,15 @@ pub async fn init_background_threads(
     let rx_sending_thread = rx_thread;
     let new_contacts = Arc::clone(&current_contacts_mutex);
     let tx_status_clone = tx_thread.clone();
+    // local_pool.spawn_pinned(async move || {
+    //     handle_background_events(
+    //         rx_sending_thread,
+    //         new_manager,
+    //         new_contacts,
+    //         tx_status_clone,
+    //     )
+    //     .await;
+    // });
     thread::Builder::new()
         .name(String::from("background_events_thread"))
         .stack_size(1024 * 1024 * 8)
@@ -902,14 +917,7 @@ pub async fn handle_background_events(
         if let Ok(event) = rx.recv() {
             match event {
                 EventSend::SendText(recipient, text) => {
-                    match send_message_tui(
-                        recipient.clone(),
-                        text.clone(),
-                        manager.clone(),
-                        Arc::clone(&current_contacts_mutex),
-                    )
-                    .await
-                    {
+                    match send_message_tui(recipient.clone(), text.clone(), manager.clone()).await {
                         Ok(_) => {
                             let _ = tx_status
                                 .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
@@ -927,11 +935,11 @@ pub async fn handle_background_events(
                         }
                     }
 
-                    let _ = contacts::sync_contacts_tui(
-                        &mut manager,
-                        Arc::clone(&current_contacts_mutex),
-                    )
-                    .await;
+                    // let _ = contacts::sync_contacts_tui(
+                    //     &mut manager,
+                    //     Arc::clone(&current_contacts_mutex),
+                    // )
+                    // .await;
                 }
                 EventSend::SendAttachment(recipient, text, attachment_path) => {
                     match send_attachment_tui(
