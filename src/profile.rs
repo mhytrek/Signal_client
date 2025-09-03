@@ -1,10 +1,9 @@
-use crate::{AsyncRegisteredManager, create_registered_manager};
+use crate::create_registered_manager;
 use anyhow::Result;
-use presage::libsignal_service::Profile;
-use std::sync::Arc;
+use presage::{Manager, libsignal_service::Profile, manager::Registered};
+use presage_store_sqlite::SqliteStore;
 
-pub async fn get_profile_tui(manager_mutex: Arc<AsyncRegisteredManager>) -> Result<Profile> {
-    let mut manager = manager_mutex.write().await;
+pub async fn get_profile_tui(manager: &mut Manager<SqliteStore, Registered>) -> Result<Profile> {
     manager.retrieve_profile().await.map_err(anyhow::Error::new)
 }
 
@@ -33,10 +32,8 @@ pub async fn get_my_profile_avatar_cli() -> Result<Option<Vec<u8>>> {
 }
 
 pub async fn get_my_profile_avatar_tui(
-    manager_mutex: Arc<AsyncRegisteredManager>,
+    manager: &mut Manager<SqliteStore, Registered>,
 ) -> Result<Option<Vec<u8>>> {
-    let mut manager = manager_mutex.write().await;
-
     let registration_data = manager.registration_data();
     let profile_key = registration_data.profile_key();
 

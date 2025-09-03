@@ -1,6 +1,6 @@
 use crate::contacts::get_contacts_cli;
 use crate::messages::receive::receiving_loop;
-use crate::{AsyncContactsMap, AsyncRegisteredManager, create_registered_manager};
+use crate::{AsyncContactsMap, create_registered_manager};
 use anyhow::Result;
 use mime_guess::mime::APPLICATION_OCTET_STREAM;
 use presage::Manager;
@@ -98,11 +98,10 @@ async fn send_message(
 pub async fn send_message_tui(
     recipient: String,
     text_message: String,
-    manager_mutex: AsyncRegisteredManager,
+    mut manager: Manager<SqliteStore, Registered>,
     current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
     // let mut manager = create_registered_manager().await?;
-    let mut manager = manager_mutex.write().await;
     send_message(
         &mut manager,
         recipient,
@@ -210,12 +209,11 @@ pub async fn send_attachment_tui(
     recipient: String,
     text_message: String,
     attachment_path: String,
-    manager_mutex: AsyncRegisteredManager,
+    manager: &mut Manager<SqliteStore, Registered>,
     current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
-    let mut manager = manager_mutex.write().await;
     send_attachment(
-        &mut manager,
+        manager,
         recipient,
         text_message,
         attachment_path,
