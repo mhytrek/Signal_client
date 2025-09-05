@@ -4,10 +4,7 @@ use crate::messages::send::{send_attachment_tui, send_message_tui};
 use crate::paths::QRCODE;
 use crate::profile::get_profile_tui;
 use crate::ui::render_ui;
-use crate::{
-    AsyncContactsMap, AsyncRegisteredManager, config::Config, contacts, create_registered_manager,
-    devices,
-};
+use crate::{AsyncContactsMap, config::Config, contacts, create_registered_manager, devices};
 use anyhow::{Error, Result};
 use crossterm::event::{self, Event, KeyModifiers};
 use crossterm::event::{KeyCode, KeyEventKind};
@@ -26,7 +23,8 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::{fs, io};
 use tokio::runtime::Builder;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
+// use tokio_util::task::LocalPoolHandle;
 use tracing::error;
 
 use image::ImageFormat;
@@ -99,7 +97,7 @@ pub struct App {
     pub config: Config,
     pub config_selected: usize,
 
-    pub manager: Option<AsyncRegisteredManager>,
+    pub manager: Option<Manager<SqliteStore, Registered>>,
 
     pub tx_thread: mpsc::Sender<EventApp>,
     pub rx_tui: mpsc::Receiver<EventApp>,
@@ -185,18 +183,17 @@ impl App {
     ) -> io::Result<bool> {
         if self.linking_status == LinkingStatus::Linked {
             if let Some(rx) = self.rx_thread.take() {
-                let new_manager: AsyncRegisteredManager = match create_registered_manager().await {
-                    Ok(manager) => Arc::new(RwLock::new(manager)),
+                let new_manager = match create_registered_manager().await {
+                    Ok(manager) => manager,
                     Err(_) => {
                         return Err(io::Error::other("Failed to create manager"));
                     }
                 };
-                let new_manager_mutex = Arc::clone(&new_manager);
 
-                self.manager = Some(new_manager);
+                self.manager = Some(new_manager.clone());
 
                 if let Err(e) =
-                    init_background_threads(self.tx_thread.clone(), rx, new_manager_mutex).await
+                    init_background_threads(self.tx_thread.clone(), rx, new_manager).await
                 {
                     eprintln!("Failed to init threads: {e:?}");
                 }
@@ -318,25 +315,21 @@ impl App {
                     true => {
                         self.linking_status = LinkingStatus::Linked;
                         if let Some(rx) = self.rx_thread.take() {
-                            let new_manager: AsyncRegisteredManager = match manager_optional {
-                                Some(manager) => Arc::new(RwLock::new(manager)),
+                            let new_manager = match manager_optional {
+                                Some(manager) => manager,
                                 None => match create_registered_manager().await {
-                                    Ok(manager) => Arc::new(RwLock::new(manager)),
+                                    Ok(manager) => manager,
                                     Err(_) => {
                                         return Err(io::Error::other("Failed to create manager"));
                                     }
                                 },
                             };
-                            let new_manager_mutex = Arc::clone(&new_manager);
 
-                            self.manager = Some(new_manager);
+                            self.manager = Some(new_manager.clone());
 
-                            if let Err(e) = init_background_threads(
-                                self.tx_thread.clone(),
-                                rx,
-                                new_manager_mutex,
-                            )
-                            .await
+                            if let Err(e) =
+                                init_background_threads(self.tx_thread.clone(), rx, new_manager)
+                                    .await
                             {
                                 eprintln!("Failed to init threads: {e:?}");
                             }
@@ -660,16 +653,20 @@ fn is_connection_error(e: &Error) -> bool {
 pub async fn init_background_threads(
     tx_thread: mpsc::Sender<EventApp>,
     rx_thread: mpsc::Receiver<EventSend>,
-    manager: AsyncRegisteredManager,
+    mut manager: Manager<SqliteStore, Registered>,
 ) -> Result<()> {
-    let new_manager_mutex = Arc::clone(&manager);
     let current_contacts_mutex: AsyncContactsMap =
-        Arc::new(Mutex::new(get_contacts_tui(new_manager_mutex).await?));
+        Arc::new(Mutex::new(get_contacts_tui(&mut manager).await?));
+
+    // let local_pool = LocalPoolHandle::new(4);
 
     //spawn thread to sync contacts and new messages
     let tx_synchronization_events = tx_thread.clone();
-    let new_manager = Arc::clone(&manager);
+    let new_manager = manager.clone();
     let new_contacts = Arc::clone(&current_contacts_mutex);
+    // local_pool.spawn_pinned(async move || {
+    //     handle_synchronization(tx_synchronization_events, new_manager, new_contacts).await;
+    // });
     thread::Builder::new()
         .name(String::from("synchronization_thread"))
         .stack_size(1024 * 1024 * 8)
@@ -686,7 +683,7 @@ pub async fn init_background_threads(
         .unwrap();
 
     //spawn thread to receive background events
-    let new_manager = Arc::clone(&manager);
+    let new_manager = manager.clone();
     let rx_sending_thread = rx_thread;
     let new_contacts = Arc::clone(&current_contacts_mutex);
     let tx_status_clone = tx_thread.clone();
@@ -712,8 +709,7 @@ pub async fn init_background_threads(
         .unwrap();
 
     // Add profile fetching
-    let profile_manager_1 = Arc::clone(&manager);
-    let profile_manager_2 = Arc::clone(&manager);
+    let mut profile_manager = manager.clone();
     let tx_profile = tx_thread.clone();
     thread::Builder::new()
         .name(String::from("profile_thread"))
@@ -725,11 +721,11 @@ pub async fn init_background_threads(
                 .build()
                 .unwrap();
             runtime.block_on(async move {
-                if let Ok(profile) = get_profile_tui(Arc::from(profile_manager_1)).await {
+                if let Ok(profile) = get_profile_tui(&mut profile_manager).await {
                     let _ = tx_profile.send(EventApp::ProfileReceived(profile));
                 }
                 if let Ok(Some(avatar_data)) =
-                    crate::profile::get_my_profile_avatar_tui(Arc::from(profile_manager_2)).await
+                    crate::profile::get_my_profile_avatar_tui(&mut profile_manager).await
                 {
                     let _ = tx_profile.send(EventApp::AvatarReceived(avatar_data));
                 }
@@ -765,21 +761,18 @@ pub fn handle_input_events(tx: mpsc::Sender<EventApp>) {
 
 pub async fn handle_synchronization(
     tx: mpsc::Sender<EventApp>,
-    manager_mutex: AsyncRegisteredManager,
+    mut manager: Manager<SqliteStore, Registered>,
     current_contacts_mutex: AsyncContactsMap,
 ) {
-    let mut manager = manager_mutex.write().await;
     match contacts::initial_sync(&mut manager).await {
         Ok(_) => {}
         Err(e) => error!("Initial contact sync failed: {e}"),
     }
-    drop(manager);
     let mut previous_contacts: Vec<(String, String)> = Vec::new();
     loop {
-        let new_mutex = Arc::clone(&manager_mutex);
         let new_contacts_mutex = Arc::clone(&current_contacts_mutex);
 
-        let messages = match receive::receive_messages_tui(new_mutex, new_contacts_mutex).await {
+        let messages = match receive::receive_messages_tui(&mut manager, new_contacts_mutex).await {
             Ok(list) => {
                 let _ = tx.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
                 list
@@ -794,8 +787,7 @@ pub async fn handle_synchronization(
             }
         };
 
-        let new_mutex = Arc::clone(&manager_mutex);
-        let result = contacts::list_contacts_tui(new_mutex).await;
+        let result = contacts::list_contacts_tui(&mut manager).await;
 
         let contacts = match result {
             Ok(list) => list,
@@ -907,7 +899,7 @@ pub async fn handle_synchronization(
 
 pub async fn handle_background_events(
     rx: Receiver<EventSend>,
-    manager_mutex: AsyncRegisteredManager,
+    mut manager: Manager<SqliteStore, Registered>,
     current_contacts_mutex: AsyncContactsMap,
     tx_status: mpsc::Sender<EventApp>,
 ) {
@@ -915,14 +907,7 @@ pub async fn handle_background_events(
         if let Ok(event) = rx.recv() {
             match event {
                 EventSend::SendText(recipient, text) => {
-                    match send_message_tui(
-                        recipient.clone(),
-                        text.clone(),
-                        Arc::clone(&manager_mutex),
-                        Arc::clone(&current_contacts_mutex),
-                    )
-                    .await
-                    {
+                    match send_message_tui(recipient.clone(), text.clone(), &mut manager).await {
                         Ok(_) => {
                             let _ = tx_status
                                 .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
@@ -940,18 +925,18 @@ pub async fn handle_background_events(
                         }
                     }
 
-                    let _ = contacts::sync_contacts_tui(
-                        Arc::clone(&manager_mutex),
-                        Arc::clone(&current_contacts_mutex),
-                    )
-                    .await;
+                    // let _ = contacts::sync_contacts_tui(
+                    //     &mut manager,
+                    //     Arc::clone(&current_contacts_mutex),
+                    // )
+                    // .await;
                 }
                 EventSend::SendAttachment(recipient, text, attachment_path) => {
                     match send_attachment_tui(
                         recipient.clone(),
                         text.clone(),
                         attachment_path,
-                        Arc::clone(&manager_mutex),
+                        &mut manager,
                         Arc::clone(&current_contacts_mutex),
                     )
                     .await
@@ -974,15 +959,14 @@ pub async fn handle_background_events(
                     }
 
                     let _ = contacts::sync_contacts_tui(
-                        Arc::clone(&manager_mutex),
+                        &mut manager,
                         Arc::clone(&current_contacts_mutex),
                     )
                     .await;
                 }
                 EventSend::GetMessagesForContact(uuid_str) => {
-                    let new_mutex = Arc::clone(&manager_mutex);
                     let result =
-                        list_messages_tui(uuid_str.clone(), "0".to_string(), new_mutex).await;
+                        list_messages_tui(uuid_str.clone(), "0".to_string(), &mut manager).await;
                     let messages = match result {
                         Ok(list) => {
                             let _ = tx_status

@@ -6,7 +6,7 @@ use signal_client::logger::init_logger;
 use signal_client::messages;
 use signal_client::{cli, contacts, devices, tui};
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
     init_logger();
     let cli = Cli::parse();

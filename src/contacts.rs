@@ -1,4 +1,3 @@
-use crate::AsyncRegisteredManager;
 use crate::messages::receive::receiving_loop;
 use crate::{AsyncContactsMap, create_registered_manager};
 use anyhow::Result;
@@ -42,11 +41,10 @@ pub async fn sync_contacts_cli() -> Result<()> {
 
 /// Function to sync contacts when TUI is used
 pub async fn sync_contacts_tui(
-    manager_mutex: AsyncRegisteredManager,
+    manager: &mut Manager<SqliteStore, Registered>,
     current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
-    let mut manager = manager_mutex.write().await;
-    sync_contacts(&mut manager, current_contacts_mutex).await
+    sync_contacts(manager, current_contacts_mutex).await
 }
 
 async fn get_contacts(
@@ -71,10 +69,9 @@ pub async fn get_contacts_cli(
 }
 
 pub async fn get_contacts_tui(
-    manager_mutex: AsyncRegisteredManager,
+    manager: &mut Manager<SqliteStore, Registered>,
 ) -> Result<HashMap<Uuid, Contact>> {
-    let manager = manager_mutex.read().await;
-    get_contacts(&manager).await
+    get_contacts(manager).await
 }
 
 async fn list_contacts(
@@ -91,8 +88,7 @@ pub async fn list_contacts_cli() -> Result<Vec<Result<Contact, SqliteStoreError>
 
 /// Returns iterator over stored contacts, for use in TUI
 pub async fn list_contacts_tui(
-    manager_mutex: AsyncRegisteredManager,
+    manager: &mut Manager<SqliteStore, Registered>,
 ) -> Result<Vec<Result<Contact, SqliteStoreError>>> {
-    let manager = manager_mutex.read().await;
-    list_contacts(&manager).await
+    list_contacts(manager).await
 }

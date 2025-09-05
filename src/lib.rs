@@ -7,7 +7,7 @@ use presage::{
 use presage_store_sqlite::{SqliteConnectOptions, SqliteStore, SqliteStoreError};
 use std::sync::Arc;
 use std::{collections::HashMap, str::FromStr};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 
 pub mod app;
 pub mod args;
@@ -24,8 +24,6 @@ pub mod tui;
 pub mod ui;
 
 pub mod sending {}
-
-pub type AsyncRegisteredManager = Arc<RwLock<Manager<SqliteStore, Registered>>>;
 
 pub type AsyncContactsMap = Arc<Mutex<HashMap<Uuid, Contact>>>;
 

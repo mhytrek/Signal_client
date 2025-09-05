@@ -18,7 +18,6 @@ use presage_store_sqlite::{SqliteStore, SqliteStoreError};
 use tokio::sync::Mutex;
 
 use crate::AsyncContactsMap;
-use crate::AsyncRegisteredManager;
 use crate::contacts::get_contacts_cli;
 use crate::create_registered_manager;
 use crate::env::SIGNAL_DISPLAY_FLAGS;
@@ -148,11 +147,9 @@ pub fn format_message(content: &Content) -> Option<MessageDto> {
 pub async fn list_messages_tui(
     recipient: String,
     from: String,
-    manager_mutex: AsyncRegisteredManager,
+    manager: &mut Manager<SqliteStore, Registered>,
 ) -> Result<Vec<MessageDto>> {
-    let manager = manager_mutex.read().await;
-
-    let messages = list_messages(&manager, recipient, from).await?;
+    let messages = list_messages(manager, recipient, from).await?;
 
     let mut result = Vec::new();
 
@@ -166,17 +163,15 @@ pub async fn list_messages_tui(
 
 /// Function to receive messages for TUI interface
 pub async fn receive_messages_tui(
-    manager_mutex: AsyncRegisteredManager,
+    manager: &mut Manager<SqliteStore, Registered>,
     current_contacts_mutex: AsyncContactsMap,
 ) -> Result<Vec<MessageDto>> {
-    let mut manager = manager_mutex.write().await;
-
     let messages = manager.receive_messages().await?;
     let mut contents = Vec::new();
 
     receiving_loop(
         messages,
-        &mut manager,
+        manager,
         Some(&mut contents),
         current_contacts_mutex,
     )

@@ -1,6 +1,6 @@
 use crate::contacts::get_contacts_cli;
 use crate::messages::receive::receiving_loop;
-use crate::{AsyncContactsMap, AsyncRegisteredManager, create_registered_manager};
+use crate::{AsyncContactsMap, create_registered_manager};
 use anyhow::Result;
 use mime_guess::mime::APPLICATION_OCTET_STREAM;
 use presage::Manager;
@@ -80,14 +80,10 @@ async fn send_message(
     manager: &mut Manager<SqliteStore, Registered>,
     recipient: String,
     text_message: String,
-    current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
     let recipient_address = get_address(recipient, manager).await?;
     let data_message = create_data_message(text_message, timestamp)?;
-
-    let messages = manager.receive_messages().await?;
-    receiving_loop(messages, manager, None, current_contacts_mutex).await?;
 
     send(manager, recipient_address, data_message, timestamp).await?;
 
@@ -98,27 +94,17 @@ async fn send_message(
 pub async fn send_message_tui(
     recipient: String,
     text_message: String,
-    manager_mutex: AsyncRegisteredManager,
-    current_contacts_mutex: AsyncContactsMap,
+    manager: &mut Manager<SqliteStore, Registered>,
 ) -> Result<()> {
     // let mut manager = create_registered_manager().await?;
-    let mut manager = manager_mutex.write().await;
-    send_message(
-        &mut manager,
-        recipient,
-        text_message,
-        current_contacts_mutex,
-    )
-    .await
+    send_message(manager, recipient, text_message).await
 }
 
 /// sends text message to recipient ( phone number or name ), for usage with CLI
 pub async fn send_message_cli(recipient: String, text_message: String) -> Result<()> {
     let mut manager = create_registered_manager().await?;
     let uuid = find_uuid(recipient, &mut manager).await?.to_string();
-    let current_contacts_mutex: AsyncContactsMap =
-        Arc::new(Mutex::new(get_contacts_cli(&manager).await?));
-    send_message(&mut manager, uuid, text_message, current_contacts_mutex).await
+    send_message(&mut manager, uuid, text_message).await
 }
 
 /// Create attachment spec from file path
@@ -210,12 +196,11 @@ pub async fn send_attachment_tui(
     recipient: String,
     text_message: String,
     attachment_path: String,
-    manager_mutex: AsyncRegisteredManager,
+    manager: &mut Manager<SqliteStore, Registered>,
     current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
-    let mut manager = manager_mutex.write().await;
     send_attachment(
-        &mut manager,
+        manager,
         recipient,
         text_message,
         attachment_path,
