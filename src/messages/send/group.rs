@@ -11,22 +11,15 @@ use tracing::error;
 use crate::contacts::get_contacts_cli;
 use crate::groups::find_master_key;
 use crate::messages::receive::receiving_loop;
-use crate::{AsyncContactsMap, AsyncRegisteredManager, create_registered_manager};
+use crate::{AsyncContactsMap, create_registered_manager};
 
 pub async fn send_message_tui(
     master_key: GroupMasterKeyBytes,
     text_message: String,
-    manager_mutex: AsyncRegisteredManager,
+    manager: &mut Manager<SqliteStore, Registered>,
     current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
-    let mut manager = manager_mutex.write().await;
-    send_message(
-        &mut manager,
-        master_key,
-        text_message,
-        current_contacts_mutex,
-    )
-    .await
+    send_message(manager, master_key, text_message, current_contacts_mutex).await
 }
 
 pub async fn send_message_cli(group_name: String, text_message: String) -> Result<()> {
@@ -56,9 +49,6 @@ async fn send_message(
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
 
     let data_message = create_data_message(text_message, &master_key, timestamp);
-
-    let messages = manager.receive_messages().await?;
-    receiving_loop(messages, manager, None, current_contacts_mutex).await?;
 
     let send_result = send(manager, &master_key, data_message, timestamp).await;
     if let Err(e) = send_result {

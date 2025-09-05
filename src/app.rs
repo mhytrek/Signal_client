@@ -1,13 +1,12 @@
 use crate::contacts::get_contacts_tui;
-use crate::messages::receive::{self, MessageDto};
+use crate::messages::receive::{self, MessageDto, contact};
 use crate::messages::send;
 use crate::messages::send::send_attachment_tui;
 use crate::paths::QRCODE;
 use crate::profile::get_profile_tui;
 use crate::ui::render_ui;
 use crate::{
-    AsyncContactsMap, AsyncRegisteredManager, config::Config, contacts, create_registered_manager,
-    devices, groups,
+    AsyncContactsMap, config::Config, contacts, create_registered_manager, devices, groups,
 };
 use anyhow::{Error, Result};
 use crossterm::event::{self, Event, KeyModifiers};
@@ -866,7 +865,6 @@ pub async fn handle_synchronization(
         Ok(_) => {}
         Err(e) => error!("Initial contact sync failed: {e}"),
     }
-    drop(manager);
     let mut previous_contacts: Vec<Box<DisplayContact>> = Vec::new();
     let mut previous_groups: Vec<Box<DisplayGroup>> = Vec::new();
     loop {
@@ -887,8 +885,8 @@ pub async fn handle_synchronization(
             }
         };
 
-        let contacts_result = contacts::list_contacts_tui(manager_mutex.clone()).await;
-        let groups_result = groups::list_groups_tui(manager_mutex.clone()).await;
+        let contacts_result = contacts::list_contacts_tui(&mut manager).await;
+        let groups_result = groups::list_groups_tui(&mut manager).await;
 
         let contacts = match contacts_result {
             Ok(list) => list,
@@ -1055,7 +1053,7 @@ pub async fn handle_background_events(
                             send::contact::send_message_tui(
                                 uuid.to_string(),
                                 text,
-                                manager_mutex.clone(),
+                                &mut manager,
                                 current_contacts_mutex.clone(),
                             )
                             .await
@@ -1064,7 +1062,7 @@ pub async fn handle_background_events(
                             send::group::send_message_tui(
                                 master_key,
                                 text,
-                                manager_mutex.clone(),
+                                &mut manager,
                                 current_contacts_mutex.clone(),
                             )
                             .await
@@ -1125,7 +1123,7 @@ pub async fn handle_background_events(
                         }
                     }
 
-                    let _ = contacts::sync_contacts_tui(
+                    let sync_result = contacts::sync_contacts_tui(
                         &mut manager,
                         Arc::clone(&current_contacts_mutex),
                     )
@@ -1136,7 +1134,7 @@ pub async fn handle_background_events(
                 }
                 EventSend::GetMessagesForContact(uuid_str) => {
                     let result =
-                        contact::list_messages_tui(uuid_str.clone(), "0".to_string(), new_mutex)
+                        contact::list_messages_tui(uuid_str.clone(), "0".to_string(), &mut manager)
                             .await;
                     let messages = match result {
                         Ok(list) => {
@@ -1172,9 +1170,8 @@ pub async fn handle_background_events(
                     {}
                 }
                 EventSend::GetMessagesForGroup(master_key) => {
-                    let new_mutex = manager_mutex.clone();
                     let result =
-                        receive::group::list_messages_tui(new_mutex, master_key, None).await;
+                        receive::group::list_messages_tui(&mut manager, master_key, None).await;
 
                     let messages = match result {
                         Ok(list) => {

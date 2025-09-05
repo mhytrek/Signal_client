@@ -5,7 +5,7 @@ use presage::store::ContentsStore;
 use presage::{Manager, manager::Registered};
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
 
-use crate::{AsyncRegisteredManager, create_registered_manager};
+use crate::create_registered_manager;
 
 async fn list_groups(
     manager: &Manager<SqliteStore, Registered>,
@@ -20,10 +20,9 @@ pub async fn list_groups_cli() -> Result<Vec<Result<(GroupMasterKeyBytes, Group)
 }
 
 pub async fn list_groups_tui(
-    manager_mutex: AsyncRegisteredManager,
+    manager: &mut Manager<SqliteStore, Registered>,
 ) -> Result<Vec<Result<(GroupMasterKeyBytes, Group), SqliteStoreError>>> {
-    let manager = manager_mutex.read().await;
-    list_groups(&manager).await
+    list_groups(manager).await
 }
 
 pub async fn find_master_key(

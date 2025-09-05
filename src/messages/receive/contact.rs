@@ -10,7 +10,7 @@ use presage::{
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
 
 use crate::{
-    AsyncRegisteredManager, create_registered_manager,
+    create_registered_manager,
     messages::receive::{MessageDto, format_message},
 };
 
@@ -37,11 +37,9 @@ pub async fn list_messages(
 pub async fn list_messages_tui(
     recipient: String,
     from: String,
-    manager_mutex: AsyncRegisteredManager,
+    manager: &mut Manager<SqliteStore, Registered>,
 ) -> Result<Vec<MessageDto>> {
-    let manager = manager_mutex.read().await;
-
-    let messages = list_messages(&manager, recipient, Some(from)).await?;
+    let messages = list_messages(manager, recipient, Some(from)).await?;
 
     let mut formatted_messages = Vec::new();
 

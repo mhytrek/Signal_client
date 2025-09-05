@@ -71,7 +71,7 @@ async fn send_attachment(
     current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
-    let recipient_address = get_address(recipient, manager).await?;
+    let recipient_address = contact::get_address(recipient, manager).await?;
 
     let attachment_spec = create_attachment(attachment_path).await?;
 
@@ -89,13 +89,13 @@ async fn send_attachment(
         .next()
         .ok_or_else(|| anyhow::anyhow!("Failed to get attachment pointer"))?;
 
-    let mut data_message = create_data_message(text_message, timestamp)?;
+    let mut data_message = contact::create_data_message(text_message, timestamp)?;
     data_message.attachments = vec![attachment_pointer];
 
     let messages = manager.receive_messages().await?;
     receiving_loop(messages, manager, None, current_contacts_mutex).await?;
 
-    send(manager, recipient_address, data_message, timestamp).await?;
+    contact::send(manager, recipient_address, data_message, timestamp).await?;
 
     Ok(())
 }

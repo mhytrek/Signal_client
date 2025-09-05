@@ -13,7 +13,7 @@ use tokio::sync::Mutex;
 
 use crate::contacts::get_contacts_cli;
 use crate::messages::receive::receiving_loop;
-use crate::{AsyncContactsMap, AsyncRegisteredManager, create_registered_manager};
+use crate::{AsyncContactsMap, create_registered_manager};
 
 /// finds contact uuid from string that can be contact_name or contact phone_number
 pub async fn find_uuid(
@@ -83,9 +83,6 @@ async fn send_message(
     let recipient_address = get_address(recipient, manager).await?;
     let data_message = create_data_message(text_message, timestamp)?;
 
-    let messages = manager.receive_messages().await?;
-    receiving_loop(messages, manager, None, current_contacts_mutex).await?;
-
     send(manager, recipient_address, data_message, timestamp).await?;
 
     Ok(())
@@ -95,18 +92,11 @@ async fn send_message(
 pub async fn send_message_tui(
     recipient: String,
     text_message: String,
-    manager_mutex: AsyncRegisteredManager,
+    manager: &mut Manager<SqliteStore, Registered>,
     current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
     // let mut manager = create_registered_manager().await?;
-    let mut manager = manager_mutex.write().await;
-    send_message(
-        &mut manager,
-        recipient,
-        text_message,
-        current_contacts_mutex,
-    )
-    .await
+    send_message(manager, recipient, text_message, current_contacts_mutex).await
 }
 
 /// sends text message to recipient ( phone number or name ), for usage with CLI
