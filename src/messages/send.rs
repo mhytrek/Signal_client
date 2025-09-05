@@ -17,7 +17,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
-use tracing::error;
 
 /// finds contact uuid from string that can be contact_name or contact phone_number
 pub async fn find_uuid(
@@ -70,7 +69,6 @@ async fn send(
     data_message: DataMessage,
     timestamp: u64,
 ) -> Result<()> {
-    error!("HERE");
     manager
         .send_message(recipient_addr, data_message, timestamp)
         .await
@@ -96,10 +94,10 @@ async fn send_message(
 pub async fn send_message_tui(
     recipient: String,
     text_message: String,
-    mut manager: Manager<SqliteStore, Registered>,
+    manager: &mut Manager<SqliteStore, Registered>,
 ) -> Result<()> {
     // let mut manager = create_registered_manager().await?;
-    send_message(&mut manager, recipient, text_message).await
+    send_message(manager, recipient, text_message).await
 }
 
 /// sends text message to recipient ( phone number or name ), for usage with CLI

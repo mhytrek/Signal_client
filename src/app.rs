@@ -687,15 +687,6 @@ pub async fn init_background_threads(
     let rx_sending_thread = rx_thread;
     let new_contacts = Arc::clone(&current_contacts_mutex);
     let tx_status_clone = tx_thread.clone();
-    // local_pool.spawn_pinned(async move || {
-    //     handle_background_events(
-    //         rx_sending_thread,
-    //         new_manager,
-    //         new_contacts,
-    //         tx_status_clone,
-    //     )
-    //     .await;
-    // });
     thread::Builder::new()
         .name(String::from("background_events_thread"))
         .stack_size(1024 * 1024 * 8)
@@ -718,8 +709,7 @@ pub async fn init_background_threads(
         .unwrap();
 
     // Add profile fetching
-    let mut profile_manager_1 = manager.clone();
-    let mut profile_manager_2 = manager.clone();
+    let mut profile_manager = manager.clone();
     let tx_profile = tx_thread.clone();
     thread::Builder::new()
         .name(String::from("profile_thread"))
@@ -731,11 +721,11 @@ pub async fn init_background_threads(
                 .build()
                 .unwrap();
             runtime.block_on(async move {
-                if let Ok(profile) = get_profile_tui(&mut profile_manager_1).await {
+                if let Ok(profile) = get_profile_tui(&mut profile_manager).await {
                     let _ = tx_profile.send(EventApp::ProfileReceived(profile));
                 }
                 if let Ok(Some(avatar_data)) =
-                    crate::profile::get_my_profile_avatar_tui(&mut profile_manager_2).await
+                    crate::profile::get_my_profile_avatar_tui(&mut profile_manager).await
                 {
                     let _ = tx_profile.send(EventApp::AvatarReceived(avatar_data));
                 }
@@ -917,7 +907,7 @@ pub async fn handle_background_events(
         if let Ok(event) = rx.recv() {
             match event {
                 EventSend::SendText(recipient, text) => {
-                    match send_message_tui(recipient.clone(), text.clone(), manager.clone()).await {
+                    match send_message_tui(recipient.clone(), text.clone(), &mut manager).await {
                         Ok(_) => {
                             let _ = tx_status
                                 .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
