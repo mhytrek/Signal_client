@@ -94,10 +94,10 @@ async fn send_message(
 pub async fn send_message_tui(
     recipient: String,
     text_message: String,
-    manager: &mut Manager<SqliteStore, Registered>,
+    mut manager: Manager<SqliteStore, Registered>,
 ) -> Result<()> {
     // let mut manager = create_registered_manager().await?;
-    send_message(manager, recipient, text_message).await
+    send_message(&mut manager, recipient, text_message).await
 }
 
 /// sends text message to recipient ( phone number or name ), for usage with CLI
@@ -196,11 +196,11 @@ pub async fn send_attachment_tui(
     recipient: String,
     text_message: String,
     attachment_path: String,
-    manager: &mut Manager<SqliteStore, Registered>,
+    mut manager: Manager<SqliteStore, Registered>,
     current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
     send_attachment(
-        manager,
+        &mut manager,
         recipient,
         text_message,
         attachment_path,

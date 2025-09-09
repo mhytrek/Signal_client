@@ -24,6 +24,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::{fs, io};
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
+use tokio_util::task::LocalPoolHandle;
 // use tokio_util::task::LocalPoolHandle;
 use tracing::error;
 
@@ -899,31 +900,37 @@ pub async fn handle_synchronization(
 
 pub async fn handle_background_events(
     rx: Receiver<EventSend>,
-    mut manager: Manager<SqliteStore, Registered>,
+    manager: Manager<SqliteStore, Registered>,
     current_contacts_mutex: AsyncContactsMap,
     tx_status: mpsc::Sender<EventApp>,
 ) {
+    let local_pool = LocalPoolHandle::new(3);
     loop {
         if let Ok(event) = rx.recv() {
+            let manager_internal = manager.clone();
+            let tx_status_internal = tx_status.clone();
             match event {
                 EventSend::SendText(recipient, text) => {
-                    match send_message_tui(recipient.clone(), text.clone(), &mut manager).await {
-                        Ok(_) => {
-                            let _ = tx_status
-                                .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
-                        }
-                        Err(e) => {
-                            if is_connection_error(&e) {
-                                let _ = tx_status.send(EventApp::NetworkStatusChanged(
-                                    NetworkStatus::Disconnected(
-                                        "Cannot send: WiFi disconnected".to_string(),
-                                    ),
-                                ));
-                            } else {
-                                println!("Error sending message: {e:?}");
+                    local_pool.spawn_pinned(async move || {
+                        match send_message_tui(recipient, text, manager_internal).await {
+                            Ok(_) => {
+                                let _ = tx_status_internal
+                                    .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                            }
+                            Err(e) => {
+                                if is_connection_error(&e) {
+                                    let _ =
+                                        tx_status_internal.send(EventApp::NetworkStatusChanged(
+                                            NetworkStatus::Disconnected(
+                                                "Cannot send: WiFi disconnected".to_string(),
+                                            ),
+                                        ));
+                                } else {
+                                    println!("Error sending message: {e:?}");
+                                }
                             }
                         }
-                    }
+                    });
 
                     // let _ = contacts::sync_contacts_tui(
                     //     &mut manager,
@@ -932,88 +939,99 @@ pub async fn handle_background_events(
                     // .await;
                 }
                 EventSend::SendAttachment(recipient, text, attachment_path) => {
-                    match send_attachment_tui(
-                        recipient.clone(),
-                        text.clone(),
-                        attachment_path,
-                        &mut manager,
-                        Arc::clone(&current_contacts_mutex),
-                    )
-                    .await
-                    {
-                        Ok(_) => {
-                            let _ = tx_status
-                                .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
-                        }
-                        Err(e) => {
-                            if is_connection_error(&e) {
-                                let _ = tx_status.send(EventApp::NetworkStatusChanged(
-                                    NetworkStatus::Disconnected(
-                                        "Cannot send: WiFi disconnected".to_string(),
-                                    ),
-                                ));
-                            } else {
-                                println!("Error sending attachment: {e:?}");
+                    let send_contacts_mutex = current_contacts_mutex.clone();
+                    // let sync_contacts_mutex = current_contacts_mutex.clone();
+                    local_pool.spawn_pinned(async move || {
+                        match send_attachment_tui(
+                            recipient.clone(),
+                            text.clone(),
+                            attachment_path,
+                            manager_internal,
+                            send_contacts_mutex,
+                        )
+                        .await
+                        {
+                            Ok(_) => {
+                                let _ = tx_status_internal
+                                    .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                            }
+                            Err(e) => {
+                                if is_connection_error(&e) {
+                                    let _ =
+                                        tx_status_internal.send(EventApp::NetworkStatusChanged(
+                                            NetworkStatus::Disconnected(
+                                                "Cannot send: WiFi disconnected".to_string(),
+                                            ),
+                                        ));
+                                } else {
+                                    println!("Error sending attachment: {e:?}");
+                                }
                             }
                         }
-                    }
 
-                    let _ = contacts::sync_contacts_tui(
-                        &mut manager,
-                        Arc::clone(&current_contacts_mutex),
-                    )
-                    .await;
+                        // let _ = contacts::sync_contacts_tui(manager_internal, sync_contacts_mutex)
+                        //     .await;
+                    });
                 }
                 EventSend::GetMessagesForContact(uuid_str) => {
-                    let result =
-                        list_messages_tui(uuid_str.clone(), "0".to_string(), &mut manager).await;
-                    let messages = match result {
-                        Ok(list) => {
-                            let _ = tx_status
-                                .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
-                            list
-                        }
-                        Err(e) => {
-                            if is_connection_error(&e) {
-                                let _ = tx_status.send(EventApp::NetworkStatusChanged(
-                                    NetworkStatus::Disconnected(
-                                        "Cannot get messages from store: WiFi disconnected"
-                                            .to_string(),
-                                    ),
-                                ));
+                    let manager_clone = manager.clone();
+                    let tx_status_clone = tx_status.clone();
+                    local_pool.spawn_pinned(async move || {
+                        let result =
+                            list_messages_tui(uuid_str.clone(), "0".to_string(), manager_clone)
+                                .await;
+                        let messages = match result {
+                            Ok(list) => {
+                                let _ = tx_status_clone
+                                    .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                                list
                             }
-                            Vec::new()
-                        }
-                    };
+                            Err(e) => {
+                                if is_connection_error(&e) {
+                                    let _ = tx_status_clone.send(EventApp::NetworkStatusChanged(
+                                        NetworkStatus::Disconnected(
+                                            "Cannot get messages from store: WiFi disconnected"
+                                                .to_string(),
+                                        ),
+                                    ));
+                                }
+                                Vec::new()
+                            }
+                        };
 
-                    if !messages.is_empty()
-                        && tx_status
-                            .send(EventApp::GetMessageHistory(uuid_str.clone(), messages))
-                            .is_err()
-                    {}
+                        if !messages.is_empty()
+                            && tx_status_clone
+                                .send(EventApp::GetMessageHistory(uuid_str.clone(), messages))
+                                .is_err()
+                        {}
+                    });
                 }
                 EventSend::GetContactInfo(uuid_str) => {
                     let contacts_mutex = Arc::clone(&current_contacts_mutex);
-                    let contacts = contacts_mutex.lock().await;
+                    local_pool.spawn_pinned(async move || {
+                        let contacts = contacts_mutex.lock().await;
 
-                    if let Ok(uuid) = uuid_str.parse()
-                        && let Some(contact) = contacts.get(&uuid)
-                    {
-                        let contact_info = ContactInfo {
-                            uuid: contact.uuid.to_string(),
-                            name: contact.name.clone(),
-                            phone_number: contact.phone_number.as_ref().map(|p| p.to_string()),
-                            verified_state: contact.verified.state,
-                            expire_timer: contact.expire_timer,
-                            has_avatar: contact.avatar.is_some(),
-                        };
-                        let _ = tx_status.send(EventApp::ContactInfoReceived(contact_info));
+                        if let Ok(uuid) = uuid_str.parse()
+                            && let Some(contact) = contacts.get(&uuid)
+                        {
+                            let contact_info = ContactInfo {
+                                uuid: contact.uuid.to_string(),
+                                name: contact.name.clone(),
+                                phone_number: contact.phone_number.as_ref().map(|p| p.to_string()),
+                                verified_state: contact.verified.state,
+                                expire_timer: contact.expire_timer,
+                                has_avatar: contact.avatar.is_some(),
+                            };
+                            let _ = tx_status_internal
+                                .send(EventApp::ContactInfoReceived(contact_info));
 
-                        if let Some(ref avatar_attachment) = contact.avatar {
-                            let avatar_bytes: Vec<u8> = avatar_attachment.reader.to_vec();
-                            let _ = tx_status.send(EventApp::ContactAvatarReceived(avatar_bytes));
+                            if let Some(ref avatar_attachment) = contact.avatar {
+                                let avatar_bytes: Vec<u8> = avatar_attachment.reader.to_vec();
+                                let _ = tx_status_internal
+                                    .send(EventApp::ContactAvatarReceived(avatar_bytes));
+                            }
                         }
-                    }
+                    });
                 }
             }
         }
