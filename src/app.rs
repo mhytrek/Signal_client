@@ -838,7 +838,7 @@ pub async fn handle_background_events(
             let tx_status_internal = tx_status.clone();
             match event {
                 EventSend::SendText(recipient, text) => {
-                    local_pool.spawn_pinned(async move || {
+                    local_pool.spawn_pinned(move || async move {
                         let send_result = send_message_tui(recipient, text, manager_internal).await;
                         match send_result {
                             Ok(_) => {
