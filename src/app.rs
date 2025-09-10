@@ -825,75 +825,6 @@ pub async fn handle_synchronization(
     }
 }
 
-// pub async fn handle_contacts(
-//     tx: mpsc::Sender<EventApp>,
-//     manager_mutex: AsyncRegisteredManager,
-//     current_contacts_mutex: AsyncContactsMap,
-// ) {
-//     let mut previous_contacts: Vec<(String, String)> = Vec::new();
-
-//     loop {
-//         let new_mutex = Arc::clone(&manager_mutex);
-//         let new_contacts_mutex = Arc::clone(&current_contacts_mutex);
-//         match contacts::sync_contacts_tui(new_mutex, new_contacts_mutex).await {
-//             Ok(_) => {
-//                 let _ = tx.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
-//             }
-//             Err(e) => {
-//                 if e.to_string().contains("connection")
-//                     || e.to_string().contains("network")
-//                     || e.to_string().contains("Websocket")
-//                     || e.to_string().contains("timeout")
-//                 {
-//                     let _ = tx.send(EventApp::NetworkStatusChanged(NetworkStatus::Disconnected(
-//                         "WiFi connection lost".to_string(),
-//                     )));
-//                 }
-//             }
-//         };
-
-//         let new_mutex = Arc::clone(&manager_mutex);
-//         let result = contacts::list_contacts_tui(new_mutex).await;
-
-//         let contacts = match result {
-//             Ok(list) => list,
-//             Err(_) => continue,
-//         };
-
-//         let contact_names: Vec<(String, String)> = contacts
-//             .into_iter()
-//             .filter_map(|contact_res| {
-//                 let contact = contact_res.ok()?;
-
-//                 let uuid_str = contact.uuid.to_string();
-
-//                 let display_name = if !contact.name.is_empty() {
-//                     contact.name
-//                 } else if let Some(phone) = contact.phone_number {
-//                     phone.to_string()
-//                 } else {
-//                     uuid_str.clone()
-//                 };
-
-//                 Some((uuid_str, display_name))
-//             })
-//             .collect();
-
-//         if contact_names != previous_contacts {
-//             if tx
-//                 .send(EventApp::ContactsList(contact_names.clone()))
-//                 .is_err()
-//             {
-//                 break;
-//             }
-
-//             previous_contacts = contact_names;
-//         }
-
-//         tokio::time::sleep(std::time::Duration::from_secs(200)).await;
-//     }
-// }
-
 pub async fn handle_background_events(
     rx: Receiver<EventSend>,
     manager: Manager<SqliteStore, Registered>,
@@ -908,7 +839,8 @@ pub async fn handle_background_events(
             match event {
                 EventSend::SendText(recipient, text) => {
                     local_pool.spawn_pinned(async move || {
-                        match send_message_tui(recipient, text, manager_internal).await {
+                        let send_result = send_message_tui(recipient, text, manager_internal).await;
+                        match send_result {
                             Ok(_) => {
                                 let _ = tx_status_internal
                                     .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
@@ -922,8 +854,6 @@ pub async fn handle_background_events(
                                                 "Cannot send: WiFi disconnected".to_string(),
                                             ),
                                         ));
-                                } else {
-                                    println!("Error sending message: {e:?}");
                                 }
                             }
                         }
