@@ -25,7 +25,6 @@ use std::{fs, io};
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
 use tokio_util::task::LocalPoolHandle;
-// use tokio_util::task::LocalPoolHandle;
 use tracing::error;
 
 use image::ImageFormat;
@@ -665,9 +664,6 @@ pub async fn init_background_threads(
     let tx_synchronization_events = tx_thread.clone();
     let new_manager = manager.clone();
     let new_contacts = Arc::clone(&current_contacts_mutex);
-    // local_pool.spawn_pinned(async move || {
-    //     handle_synchronization(tx_synchronization_events, new_manager, new_contacts).await;
-    // });
     thread::Builder::new()
         .name(String::from("synchronization_thread"))
         .stack_size(1024 * 1024 * 8)
@@ -916,6 +912,7 @@ pub async fn handle_background_events(
                             Ok(_) => {
                                 let _ = tx_status_internal
                                     .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                                let _ = tx_status_internal.send(EventApp::ReceiveMessage);
                             }
                             Err(e) => {
                                 if is_connection_error(&e) {
