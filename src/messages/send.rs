@@ -1,57 +1,18 @@
-use crate::account_management::create_registered_manager;
 use crate::messages::receive::receive_messages_cli;
 use anyhow::{Result, bail};
 use mime_guess::mime::APPLICATION_OCTET_STREAM;
 use presage::Manager;
 use presage::libsignal_service::sender::AttachmentSpec;
 use presage::manager::Registered;
+use crate::{account_management::create_registered_manager, messages::attachments::create_attachment};
+use anyhow::Result;
 use presage_store_sqlite::SqliteStore;
-use std::fs;
-use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
+use presage::manager::{Manager, Registered};
+
 
 pub mod contact;
 pub mod group;
-
-/// Create attachment spec from file path
-async fn create_attachment(attachment_path: String) -> Result<(AttachmentSpec, Vec<u8>)> {
-    // Resolve absolute path
-    let path: PathBuf = fs::canonicalize(&attachment_path)
-        .map_err(|_| anyhow::anyhow!("Failed to resolve path: {}", attachment_path))?;
-
-    if !path.exists() {
-        bail!("Attachment file not found: {}", path.display());
-    }
-
-    if !path.is_file() {
-        bail!("Attachment path is not a file: {}", path.display());
-    }
-
-    let file_data = fs::read(&path)?;
-    let file_name = path
-        .file_name()
-        .ok_or_else(|| anyhow::anyhow!("Invalid file name for path: {}", path.display()))?
-        .to_string_lossy()
-        .to_string();
-
-    let attachment_spec = AttachmentSpec {
-        content_type: mime_guess::from_path(&path)
-            .first()
-            .unwrap_or(APPLICATION_OCTET_STREAM)
-            .to_string(),
-        length: file_data.len(),
-        file_name: Some(file_name),
-        preview: None,
-        voice_note: None,
-        borderless: None,
-        width: None,
-        height: None,
-        caption: None,
-        blur_hash: None,
-    };
-
-    Ok((attachment_spec, file_data))
-}
 
 /// Send message with attachment
 async fn send_attachment(

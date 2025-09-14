@@ -9,7 +9,7 @@ use presage::{
 };
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
 
-use crate::account_management::create_registered_manager;
+use crate::{account_management::create_registered_manager, messages::receive::format_attachments};
 use crate::messages::receive::{MessageDto, format_message};
 
 pub async fn list_messages(
@@ -45,6 +45,8 @@ pub async fn list_messages_tui(
         if let Some(formatted_message) = format_message(&message) {
             formatted_messages.push(formatted_message);
         }
+        let attachment_msgs = format_attachments(&message);
+        formatted_messages.extend(attachment_msgs);
     }
     Ok(formatted_messages)
 }
@@ -60,6 +62,8 @@ pub async fn list_messages_cli(recipient: String, from: Option<String>) -> Resul
         if let Some(formatted_message) = format_message(&message) {
             result.push(formatted_message);
         }
+        let attachment_msgs = format_attachments(&message);
+        result.extend(attachment_msgs);
     }
     Ok(result)
 }

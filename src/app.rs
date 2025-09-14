@@ -1,4 +1,5 @@
 use crate::contacts::get_contacts_tui;
+use crate::messages::attachments::save_attachment;
 use crate::messages::receive::{self, MessageDto, check_contacts, contact};
 use crate::messages::send::{self, send_attachment_tui};
 use crate::paths::{ACCOUNTS_DIR, QRCODE};
@@ -9,6 +10,7 @@ use anyhow::{Error, Result, anyhow, bail};
 use crossterm::event::{self, Event, KeyModifiers};
 use crossterm::event::{KeyCode, KeyEventKind};
 use futures::{StreamExt, pin_mut};
+use presage::proto::AttachmentPointer;
 use presage::Manager;
 use presage::libsignal_service::Profile;
 use presage::libsignal_service::prelude::Uuid;
@@ -22,7 +24,7 @@ use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use std::collections::HashMap;
 use std::io::Stderr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::{fs, io};
@@ -111,6 +113,7 @@ pub enum CurrentScreen {
     Main,
     Syncing,
     LinkingNewDevice,
+    InspectMesseges,
     Writing,
     Options,
     Exiting,
@@ -209,6 +212,11 @@ pub enum NetworkStatus {
     Disconnected(String),
 }
 
+pub enum UiStatus {
+    Info(String),
+    Error(String),
+}
+
 pub enum EventApp {
     KeyInput(event::KeyEvent),
     ContactsList(Vec<Box<dyn DisplayRecipient>>),
@@ -227,6 +235,7 @@ pub enum EventApp {
     ReceiveMessage,
     QrCodeGenerated,
     Resize(u16, u16),
+    UiStatus(UiStatus),
 }
 pub enum EventSend {
     SendText(RecipientId, String),
@@ -234,6 +243,7 @@ pub enum EventSend {
     GetMessagesForContact(String),
     GetMessagesForGroup(GroupMasterKeyBytes),
     GetContactInfo(String),
+    SaveAttachment(Box<AttachmentPointer>, PathBuf),
 }
 
 impl App {
@@ -599,6 +609,7 @@ impl App {
             }
             EventApp::QrCodeGenerated => Ok(false),
             EventApp::Resize(_, _) => Ok(false),
+            EventApp::UiStatus(_) => Ok(false), // TODO: implement status on ui
         }
     }
 
@@ -772,35 +783,12 @@ impl App {
                 KeyCode::Char('n') => self.current_screen = Main,
                 _ => {}
             },
-            Writing => match key.code {
-                KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    self.synchronize_messages_for_selected_recipient();
-                }
+            InspectMesseges => match key.code {
                 KeyCode::Esc | KeyCode::Left => self.current_screen = Main,
-                KeyCode::Tab => {
-                    self.input_focus = match self.input_focus {
-                        InputFocus::Message => InputFocus::Attachment,
-                        InputFocus::Attachment => InputFocus::Message,
-                    };
+                KeyCode::Char('q') => self.current_screen = Writing,
+                KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.current_screen = Writing
                 }
-                KeyCode::Enter => {
-                    self.submit_message(tx);
-                    self.synchronize_messages_for_selected_recipient();
-                }
-                KeyCode::Char(to_insert) => match self.input_focus {
-                    InputFocus::Message => self.enter_char(to_insert),
-                    InputFocus::Attachment => {
-                        self.attachment_path.push(to_insert);
-                        self.validate_attachment_path();
-                    }
-                },
-                KeyCode::Backspace => match self.input_focus {
-                    InputFocus::Message => self.delete_char(),
-                    InputFocus::Attachment => {
-                        self.attachment_path.pop();
-                        self.validate_attachment_path();
-                    }
-                },
 
                 KeyCode::Up => {
                     let recipient_id = self.recipients[self.selected_recipient].0.id();
@@ -817,6 +805,94 @@ impl App {
                             .map(|msgs| msgs.len())
                             .unwrap_or(0),
                     };
+
+                    if last_message > 0 && self.message_selected < last_message - 1 {
+                        self.message_selected += 1;
+                    }
+                }
+                KeyCode::Down => {
+                    if self.message_selected > 0 {
+                        self.message_selected -= 1;
+                    }
+                }
+
+                KeyCode::Char('s') => {
+                    let selected_recipient_id = self.recipients[self.selected_recipient].0.id();
+                    let msg = match selected_recipient_id {
+                        RecipientId::Contact(uuid) => match self.contact_messages.get(&uuid.to_string()) {
+                        Some(messeges) => messeges.get(self.message_selected),
+                        None => None,
+                        },
+                        RecipientId::Group(group_key) => match self.group_messages.get(&group_key) {
+                        Some(messeges) => messeges.get(self.message_selected),
+                        None => None,
+                        },
+                    };
+
+                    let attachment = match msg {
+                        Some(message) => message.attachment.clone(),
+                        None => None,
+                    };
+
+                    match attachment {
+                        Some(att) => {
+                            // TODO: handle unwraps
+                            self.tx_tui
+                                .send(EventSend::SaveAttachment(Box::new(att),self.config.attachment_save_dir.clone()))
+                                .unwrap();
+                        }
+                        None => {}
+                        
+                    }
+                }
+
+                _ => {}
+            },
+
+            Writing => match key.code {
+                        KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => self.synchronize_messages_for_selected_recipient(),
+                        KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => self.current_screen = InspectMesseges,
+                        KeyCode::Esc | KeyCode::Left => self.current_screen = Main,
+                        KeyCode::Tab => {
+                            self.input_focus = match self.input_focus {
+                                InputFocus::Message => InputFocus::Attachment,
+                                InputFocus::Attachment => InputFocus::Message,
+                            };
+                        }
+
+
+
+                        
+                        KeyCode::Enter => {
+                            self.submit_message(tx);
+                            self.synchronize_messages_for_selected_recipient();
+                        }
+                        KeyCode::Char(to_insert) => match self.input_focus {
+                            InputFocus::Message => self.enter_char(to_insert),
+                            InputFocus::Attachment => {
+                                self.attachment_path.push(to_insert);
+                                self.validate_attachment_path();
+                            }
+                        },
+                        KeyCode::Backspace => match self.input_focus {
+                            InputFocus::Message => self.delete_char(),
+                            InputFocus::Attachment => {
+                                self.attachment_path.pop();
+                                self.validate_attachment_path();
+                            }
+                        },
+
+                        KeyCode::Up => {
+                            let selected_recipient_id = self.recipients[self.selected_recipient].0.id();
+                            let last_message = match selected_recipient_id {
+                                RecipientId::Contact(uuid) => match self.contact_messages.get(&uuid.to_string()) {
+                                Some(messeges) => messeges.len(),
+                                None => 0,
+                                },
+                                RecipientId::Group(group_key) => match self.group_messages.get(&group_key) {
+                                Some(messeges) => messeges.len(),
+                                None => 0,
+                            }};
 
                     if last_message > 0 && self.message_selected < last_message - 1 {
                         self.message_selected += 1;
@@ -1001,12 +1077,6 @@ impl App {
                             self.avatar_image = None;
                         } else if self.avatar_cache.is_some() {
                             self.load_avatar();
-                        }
-                    }
-                    2 => {
-                        self.config.toggle_compact_messages();
-                        if let Err(e) = self.config.save() {
-                            warn!("Failed to save config: {e:?}");
                         }
                     }
                     _ => {}
@@ -1568,45 +1638,65 @@ async fn handle_incoming_event(
 ) {
     match event {
         EventSend::SendText(recipient, text) => {
-            handle_send_text_event(
-                recipient,
-                text,
-                manager,
-                tx_status,
-                retry_manager,
-                local_pool,
-            )
-            .await;
-        }
-
+                        handle_send_text_event(
+                            recipient,
+                            text,
+                            manager,
+                            tx_status,
+                            retry_manager,
+                            local_pool,
+                        )
+                        .await;
+            }
         EventSend::SendAttachment(recipient, text, attachment_path) => {
-            handle_send_attachment_event(
-                recipient,
-                text,
-                attachment_path,
-                manager,
-                // current_contacts_mutex,
-                tx_status,
-                retry_manager,
-                local_pool,
-            )
-            .await;
-        }
-
+                handle_send_attachment_event(
+                    recipient,
+                    text,
+                    attachment_path,
+                    manager,
+                    // current_contacts_mutex,
+                    tx_status,
+                    retry_manager,
+                    local_pool,
+                )
+                .await;
+            }
         EventSend::GetMessagesForContact(uuid_str) => {
-            handle_get_contact_messages_event(uuid_str, manager, tx_status, local_pool).await;
-        }
-
+                handle_get_contact_messages_event(uuid_str, manager, tx_status, local_pool).await;
+            }
         EventSend::GetMessagesForGroup(master_key) => {
-            handle_get_group_messages_event(master_key, manager, tx_status, local_pool).await;
-        }
-
+                handle_get_group_messages_event(master_key, manager, tx_status, local_pool).await;
+            }
         EventSend::GetContactInfo(uuid_str) => {
-            handle_get_contact_info_event(uuid_str, current_contacts_mutex, tx_status).await;
-        }
+                handle_get_contact_info_event(uuid_str, current_contacts_mutex, tx_status).await;
+            }
+        EventSend::SaveAttachment(attachment_pointer, attachment_save_dir) => {
+            handle_save_attachment_event(*attachment_pointer, attachment_save_dir, manager, tx_status).await;
+        },
     }
 }
 
+async fn handle_save_attachment_event(
+    attachment_pointer: AttachmentPointer,
+    attachment_save_dir: PathBuf,
+    manager: &Manager<SqliteStore, Registered>,
+    tx_status: &mpsc::Sender<EventApp>,
+) {
+    match save_attachment(attachment_pointer, manager.clone(), attachment_save_dir).await {
+        Ok(path) => {
+            let _ = tx_status.send(EventApp::UiStatus(UiStatus::Info(format!(
+                "Attachment saved to {}",
+                path.display()
+            ))));
+        }
+        Err(e) => {
+            let _ = tx_status.send(EventApp::UiStatus(UiStatus::Error(format!(
+                "Failed to save attachment: {e}"
+            ))));
+            error!("Failed to save attachment: {:?}", e);
+        }
+    }
+}
 async fn handle_send_text_event(
     recipient: RecipientId,
     text: String,
