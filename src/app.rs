@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use std::io::Stderr;
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::mpsc::{self, Sender};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::{fs, io};
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
@@ -275,13 +275,13 @@ impl App {
 
                 self.manager = Some(new_manager.clone());
 
-                if let Err(e) =
-                    init_background_threads(
-                        self.tx_thread.clone(),
-                        rx,
-                        new_manager,
-                        Arc::clone(&self.retry_manager),
-                    ).await
+                if let Err(e) = init_background_threads(
+                    self.tx_thread.clone(),
+                    rx,
+                    new_manager,
+                    Arc::clone(&self.retry_manager),
+                )
+                .await
                 {
                     eprintln!("Failed to init threads: {e:?}");
                 }
@@ -1020,12 +1020,12 @@ pub async fn handle_background_events(
 
     loop {
         tokio::select! {
-                    _ = retry_interval.tick() => {
-                        let mut manager = retry_manager.lock().await;
-                        let messages_to_retry = manager.get_messages_to_retry();
+            _ = retry_interval.tick() => {
+                let mut retry_mgr = retry_manager.lock().await;
+                let messages_to_retry = retry_mgr.get_messages_to_retry();
+                drop(retry_mgr); // Release the lock early
 
-                        for msg in messages_to_retry {
-
+                for msg in messages_to_retry {
                     let result = if let Some(attachment_path) = &msg.attachment_path {
                         send_attachment_tui(
                             msg.recipient.clone(),
@@ -1039,35 +1039,35 @@ pub async fn handle_background_events(
                             msg.recipient.clone(),
                             msg.text.clone(),
                             &mut manager,
-                            Arc::clone(&current_contacts_mutex),
                         ).await
                     };
 
-                            match result {
-                                Ok(_) => {
-                                    manager.mark_sent(&msg.id);
-                                    let _ = tx_status.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
-                                }
-                                Err(e) => {
-                                    let error_msg = e.to_string();
-                                    manager.mark_failed(&msg.id, error_msg.clone());
+                    let mut retry_mgr = retry_manager.lock().await;
+                    match result {
+                        Ok(_) => {
+                            retry_mgr.mark_sent(&msg.id);
+                            let _ = tx_status.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                        }
+                        Err(e) => {
+                            let error_msg = e.to_string();
+                            retry_mgr.mark_failed(&msg.id, error_msg.clone());
 
-                                    if is_connection_error(&e) {
-                                        let _ = tx_status.send(EventApp::NetworkStatusChanged(
-                                            NetworkStatus::Disconnected("Cannot send: WiFi disconnected".to_string())
-                                        ));
-                                    }
-                                }
+                            if is_connection_error(&e) {
+                                let _ = tx_status.send(EventApp::NetworkStatusChanged(
+                                    NetworkStatus::Disconnected("Cannot send: WiFi disconnected".to_string())
+                                ));
                             }
                         }
-                        drop(manager);
                     }
+                    drop(retry_mgr);
+                }
+            }
 
-                    _ = cleanup_interval.tick() => {
-                        let mut manager = retry_manager.lock().await;
-                        manager.cleanup_old_messages();
-                        drop(manager);
-                    }
+            _ = cleanup_interval.tick() => {
+                let mut retry_mgr = retry_manager.lock().await;
+                retry_mgr.cleanup_old_messages();
+                drop(retry_mgr);
+            }
 
             event = async {
                 rx.recv().ok()
@@ -1121,10 +1121,10 @@ pub async fn handle_background_events(
                                     let mut manager = retry_manager.lock().await;
 
                                     if is_delivery_confirmation_timeout(&e) {
-                                        manager.mark_sent(&message_id);
+                                        retry_mgr.mark_sent(&message_id);
                                         warn!("Message likely delivered despite confirmation timeout");
                                     } else {
-                                        manager.mark_failed(&message_id, e.to_string());
+                                        retry_mgr.mark_failed(&message_id, e.to_string());
 
                                                 if is_connection_error(&e)
                                                     && let Err(send_err) = tx_status_internal.send(EventApp::NetworkStatusChanged(
