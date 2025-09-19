@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
@@ -9,11 +8,8 @@ use presage::{
     Manager, libsignal_service::prelude::Uuid, manager::Registered, model::contacts::Contact,
 };
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
-use tokio::sync::Mutex;
 
-use crate::contacts::get_contacts_cli;
-use crate::messages::receive::receiving_loop;
-use crate::{AsyncContactsMap, create_registered_manager};
+use crate::create_registered_manager;
 
 /// finds contact uuid from string that can be contact_name or contact phone_number
 pub async fn find_uuid(

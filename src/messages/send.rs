@@ -1,6 +1,4 @@
-use crate::contacts::get_contacts_cli;
-use crate::messages::receive::receiving_loop;
-use crate::{AsyncContactsMap, create_registered_manager};
+use crate::create_registered_manager;
 use anyhow::Result;
 use mime_guess::mime::APPLICATION_OCTET_STREAM;
 use presage::Manager;
@@ -9,9 +7,7 @@ use presage::manager::Registered;
 use presage_store_sqlite::SqliteStore;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::sync::Mutex;
 
 pub mod contact;
 pub mod group;

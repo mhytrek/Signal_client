@@ -1,17 +1,13 @@
-use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Result, anyhow};
 use presage::proto::{DataMessage, GroupContextV2};
 use presage::{Manager, libsignal_service::zkgroup::GroupMasterKeyBytes, manager::Registered};
 use presage_store_sqlite::SqliteStore;
-use tokio::sync::Mutex;
 use tracing::error;
 
-use crate::contacts::get_contacts_cli;
+use crate::create_registered_manager;
 use crate::groups::find_master_key;
-use crate::messages::receive::receiving_loop;
-use crate::{AsyncContactsMap, create_registered_manager};
 
 pub async fn send_message_tui(
     master_key: GroupMasterKeyBytes,
@@ -23,8 +19,6 @@ pub async fn send_message_tui(
 
 pub async fn send_message_cli(group_name: String, text_message: String) -> Result<()> {
     let mut manager = create_registered_manager().await?;
-    let current_contacts_mutex: AsyncContactsMap =
-        Arc::new(Mutex::new(get_contacts_cli(&manager).await?));
     let master_key = find_master_key(group_name, &mut manager).await?;
     let master_key = match master_key {
         Some(mk) => mk,

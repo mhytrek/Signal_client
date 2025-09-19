@@ -57,11 +57,11 @@ pub async fn list_messages_cli(recipient: String, from: Option<String>) -> Resul
 }
 
 pub async fn list_messages_tui(
-    mut manager: Manager<SqliteStore, Registered>,
+    manager: Manager<SqliteStore, Registered>,
     master_key: GroupMasterKeyBytes,
     from: Option<String>,
 ) -> Result<Vec<MessageDto>> {
-    let messages = list_messages(&mut manager, master_key, from).await?;
+    let messages = list_messages(&manager, master_key, from).await?;
 
     let mut formatted_messages = vec![];
     for message in messages.into_iter().flatten() {
