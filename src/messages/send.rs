@@ -68,7 +68,6 @@ async fn send_attachment(
     recipient: String,
     text_message: String,
     attachment_path: String,
-    current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
     let recipient_address = contact::get_address(recipient, manager).await?;
@@ -92,9 +91,6 @@ async fn send_attachment(
     let mut data_message = contact::create_data_message(text_message, timestamp)?;
     data_message.attachments = vec![attachment_pointer];
 
-    let messages = manager.receive_messages().await?;
-    receiving_loop(messages, manager, None, current_contacts_mutex).await?;
-
     contact::send(manager, recipient_address, data_message, timestamp).await?;
 
     Ok(())
@@ -106,16 +102,8 @@ pub async fn send_attachment_tui(
     text_message: String,
     attachment_path: String,
     mut manager: Manager<SqliteStore, Registered>,
-    current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
-    send_attachment(
-        &mut manager,
-        recipient,
-        text_message,
-        attachment_path,
-        current_contacts_mutex,
-    )
-    .await
+    send_attachment(&mut manager, recipient, text_message, attachment_path).await
 }
 
 /// sends attachment to recipient ( phone number or name ), for usage with CLI
@@ -125,14 +113,5 @@ pub async fn send_attachment_cli(
     attachment_path: String,
 ) -> Result<()> {
     let mut manager = create_registered_manager().await?;
-    let current_contacts_mutex: AsyncContactsMap =
-        Arc::new(Mutex::new(get_contacts_cli(&manager).await?));
-    send_attachment(
-        &mut manager,
-        recipient,
-        text_message,
-        attachment_path,
-        current_contacts_mutex,
-    )
-    .await
+    send_attachment(&mut manager, recipient, text_message, attachment_path).await
 }

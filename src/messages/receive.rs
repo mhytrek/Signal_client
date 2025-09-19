@@ -139,22 +139,6 @@ fn get_message_text(content: &Content) -> (Option<String>, bool) {
     (text, sender)
 }
 
-<<<<<<< HEAD
-/// Returns iterator over stored messeges from certain time for given contact uuid, for use in TUI
-pub async fn list_messages_tui(
-    recipient: String,
-    from: String,
-    manager: Manager<SqliteStore, Registered>,
-) -> Result<Vec<MessageDto>> {
-    let messages = list_messages(&manager, recipient, from).await?;
-
-    let mut result = Vec::new();
-
-    for message in messages.into_iter().flatten() {
-        if let Some(formatted_message) = format_message(&message) {
-            result.push(formatted_message);
-        }
-=======
 fn get_message_group_context(content: &Content) -> Option<GroupContextV2> {
     match &content.body {
         ContentBody::DataMessage(data_msg) => data_msg.group_v2.clone(),
@@ -166,7 +150,6 @@ fn get_message_group_context(content: &Content) -> Option<GroupContextV2> {
             None => None,
         },
         _ => None,
->>>>>>> d0802ee (Added group chats.)
     }
 }
 

@@ -77,7 +77,6 @@ async fn send_message(
     manager: &mut Manager<SqliteStore, Registered>,
     recipient: String,
     text_message: String,
-    current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
     let recipient_address = get_address(recipient, manager).await?;
@@ -92,23 +91,14 @@ async fn send_message(
 pub async fn send_message_tui(
     recipient: String,
     text_message: String,
-    manager: &mut Manager<SqliteStore, Registered>,
-    current_contacts_mutex: AsyncContactsMap,
+    mut manager: Manager<SqliteStore, Registered>,
 ) -> Result<()> {
     // let mut manager = create_registered_manager().await?;
-    send_message(manager, recipient, text_message, current_contacts_mutex).await
+    send_message(&mut manager, recipient, text_message).await
 }
 
 /// sends text message to recipient ( phone number or name ), for usage with CLI
 pub async fn send_message_cli(recipient: String, text_message: String) -> Result<()> {
     let mut manager = create_registered_manager().await?;
-    let current_contacts_mutex: AsyncContactsMap =
-        Arc::new(Mutex::new(get_contacts_cli(&manager).await?));
-    send_message(
-        &mut manager,
-        recipient,
-        text_message,
-        current_contacts_mutex,
-    )
-    .await
+    send_message(&mut manager, recipient, text_message).await
 }

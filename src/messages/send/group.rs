@@ -16,10 +16,9 @@ use crate::{AsyncContactsMap, create_registered_manager};
 pub async fn send_message_tui(
     master_key: GroupMasterKeyBytes,
     text_message: String,
-    manager: &mut Manager<SqliteStore, Registered>,
-    current_contacts_mutex: AsyncContactsMap,
+    mut manager: Manager<SqliteStore, Registered>,
 ) -> Result<()> {
-    send_message(manager, master_key, text_message, current_contacts_mutex).await
+    send_message(&mut manager, master_key, text_message).await
 }
 
 pub async fn send_message_cli(group_name: String, text_message: String) -> Result<()> {
@@ -31,20 +30,13 @@ pub async fn send_message_cli(group_name: String, text_message: String) -> Resul
         Some(mk) => mk,
         None => return Err(anyhow!("Group doesn't exist.")),
     };
-    send_message(
-        &mut manager,
-        master_key,
-        text_message,
-        current_contacts_mutex,
-    )
-    .await
+    send_message(&mut manager, master_key, text_message).await
 }
 
 async fn send_message(
     manager: &mut Manager<SqliteStore, Registered>,
     master_key: GroupMasterKeyBytes,
     text_message: String,
-    current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
 

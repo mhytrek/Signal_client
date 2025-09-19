@@ -37,9 +37,9 @@ pub async fn list_messages(
 pub async fn list_messages_tui(
     recipient: String,
     from: String,
-    manager: &mut Manager<SqliteStore, Registered>,
+    mut manager: Manager<SqliteStore, Registered>,
 ) -> Result<Vec<MessageDto>> {
-    let messages = list_messages(manager, recipient, Some(from)).await?;
+    let messages = list_messages(&mut manager, recipient, Some(from)).await?;
 
     let mut formatted_messages = Vec::new();
 
