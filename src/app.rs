@@ -998,6 +998,7 @@ pub async fn handle_background_events(
                             Ok(_) => {
                                 let _ = tx_status_internal
                                     .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                                let _ = tx_status_internal.send(EventApp::ReceiveMessage);
                             }
                             Err(e) => {
                                 if is_connection_error(&e) {
