@@ -858,17 +858,10 @@ pub async fn handle_background_events(
                             }
                         }
                     });
-
-                    // let _ = contacts::sync_contacts_tui(
-                    //     &mut manager,
-                    //     Arc::clone(&current_contacts_mutex),
-                    // )
-                    // .await;
                 }
                 EventSend::SendAttachment(recipient, text, attachment_path) => {
                     let send_contacts_mutex = current_contacts_mutex.clone();
-                    // let sync_contacts_mutex = current_contacts_mutex.clone();
-                    local_pool.spawn_pinned(async move || {
+                    local_pool.spawn_pinned(move || async move {
                         match send_attachment_tui(
                             recipient.clone(),
                             text.clone(),
@@ -895,39 +888,35 @@ pub async fn handle_background_events(
                                 }
                             }
                         }
-
-                        // let _ = contacts::sync_contacts_tui(manager_internal, sync_contacts_mutex)
-                        //     .await;
                     });
                 }
                 EventSend::GetMessagesForContact(uuid_str) => {
-                    let manager_clone = manager.clone();
-                    let tx_status_clone = tx_status.clone();
-                    local_pool.spawn_pinned(async move || {
+                    local_pool.spawn_pinned(move || async move {
                         let result =
-                            list_messages_tui(uuid_str.clone(), "0".to_string(), manager_clone)
+                            list_messages_tui(uuid_str.clone(), "0".to_string(), manager_internal)
                                 .await;
                         let messages = match result {
                             Ok(list) => {
-                                let _ = tx_status_clone
+                                let _ = tx_status_internal
                                     .send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
                                 list
                             }
                             Err(e) => {
                                 if is_connection_error(&e) {
-                                    let _ = tx_status_clone.send(EventApp::NetworkStatusChanged(
-                                        NetworkStatus::Disconnected(
-                                            "Cannot get messages from store: WiFi disconnected"
-                                                .to_string(),
-                                        ),
-                                    ));
+                                    let _ =
+                                        tx_status_internal.send(EventApp::NetworkStatusChanged(
+                                            NetworkStatus::Disconnected(
+                                                "Cannot get messages from store: WiFi disconnected"
+                                                    .to_string(),
+                                            ),
+                                        ));
                                 }
                                 Vec::new()
                             }
                         };
 
                         if !messages.is_empty()
-                            && tx_status_clone
+                            && tx_status_internal
                                 .send(EventApp::GetMessageHistory(uuid_str.clone(), messages))
                                 .is_err()
                         {}
@@ -935,7 +924,7 @@ pub async fn handle_background_events(
                 }
                 EventSend::GetContactInfo(uuid_str) => {
                     let contacts_mutex = Arc::clone(&current_contacts_mutex);
-                    local_pool.spawn_pinned(async move || {
+                    local_pool.spawn_pinned(move || async move {
                         let contacts = contacts_mutex.lock().await;
 
                         if let Ok(uuid) = uuid_str.parse()
