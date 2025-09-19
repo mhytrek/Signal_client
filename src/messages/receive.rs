@@ -147,9 +147,9 @@ pub fn format_message(content: &Content) -> Option<MessageDto> {
 pub async fn list_messages_tui(
     recipient: String,
     from: String,
-    manager: &mut Manager<SqliteStore, Registered>,
+    manager: Manager<SqliteStore, Registered>,
 ) -> Result<Vec<MessageDto>> {
-    let messages = list_messages(manager, recipient, from).await?;
+    let messages = list_messages(&manager, recipient, from).await?;
 
     let mut result = Vec::new();
 

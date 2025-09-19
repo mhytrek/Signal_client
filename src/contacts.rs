@@ -41,10 +41,10 @@ pub async fn sync_contacts_cli() -> Result<()> {
 
 /// Function to sync contacts when TUI is used
 pub async fn sync_contacts_tui(
-    manager: &mut Manager<SqliteStore, Registered>,
+    mut manager: Manager<SqliteStore, Registered>,
     current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
-    sync_contacts(manager, current_contacts_mutex).await
+    sync_contacts(&mut manager, current_contacts_mutex).await
 }
 
 async fn get_contacts(
