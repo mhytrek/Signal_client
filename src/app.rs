@@ -1,7 +1,6 @@
 use crate::contacts::get_contacts_tui;
 use crate::messages::receive::{self, MessageDto, contact};
-use crate::messages::send;
-use crate::messages::send::send_attachment_tui;
+use crate::messages::send::{self, send_attachment_tui};
 use crate::paths::QRCODE;
 use crate::profile::get_profile_tui;
 use crate::ui::render_ui;
@@ -14,7 +13,7 @@ use crossterm::event::{KeyCode, KeyEventKind};
 use presage::Manager;
 use presage::libsignal_service::Profile;
 use presage::libsignal_service::prelude::Uuid;
-use presage::libsignal_service::zkgroup::GroupMasterKeyBytes;
+use presage::libsignal_service::zkgroup::GroupMasterKeyBytes; // Fix: Use full path
 use presage::manager::Registered;
 use presage_store_sqlite::SqliteStore;
 use ratatui::Terminal;
@@ -30,7 +29,7 @@ use std::{fs, io};
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
 use tokio_util::task::LocalPoolHandle;
-use tracing::{error, info, warn};
+use tracing::{error, warn}; // Removed unused 'info'
 
 use crate::retry_manager::{OutgoingMessage, RetryManager};
 use image::ImageFormat;
@@ -38,7 +37,7 @@ use std::thread;
 use std::time::Duration;
 use tokio::time::interval;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum RecipientId {
     Contact(Uuid),
     Group(GroupMasterKeyBytes),
@@ -498,10 +497,11 @@ impl App {
         if let Some((recipient, input)) = self.recipients.get_mut(self.selected_recipient) {
             let message_text = input.trim().to_string();
             let has_attachment = !self.attachment_path.trim().is_empty();
+            let has_text = !message_text.is_empty(); // Fix: add this line
 
             if has_text || has_attachment {
                 let outgoing = OutgoingMessage::new(
-                    recipient.id(), //to check
+                    recipient.id(),
                     message_text.clone(),
                     if has_attachment {
                         Some(self.attachment_path.clone())
@@ -1011,8 +1011,9 @@ pub async fn handle_background_events(
     current_contacts_mutex: AsyncContactsMap,
     tx_status: mpsc::Sender<EventApp>,
     retry_manager: Arc<Mutex<RetryManager>>,
-    local_pool: LocalPoolHandle,
 ) {
+    let local_pool = LocalPoolHandle::new(4); // Add this line
+
     let mut retry_interval = interval(Duration::from_secs(30));
     let mut cleanup_interval = interval(Duration::from_secs(3600));
 
@@ -1021,7 +1022,6 @@ pub async fn handle_background_events(
             _ = retry_interval.tick() => {
                 handle_retry_tick(
                     &manager,
-                    &current_contacts_mutex,
                     &tx_status,
                     &retry_manager
                 ).await;
@@ -1051,31 +1051,51 @@ pub async fn handle_background_events(
     }
 }
 
+
 async fn handle_retry_tick(
     manager: &Manager<SqliteStore, Registered>,
-    current_contacts_mutex: &AsyncContactsMap,
     tx_status: &mpsc::Sender<EventApp>,
     retry_manager: &Arc<Mutex<RetryManager>>,
 ) {
     let mut retry_mgr = retry_manager.lock().await;
     let messages_to_retry = retry_mgr.messages_to_retry();
-    drop(retry_mgr); // Release the lock early
+    drop(retry_mgr);
 
     for msg in messages_to_retry {
         let result = if let Some(attachment_path) = &msg.attachment_path {
-            send_attachment_tui(
-                msg.recipient.clone(),
-                msg.text.clone(),
-                attachment_path.clone(),
-                manager.clone(),
-                Arc::clone(current_contacts_mutex),
-            ).await
+            // Fix: Handle RecipientId properly
+            match &msg.recipient {
+                RecipientId::Contact(uuid) => {
+                    send_attachment_tui(
+                        uuid.to_string(),
+                        msg.text.clone(),
+                        attachment_path.clone(),
+                        manager.clone(),
+                    ).await
+                }
+                RecipientId::Group(_) => {
+                    // TODO: Implement group attachment sending
+                    Err(anyhow::anyhow!("Group attachment sending not yet implemented"))
+                }
+            }
         } else {
-            send_message_tui(
-                msg.recipient.clone(),
-                msg.text.clone(),
-                manager.clone(),
-            ).await
+            // Fix: Handle RecipientId properly for text messages
+            match &msg.recipient {
+                RecipientId::Contact(uuid) => {
+                    send::contact::send_message_tui(
+                        uuid.to_string(),
+                        msg.text.clone(),
+                        manager.clone(),
+                    ).await
+                }
+                RecipientId::Group(master_key) => {
+                    send::group::send_message_tui(
+                        *master_key,
+                        msg.text.clone(),
+                        manager.clone(),
+                    ).await
+                }
+            }
         };
 
         let mut retry_mgr = retry_manager.lock().await;
@@ -1253,7 +1273,6 @@ async fn handle_send_attachment_event(
     let attachment_path_clone = attachment_path.clone();
     let tx_status_clone = tx_status.clone();
     let retry_manager_clone = Arc::clone(retry_manager);
-    let current_contacts_clone = Arc::clone(current_contacts_mutex);
     let manager_clone = manager.clone();
 
     // Spawn the send operation
@@ -1266,7 +1285,6 @@ async fn handle_send_attachment_event(
                     text_clone,
                     attachment_path_clone,
                     manager_clone,
-                    Arc::clone(&current_contacts_clone),
                 )
                     .await
             }
@@ -1365,7 +1383,7 @@ async fn handle_get_contact_messages_event(
 }
 
 async fn handle_get_group_messages_event(
-    master_key: MasterKeyBytes,
+    master_key: GroupMasterKeyBytes,
     manager: &Manager<SqliteStore, Registered>,
     tx_status: &mpsc::Sender<EventApp>,
     local_pool: &LocalPoolHandle,

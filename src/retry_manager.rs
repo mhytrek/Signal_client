@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
+use crate::app::RecipientId;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum DeliveryStatus {
@@ -11,10 +12,10 @@ pub enum DeliveryStatus {
     Failed(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct OutgoingMessage {
     pub id: String,
-    pub recipient: String,
+    pub recipient: RecipientId,
     pub text: String,
     pub attachment_path: Option<String>,
     pub status: DeliveryStatus,
@@ -24,7 +25,7 @@ pub struct OutgoingMessage {
 }
 
 impl OutgoingMessage {
-    pub fn new(recipient: String, text: String, attachment_path: Option<String>) -> Self {
+    pub fn new(recipient: RecipientId, text: String, attachment_path: Option<String>) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
             recipient,
