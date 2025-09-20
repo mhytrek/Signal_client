@@ -1360,9 +1360,9 @@ async fn handle_get_contact_messages_event(
         if !messages.is_empty()
             && let Err(e) =
                 tx_status_clone.send(EventApp::GetContactMessageHistory(uuid_str, messages))
-            {
-                error!("Failed to send contact message history event: {}", e);
-            }
+        {
+            error!("Failed to send contact message history event: {}", e);
+        }
     });
 }
 
@@ -1400,9 +1400,9 @@ async fn handle_get_group_messages_event(
         if !messages.is_empty()
             && let Err(e) =
                 tx_status_clone.send(EventApp::GetGroupMessageHistory(master_key, messages))
-            {
-                error!("Failed to send group message history event: {}", e);
-            }
+        {
+            error!("Failed to send group message history event: {}", e);
+        }
     });
 }
 
