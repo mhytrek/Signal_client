@@ -2,6 +2,7 @@ target/
 store/
 .vscode/
 assets/
+logs/
 
 # Tags for vim
 tags

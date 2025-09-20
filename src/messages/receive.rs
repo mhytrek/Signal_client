@@ -1,5 +1,4 @@
 use std::env;
-use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -11,10 +10,10 @@ use presage::libsignal_service::prelude::Uuid;
 use presage::manager::Manager;
 use presage::manager::Registered;
 use presage::model::messages::Received;
+use presage::proto::GroupContextV2;
 use presage::proto::{DataMessage, SyncMessage, sync_message::Sent};
-use presage::store::Thread;
 use presage::store::{ContentExt, ContentsStore};
-use presage_store_sqlite::{SqliteStore, SqliteStoreError};
+use presage_store_sqlite::SqliteStore;
 use tokio::sync::Mutex;
 
 use crate::AsyncContactsMap;
@@ -22,11 +21,15 @@ use crate::contacts::get_contacts_cli;
 use crate::create_registered_manager;
 use crate::env::SIGNAL_DISPLAY_FLAGS;
 
+pub mod contact;
+pub mod group;
+
 pub struct MessageDto {
     pub uuid: Uuid,
     pub timestamp: u64,
     pub text: String,
     pub sender: bool,
+    pub group_context: Option<GroupContextV2>,
 }
 
 async fn loop_no_contents(messages: impl Stream<Item = Received>) {
@@ -67,26 +70,22 @@ pub async fn receiving_loop(
     check_contacts(manager, current_contacts_mutex).await
 }
 
-async fn list_messages(
-    manager: &Manager<SqliteStore, Registered>,
-    recipient: String,
-    from: String,
-) -> Result<Vec<Result<Content, SqliteStoreError>>> {
-    let recipient_uuid = Uuid::from_str(&recipient)?;
-    let thread = Thread::Contact(recipient_uuid);
-    let from_u64 = u64::from_str(&from)?;
-
-    Ok(manager
-        .store()
-        .messages(&thread, from_u64..)
-        .await?
-        .collect())
-}
-
-///format Content to a MessageDto or returns None
+/// Format Content to a MessageDto or returns None
 pub fn format_message(content: &Content) -> Option<MessageDto> {
     let timestamp: u64 = content.timestamp();
     let uuid = content.metadata.sender.raw_uuid();
+    let (text, sender) = get_message_text(content);
+    let group_context = get_message_group_context(content);
+    text.map(|text| MessageDto {
+        uuid,
+        timestamp,
+        text,
+        sender,
+        group_context,
+    })
+}
+
+fn get_message_text(content: &Content) -> (Option<String>, bool) {
     let mut sender = false;
     let text: Option<String> = match &content.body {
         ContentBody::NullMessage(_) => Some("[NULL] <null message>".to_string()),
@@ -120,7 +119,9 @@ pub fn format_message(content: &Content) -> Option<MessageDto> {
                     // comment next case to turn off the messages with [FLAG]
                     DataMessage {
                         flags: Some(flag), ..
-                    } => Some(format!("[FLAG] Synced data message (flag: {flag})")),
+                    } if env::var(SIGNAL_DISPLAY_FLAGS).is_ok() => {
+                        Some(format!("[FLAG] Synced data message (flag: {flag})"))
+                    }
 
                     _ => None,
                 }
@@ -135,30 +136,21 @@ pub fn format_message(content: &Content) -> Option<MessageDto> {
         ContentBody::PniSignatureMessage(_) => None,
         ContentBody::EditMessage(_) => Some("[EDIT] <edit message>".to_string()),
     };
-    text.map(|text| MessageDto {
-        uuid,
-        timestamp,
-        text,
-        sender,
-    })
+    (text, sender)
 }
 
-/// Returns iterator over stored messeges from certain time for given contact uuid, for use in TUI
-pub async fn list_messages_tui(
-    recipient: String,
-    from: String,
-    manager: Manager<SqliteStore, Registered>,
-) -> Result<Vec<MessageDto>> {
-    let messages = list_messages(&manager, recipient, from).await?;
-
-    let mut result = Vec::new();
-
-    for message in messages.into_iter().flatten() {
-        if let Some(formatted_message) = format_message(&message) {
-            result.push(formatted_message);
-        }
+fn get_message_group_context(content: &Content) -> Option<GroupContextV2> {
+    match &content.body {
+        ContentBody::DataMessage(data_msg) => data_msg.group_v2.clone(),
+        ContentBody::SynchronizeMessage(sync_msg) => match &sync_msg.sent {
+            Some(sent) => match &sent.message {
+                Some(data_msg) => data_msg.group_v2.clone(),
+                None => None,
+            },
+            None => None,
+        },
+        _ => None,
     }
-    Ok(result)
 }
 
 /// Function to receive messages for TUI interface
@@ -185,21 +177,6 @@ pub async fn receive_messages_tui(
         }
     }
 
-    Ok(result)
-}
-
-/// Returns iterator over stored messeges from certain time for given contact uuid, for use in CLI
-pub async fn list_messages_cli(recipient: String, from: String) -> Result<Vec<MessageDto>> {
-    let manager = create_registered_manager().await?;
-    let messages = list_messages(&manager, recipient, from).await?;
-
-    let mut result = Vec::new();
-
-    for message in messages.into_iter().flatten() {
-        if let Some(formatted_message) = format_message(&message) {
-            result.push(formatted_message);
-        }
-    }
     Ok(result)
 }
 
