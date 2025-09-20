@@ -1,8 +1,8 @@
+use crate::app::RecipientId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
-use crate::app::RecipientId;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum DeliveryStatus {
