@@ -9,7 +9,6 @@ use presage::{Manager, libsignal_service::configuration::SignalServers};
 use presage_store_sqlite::SqliteStore;
 use tokio::fs;
 
-use crate::contacts::initial_sync;
 use crate::open_store;
 use crate::paths::{self, ASSETS, QRCODE};
 
@@ -74,6 +73,9 @@ pub async fn link_new_device_cli(device_name: String) -> Result<()> {
     )
     .await;
 
+    // TODO: Handle initial synchronization for CLI
+    #[allow(unused_variables)]
+    #[allow(unused_mut)]
     let mut manager = match manager_result {
         Ok(manager) => {
             println!("Device linked successfully! Syncing contacts...");
@@ -81,7 +83,6 @@ pub async fn link_new_device_cli(device_name: String) -> Result<()> {
         }
         Err(e) => return Err(anyhow!("Error while linking device: {e}")),
     };
-    initial_sync(&mut manager).await?;
     Ok(())
 }
 

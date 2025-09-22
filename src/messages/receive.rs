@@ -211,7 +211,7 @@ pub async fn receive_messages_cli() -> Result<Vec<MessageDto>> {
     Ok(result)
 }
 
-async fn check_contacts(
+pub async fn check_contacts(
     manager: &mut Manager<SqliteStore, Registered>,
     current_contacts_mutex: AsyncContactsMap,
 ) -> Result<()> {
