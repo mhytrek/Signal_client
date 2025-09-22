@@ -13,7 +13,7 @@ use crossterm::event::{KeyCode, KeyEventKind};
 use presage::Manager;
 use presage::libsignal_service::Profile;
 use presage::libsignal_service::prelude::Uuid;
-use presage::libsignal_service::zkgroup::GroupMasterKeyBytes; // Fix: Use full path
+use presage::libsignal_service::zkgroup::GroupMasterKeyBytes;
 use presage::manager::Registered;
 use presage_store_sqlite::SqliteStore;
 use ratatui::Terminal;
@@ -29,7 +29,7 @@ use std::{fs, io};
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
 use tokio_util::task::LocalPoolHandle;
-use tracing::{error, warn}; // Removed unused 'info'
+use tracing::{error, warn};
 
 use crate::retry_manager::{OutgoingMessage, RetryManager};
 use image::ImageFormat;
@@ -277,7 +277,7 @@ impl App {
                     self.tx_thread.clone(),
                     rx,
                     new_manager,
-                    Arc::clone(&self.retry_manager),
+                    self.retry_manager.clone(),
                 )
                 .await
                 {
@@ -497,7 +497,7 @@ impl App {
         if let Some((recipient, input)) = self.recipients.get_mut(self.selected_recipient) {
             let message_text = input.trim().to_string();
             let has_attachment = !self.attachment_path.trim().is_empty();
-            let has_text = !message_text.is_empty(); // Fix: add this line
+            let has_text = !message_text.is_empty();
 
             if has_text || has_attachment {
                 let outgoing = OutgoingMessage::new(
@@ -820,7 +820,7 @@ pub async fn init_background_threads(
     let rx_sending_thread = rx_thread;
     let new_contacts = Arc::clone(&current_contacts_mutex);
     let tx_status_clone = tx_thread.clone();
-    let retry_manager_clone = Arc::clone(&retry_manager);
+    let retry_manager_clone = retry_manager.clone();
     thread::Builder::new()
         .name(String::from("background_events_thread"))
         .stack_size(1024 * 1024 * 8)
