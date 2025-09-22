@@ -24,6 +24,7 @@ pub mod profile;
 pub mod tui;
 pub mod ui;
 
+mod retry_manager;
 pub mod sending {}
 
 pub type AsyncContactsMap = Arc<Mutex<HashMap<Uuid, Contact>>>;

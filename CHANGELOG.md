@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 - Migrated from `SledStore` to `SqliteStore`.
 
 ### Added
+- Retry strategy for sending messages
 
 ### Changed
 

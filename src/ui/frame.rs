@@ -93,17 +93,32 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(app.config.get_primary_color()),
             ),
             CurrentScreen::Writing => {
-                if app.attachment_error.is_some() {
-                    Span::styled(
-                        "(q) to exit | (ENTER) to send | (TAB) to switch input/attachment | Fix attachment path to send",
-                        Style::default().fg(app.config.get_error_color()),
-                    )
+                let retry_info = if let Ok(manager) = app.retry_manager.try_lock() {
+                    let failed_count = manager.failed_count();
+
+                    if failed_count > 0 {
+                        format!(" | {} failed msgs", failed_count)
+                    } else {
+                        String::new()
+                    }
                 } else {
-                    Span::styled(
-                        "(q) to exit | (ENTER) to send | (TAB) to switch input/attachment",
-                        Style::default().fg(app.config.get_primary_color()),
-                    )
-                }
+                    String::new()
+                };
+
+                let base_text = if app.attachment_error.is_some() {
+                    "(q) to exit | (ENTER) to send | (TAB) to switch input/attachment | Fix attachment path to send"
+                } else {
+                    "(q) to exit | (ENTER) to send | (TAB) to switch input/attachment"
+                };
+
+                Span::styled(
+                    format!("{}{}", base_text, retry_info),
+                    if app.attachment_error.is_some() {
+                        Style::default().fg(app.config.get_error_color())
+                    } else {
+                        Style::default().fg(app.config.get_primary_color())
+                    },
+                )
             }
             CurrentScreen::Options => Span::styled(
                 "(q) to exit | (↑ ↓) to navigate | (ENTER/SPACE) to toggle option",
