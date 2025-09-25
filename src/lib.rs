@@ -77,14 +77,13 @@ pub fn list_accounts() -> Result<Vec<String>> {
 
     if let Ok(entries) = fs::read_dir(ACCOUNTS_DIR) {
         for entry in entries {
-            if let Ok(entry) = entry {
-                if entry.path().is_dir() {
-                    if let Some(name) = entry.file_name().to_str() {
-                        let store_path = get_account_store_path(name);
-                        if Path::new(&store_path).exists() {
-                            accounts.push(name.to_string());
-                        }
-                    }
+            if let Ok(entry) = entry
+                && entry.path().is_dir()
+                && let Some(name) = entry.file_name().to_str()
+            {
+                let store_path = get_account_store_path(name);
+                if Path::new(&store_path).exists() {
+                    accounts.push(name.to_string());
                 }
             }
         }

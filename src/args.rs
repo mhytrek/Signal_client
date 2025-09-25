@@ -52,9 +52,6 @@ pub enum Command {
 
     /// Get current active account
     GetCurrentAccount,
-
-    /// Run TUI with account selection
-    RunAppWithAccounts,
 }
 
 #[derive(Args)]

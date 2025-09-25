@@ -1,9 +1,9 @@
+use crate::contacts::initial_sync;
 use crate::{
     ACCOUNTS_DIR, Config, ensure_accounts_dir, get_account_store_path, list_accounts, open_store,
 };
 use anyhow::{Result, anyhow};
 use presage::Manager;
-use crate::contacts::initial_sync;
 
 pub async fn create_account_cli(account_name: String, device_name: String) -> Result<()> {
     use futures::{channel::oneshot, future};
@@ -74,7 +74,7 @@ pub async fn list_accounts_cli() -> Result<()> {
 
     println!("Available accounts:");
     for account in accounts {
-        let marker = if current.map_or(false, |c| c == &account) {
+        let marker = if current == Some(&account) {
             " (current)"
         } else {
             ""

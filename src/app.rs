@@ -6,8 +6,8 @@ use crate::profile::get_profile_tui;
 use crate::ui::render_ui;
 use crate::{
     ACCOUNTS_DIR, AsyncContactsMap, config::Config, contacts, create_registered_manager,
-    create_registered_manager_for_account, devices, ensure_accounts_dir, get_account_store_path,
-    groups, list_accounts, paths,
+    create_registered_manager_for_account, devices, ensure_accounts_dir, groups, list_accounts,
+    paths,
 };
 use anyhow::{Error, Result};
 use crossterm::event::{self, Event, KeyModifiers};
@@ -35,7 +35,6 @@ use tokio::sync::Mutex;
 use tokio_util::task::LocalPoolHandle;
 use tracing::{Level, debug, error, info, span, trace, warn};
 
-use crate::devices::link_new_device_for_account;
 use crate::retry_manager::{OutgoingMessage, RetryManager};
 use image::ImageFormat;
 use std::thread;
@@ -378,21 +377,20 @@ impl App {
             self.rx_thread = Some(rx_thread);
         }
 
-        if let Some(rx) = self.rx_thread.take() {
-            if let Err(e) = init_background_threads(
+        if let Some(rx) = self.rx_thread.take()
+            && let Err(e) = init_background_threads(
                 self.tx_thread.clone(),
                 rx,
                 new_manager,
                 self.retry_manager.clone(),
             )
             .await
-            {
-                eprintln!("Failed to init threads: {e:?}");
-                return Err(anyhow::anyhow!(
-                    "Failed to initialize background threads: {}",
-                    e
-                ));
-            }
+        {
+            eprintln!("Failed to init threads: {e:?}");
+            return Err(anyhow::anyhow!(
+                "Failed to initialize background threads: {}",
+                e
+            ));
         }
 
         Ok(())
@@ -975,115 +973,113 @@ impl App {
                 }
                 _ => {}
             },
-            LinkingNewDevice => {
-                match self.linking_status {
-                    LinkingStatus::Linked => self.current_screen = Syncing,
-                    LinkingStatus::Unlinked => {
-                        if key.kind == KeyEventKind::Press {
-                            match key.code {
-                                KeyCode::Enter => {
-                                    let accounts = list_accounts().unwrap_or_default();
-                                    let device_name = if self.textarea.trim().is_empty() {
-                                        "My Device".to_string()
-                                    } else {
-                                        self.textarea.trim().to_string()
-                                    };
+            LinkingNewDevice => match self.linking_status {
+                LinkingStatus::Linked => self.current_screen = Syncing,
+                LinkingStatus::Unlinked => {
+                    if key.kind == KeyEventKind::Press {
+                        match key.code {
+                            KeyCode::Enter => {
+                                let accounts = list_accounts().unwrap_or_default();
+                                let device_name = if self.textarea.trim().is_empty() {
+                                    "My Device".to_string()
+                                } else {
+                                    self.textarea.trim().to_string()
+                                };
 
-                                    if Path::new(QRCODE).exists() {
-                                        fs::remove_file(QRCODE)?;
-                                    }
+                                if Path::new(QRCODE).exists() {
+                                    fs::remove_file(QRCODE)?;
+                                }
 
-                                    let tx_key_events = self.tx_thread.clone();
-                                    thread::spawn(move || {
-                                        handle_checking_qr_code(tx_key_events);
-                                    });
+                                let tx_key_events = self.tx_thread.clone();
+                                thread::spawn(move || {
+                                    handle_checking_qr_code(tx_key_events);
+                                });
 
-                                    if accounts.is_empty() && self.creating_account_name.is_none() {
-                                        self.creating_account_name = Some("default".to_string());
+                                if accounts.is_empty() && self.creating_account_name.is_none() {
+                                    self.creating_account_name = Some("default".to_string());
 
-                                        let tx_link = self.tx_thread.clone();
-                                        let account_name = "default".to_string();
-                                        thread::Builder::new()
-                                            .name(String::from("initial_setup_thread"))
-                                            .stack_size(1024 * 1024 * 8)
-                                            .spawn(move || {
-                                                let runtime = Builder::new_multi_thread()
-                                                    .thread_name("initial_setup_runtime")
-                                                    .enable_all()
-                                                    .build()
-                                                    .unwrap();
-                                                runtime.block_on(async move {
-                                                    handle_linking_device_for_account(
-                                                        tx_link,
-                                                        account_name,
-                                                        device_name,
-                                                    )
-                                                    .await;
-                                                })
+                                    let tx_link = self.tx_thread.clone();
+                                    let account_name = "default".to_string();
+                                    thread::Builder::new()
+                                        .name(String::from("initial_setup_thread"))
+                                        .stack_size(1024 * 1024 * 8)
+                                        .spawn(move || {
+                                            let runtime = Builder::new_multi_thread()
+                                                .thread_name("initial_setup_runtime")
+                                                .enable_all()
+                                                .build()
+                                                .unwrap();
+                                            runtime.block_on(async move {
+                                                handle_linking_device_for_account(
+                                                    tx_link,
+                                                    account_name,
+                                                    device_name,
+                                                )
+                                                .await;
                                             })
-                                            .unwrap();
-                                    } else {
-                                        let tx_link_device_event = self.tx_thread.clone();
-                                        thread::Builder::new()
-                                            .name(String::from("linking_device_thread"))
-                                            .stack_size(1024 * 1024 * 8)
-                                            .spawn(move || {
-                                                let runtime = Builder::new_multi_thread()
-                                                    .thread_name("linking_device_runtime")
-                                                    .enable_all()
-                                                    .build()
-                                                    .unwrap();
-                                                runtime.block_on(async move {
-                                                    handle_linking_device(
-                                                        tx_link_device_event,
-                                                        device_name,
-                                                    )
-                                                    .await;
-                                                })
+                                        })
+                                        .unwrap();
+                                } else {
+                                    let tx_link_device_event = self.tx_thread.clone();
+                                    thread::Builder::new()
+                                        .name(String::from("linking_device_thread"))
+                                        .stack_size(1024 * 1024 * 8)
+                                        .spawn(move || {
+                                            let runtime = Builder::new_multi_thread()
+                                                .thread_name("linking_device_runtime")
+                                                .enable_all()
+                                                .build()
+                                                .unwrap();
+                                            runtime.block_on(async move {
+                                                handle_linking_device(
+                                                    tx_link_device_event,
+                                                    device_name,
+                                                )
+                                                .await;
                                             })
-                                            .unwrap();
-                                    }
+                                        })
+                                        .unwrap();
+                                }
 
-                                    self.linking_status = LinkingStatus::InProgress;
-                                    self.textarea.clear();
-                                }
-                                KeyCode::Backspace => {
-                                    self.textarea.pop();
-                                }
-                                KeyCode::Esc => {
-                                    if self.creating_account_name.is_some() {
-                                        self.current_screen = CurrentScreen::AccountSelector;
-                                        self.creating_account_name = None;
-                                    } else {
-                                        self.current_screen = CurrentScreen::LinkingNewDevice;
-                                    }
-                                }
-                                KeyCode::Char(value) => self.textarea.push(value),
-                                _ => {}
+                                self.linking_status = LinkingStatus::InProgress;
+                                self.textarea.clear();
                             }
+                            KeyCode::Backspace => {
+                                self.textarea.pop();
+                            }
+                            KeyCode::Esc => {
+                                if self.creating_account_name.is_some() {
+                                    self.current_screen = CurrentScreen::AccountSelector;
+                                    self.creating_account_name = None;
+                                } else {
+                                    self.current_screen = CurrentScreen::LinkingNewDevice;
+                                }
+                            }
+                            KeyCode::Char(value) => self.textarea.push(value),
+                            _ => {}
                         }
                     }
-                    LinkingStatus::InProgress => {}
-                    LinkingStatus::Error(ref _error_msg) => {
-                        if key.kind == KeyEventKind::Press {
-                            match key.code {
-                                KeyCode::Esc | KeyCode::Char('q') => {
-                                    if self.creating_account_name.is_some() {
-                                        self.current_screen = CurrentScreen::AccountSelector;
-                                        self.creating_account_name = None;
-                                        self.linking_status = LinkingStatus::Unlinked;
-                                    } else {
-                                        self.linking_status = LinkingStatus::Unlinked;
-                                    }
-                                }
-                                _ => {
+                }
+                LinkingStatus::InProgress => {}
+                LinkingStatus::Error(ref _error_msg) => {
+                    if key.kind == KeyEventKind::Press {
+                        match key.code {
+                            KeyCode::Esc | KeyCode::Char('q') => {
+                                if self.creating_account_name.is_some() {
+                                    self.current_screen = CurrentScreen::AccountSelector;
+                                    self.creating_account_name = None;
+                                    self.linking_status = LinkingStatus::Unlinked;
+                                } else {
                                     self.linking_status = LinkingStatus::Unlinked;
                                 }
+                            }
+                            _ => {
+                                self.linking_status = LinkingStatus::Unlinked;
                             }
                         }
                     }
                 }
-            }
+            },
             Syncing => {}
         }
         Ok(false)
@@ -1921,7 +1917,6 @@ pub async fn handle_linking_device(tx: mpsc::Sender<EventApp>, device_name: Stri
         let account_name = "default".to_string();
         let _ = ensure_accounts_dir();
         let account_dir = format!("{}/{}", ACCOUNTS_DIR, account_name);
-        let store_path = get_account_store_path(&account_name);
         let _ = tokio::fs::create_dir_all(&account_dir).await;
 
         let result = devices::link_new_device_for_account(account_name.clone(), device_name).await;

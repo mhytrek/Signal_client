@@ -11,9 +11,7 @@ use tokio::fs;
 
 use crate::contacts::initial_sync;
 use crate::paths::{self, ASSETS, QRCODE};
-use crate::{
-    ACCOUNTS_DIR, ensure_accounts_dir, get_account_assets_path, get_account_store_path, open_store,
-};
+use crate::{ACCOUNTS_DIR, ensure_accounts_dir, get_account_store_path, open_store};
 
 // / Links a new device to the Signal account using the given name.
 // / Generates a url and waits for the user to use it to complete the linking process.
