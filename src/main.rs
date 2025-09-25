@@ -1,9 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 
-use signal_client::account_management::{
-    create_account_cli, get_current_account_cli, list_accounts_cli, switch_account_cli,
-};
+use signal_client::account_management::{create_account_cli, delete_account_cli, get_current_account_cli, list_accounts_cli, switch_account_cli};
 use signal_client::args::{Cli, Command};
 use signal_client::logger::init_logger;
 use signal_client::{cli, contacts, tui};
@@ -47,6 +45,9 @@ async fn main() -> Result<()> {
         Command::ListAccounts => list_accounts_cli().await?,
         Command::SwitchAccount(args) => switch_account_cli(args.account_name).await?,
         Command::GetCurrentAccount => get_current_account_cli().await?,
+        Command::DeleteAccount(args) => {
+            delete_account_cli(args.account_name).await?
+        }
     }
 
     Ok(())

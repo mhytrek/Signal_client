@@ -52,6 +52,16 @@ pub enum Command {
 
     /// Get current active account
     GetCurrentAccount,
+
+    /// Delete an account
+    DeleteAccount(DeleteAccountArgs),
+}
+
+#[derive(Args)]
+pub struct DeleteAccountArgs {
+    /// Name of the account to delete
+    #[arg(short, long)]
+    pub account_name: String,
 }
 
 #[derive(Args)]

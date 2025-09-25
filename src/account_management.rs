@@ -1,3 +1,4 @@
+use std::path::Path;
 use crate::contacts::initial_sync;
 use crate::{
     ACCOUNTS_DIR, Config, ensure_accounts_dir, get_account_store_path, list_accounts, open_store,
@@ -106,5 +107,51 @@ pub async fn get_current_account_cli() -> Result<()> {
         Some(account) => println!("Current account: {}", account),
         None => println!("No current account set"),
     }
+    Ok(())
+}
+
+pub async fn delete_account_cli(account_name: String) -> Result<()> {
+    use std::io::{self, Write};
+
+    let accounts = list_accounts()?;
+    if !accounts.contains(&account_name) {
+        return Err(anyhow::anyhow!("Account '{}' does not exist", account_name));
+    }
+
+    let config = Config::load();
+    let is_current = config.get_current_account() == Some(&account_name);
+
+    print!("Are you sure you want to delete account '{}'? This action cannot be undone! (yes/no): ", account_name);
+    io::stdout().flush()?;
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+
+    if input.trim().to_lowercase() != "yes" {
+        println!("Account deletion cancelled.");
+        return Ok(());
+    }
+
+    let account_dir = format!("{}/{}", ACCOUNTS_DIR, account_name);
+    if Path::new(&account_dir).exists() {
+        std::fs::remove_dir_all(&account_dir)?;
+    }
+
+    if is_current {
+        let mut config = Config::load();
+        config.clear_current_account();
+
+        let remaining_accounts = list_accounts()?;
+        if !remaining_accounts.is_empty() {
+            config.set_current_account(remaining_accounts[0].clone());
+            println!("Set '{}' as the new current account.", remaining_accounts[0]);
+        }
+
+        config
+            .save()
+            .map_err(|e| anyhow::anyhow!("Failed to save config: {}", e))?;
+    }
+
+    println!("Account '{}' deleted successfully.", account_name);
     Ok(())
 }

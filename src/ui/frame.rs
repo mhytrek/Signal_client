@@ -92,6 +92,19 @@ pub fn render_ui(frame: &mut Frame, app: &mut App) {
             render_account_creation(frame, app, frame.area());
             render_footer(frame, app, chunks[1]);
         }
+        CurrentScreen::ConfirmDelete => {
+            if let Some(account_name) = &app.deleting_account {
+                let text = format!(
+                    "Are you sure you want to delete account '{}'?\n\
+            This action cannot be undone!\n\n\
+            All messages and data for this account will be lost.\n\n\
+            Press 'y' to confirm deletion\n\
+            Press 'n' or ESC to cancel",
+                    account_name
+                );
+                render_popup(frame, frame.area(), &text);
+            }
+        }
     }
 }
 
@@ -100,7 +113,7 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     let current_keys_hint = {
         match app.current_screen {
             CurrentScreen::Main => Span::styled(
-                "(q) to quit | (↑ ↓) to navigate | (→) to select chat | (i) for contact info | (e) for options",
+                "(q) to quit | (↑ ↓) to navigate | (→) to select chat | (a) for account management | (i) for contact info | (e) for options",
                 Style::default().fg(app.config.get_primary_color()),
             ),
             CurrentScreen::Writing => {

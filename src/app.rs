@@ -116,6 +116,7 @@ pub enum CurrentScreen {
     ContactInfo,
     AccountSelector,
     CreatingAccount,
+    ConfirmDelete,
 }
 
 #[derive(PartialEq)]
@@ -151,6 +152,7 @@ pub struct App {
     pub recipients: Vec<(Box<dyn DisplayRecipient>, String)>, // contact_uuid, contact_name, input for this contact
 
     pub current_account: Option<String>,
+    pub deleting_account: Option<String>,
     pub available_accounts: Vec<String>,
     pub account_selected: usize,
     pub show_account_selector: bool,
@@ -250,6 +252,7 @@ impl App {
         App {
             linking_status,
             current_account,
+            deleting_account: None,
             available_accounts,
             device_name_input: String::new(),
             account_creation_field: AccountCreationField::AccountName,
@@ -391,6 +394,41 @@ impl App {
                 "Failed to initialize background threads: {}",
                 e
             ));
+        }
+
+        Ok(())
+    }
+
+    pub async fn delete_account(&mut self, account_name: String) -> Result<()> {
+        use std::path::Path;
+        let is_current = self.current_account.as_ref() == Some(&account_name);
+
+        let account_dir = format!("{}/{}", ACCOUNTS_DIR, account_name);
+        if Path::new(&account_dir).exists() {
+            std::fs::remove_dir_all(&account_dir)?;
+        }
+
+        if is_current {
+            let mut config = Config::load();
+            config.clear_current_account();
+
+            let remaining = list_accounts()?;
+            if !remaining.is_empty() {
+                config.set_current_account(remaining[0].clone());
+                self.current_account = Some(remaining[0].clone());
+            } else {
+                self.current_account = None;
+            }
+
+            config
+                .save()
+                .map_err(|e| anyhow::anyhow!("Failed to save config: {}", e))?;
+            self.config = Config::load();
+        }
+
+        self.refresh_accounts();
+        if self.account_selected >= self.available_accounts.len() {
+            self.account_selected = self.available_accounts.len().saturating_sub(1);
         }
 
         Ok(())
@@ -922,8 +960,35 @@ impl App {
                     self.current_screen = CreatingAccount;
                     self.textarea.clear();
                 }
+                KeyCode::Char('d') | KeyCode::Delete => {
+                    if let Some(account_name) = self.available_accounts.get(self.account_selected) {
+                        if self.available_accounts.len() == 1 {
+                            return Ok(false);
+                        }
+                        self.deleting_account = Some(account_name.clone());
+                        self.current_screen = CurrentScreen::ConfirmDelete;
+                    }
+                }
+
                 _ => {}
             },
+            CurrentScreen::ConfirmDelete => match key.code {
+                KeyCode::Char('y') => {
+                    if let Some(account_name) = self.deleting_account.take() {
+                        // Delete the account
+                        if let Err(e) = self.delete_account(account_name).await {
+                            eprintln!("Failed to delete account: {e:?}");
+                        }
+                        self.refresh_accounts();
+                        self.current_screen = CurrentScreen::AccountSelector;
+                    }
+                }
+                KeyCode::Char('n') | KeyCode::Esc => {
+                    self.deleting_account = None;
+                    self.current_screen = CurrentScreen::AccountSelector;
+                }
+                _ => {}
+            }
             Options => match key.code {
                 KeyCode::Esc | KeyCode::Char('q') => self.current_screen = Main,
                 KeyCode::Up | KeyCode::Char('w') => {
