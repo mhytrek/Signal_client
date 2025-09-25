@@ -1,5 +1,5 @@
 use crate::contacts::get_contacts_tui;
-use crate::messages::receive::{self, MessageDto, contact};
+use crate::messages::receive::{self, MessageDto, check_contacts, contact};
 use crate::messages::send::{self, send_attachment_tui};
 use crate::paths::QRCODE;
 use crate::profile::get_profile_tui;
@@ -10,11 +10,13 @@ use crate::{
 use anyhow::{Error, Result};
 use crossterm::event::{self, Event, KeyModifiers};
 use crossterm::event::{KeyCode, KeyEventKind};
+use futures::{StreamExt, pin_mut};
 use presage::Manager;
 use presage::libsignal_service::Profile;
 use presage::libsignal_service::prelude::Uuid;
 use presage::libsignal_service::zkgroup::GroupMasterKeyBytes;
 use presage::manager::Registered;
+use presage::model::messages::Received;
 use presage_store_sqlite::SqliteStore;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
@@ -29,7 +31,7 @@ use std::{fs, io};
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
 use tokio_util::task::LocalPoolHandle;
-use tracing::{error, warn};
+use tracing::{Level, debug, error, info, span, trace, warn};
 
 use crate::retry_manager::{OutgoingMessage, RetryManager};
 use image::ImageFormat;
@@ -535,7 +537,10 @@ impl App {
 
     // TODO: These unwraps must be handled gracefully
     fn synchronize_messages_for_selected_recipient(&mut self) {
-        let recipient_id = self.recipients[self.selected_recipient].0.id();
+        let recipient_id = match self.recipients.get(self.selected_recipient) {
+            Some(recipient) => recipient.0.id(),
+            None => return,
+        };
         match recipient_id {
             RecipientId::Contact(uuid) => self
                 .tx_tui
@@ -899,111 +904,144 @@ pub async fn handle_synchronization(
     mut manager: Manager<SqliteStore, Registered>,
     current_contacts_mutex: AsyncContactsMap,
 ) {
-    match contacts::initial_sync(&mut manager).await {
-        Ok(_) => {}
-        Err(e) => error!("Initial contact sync failed: {e}"),
-    }
+    let _receiving_span = span!(Level::TRACE, "Receiving loop").entered();
     let mut previous_contacts: Vec<Box<DisplayContact>> = Vec::new();
     let mut previous_groups: Vec<Box<DisplayGroup>> = Vec::new();
+    let mut initialized = false;
     loop {
-        let new_contacts_mutex = Arc::clone(&current_contacts_mutex);
+        let messages_stream_result = manager.receive_messages().await;
+        match messages_stream_result {
+            Ok(messages_stream) => {
+                pin_mut!(messages_stream);
+                while let Some(received) = messages_stream.next().await {
+                    _ = tx.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                    match received {
+                        Received::QueueEmpty => {
+                            // NOTE: This is terrible solution but works for now, will have be
+                            // changed to something more graceful in furure
+                            if !initialized {
+                                loop {
+                                    info!("Synchronizing contacts");
+                                    match manager.request_contacts().await {
+                                        Ok(_) => {
+                                            info!("Synchronized contacts.");
+                                            break;
+                                        }
+                                        Err(e) => {
+                                            error!(error = %e, "Failed to synchronize contacts");
+                                            tokio::time::sleep(Duration::from_secs(3)).await;
+                                        }
+                                    }
+                                }
+                                initialized = true;
+                            }
+                            debug!("Received queue empty");
+                        }
+                        Received::Contacts => {
+                            debug!("Received contact");
+                        }
+                        Received::Content(content) => {
+                            debug!("Received content");
+                            trace!("Received message: {content:#?}");
+                            if initialized && let Err(e) = tx.send(EventApp::ReceiveMessage) {
+                                error!(channel_error = %e);
+                            }
+                        }
+                    }
+                    _ = check_contacts(&mut manager, current_contacts_mutex.clone()).await;
 
-        let messages = match receive::receive_messages_tui(&mut manager, new_contacts_mutex).await {
-            Ok(list) => {
-                let _ = tx.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
-                list
-            }
-            Err(e) => {
-                if is_connection_error(&e) {
-                    let _ = tx.send(EventApp::NetworkStatusChanged(NetworkStatus::Disconnected(
-                        "Cannot receive pending messages: WiFi disconnected".to_string(),
-                    )));
+                    let contacts_result = contacts::list_contacts_tui(&mut manager).await;
+                    let groups_result = groups::list_groups_tui(&mut manager).await;
+
+                    let contacts = match contacts_result {
+                        Ok(list) => list,
+                        Err(e) => {
+                            error!("{e}");
+                            continue;
+                        }
+                    };
+
+                    let groups = match groups_result {
+                        Ok(list) => list,
+                        Err(e) => {
+                            error!("{e}");
+                            continue;
+                        }
+                    };
+
+                    let contact_displays: Vec<Box<DisplayContact>> = contacts
+                        .into_iter()
+                        .filter_map(|contact_res| {
+                            let contact = contact_res.ok()?;
+
+                            let uuid_str = contact.uuid.to_string();
+
+                            let display_name = if !contact.name.is_empty() {
+                                contact.name
+                            } else if let Some(phone) = contact.phone_number {
+                                phone.to_string()
+                            } else {
+                                uuid_str.clone()
+                            };
+
+                            let display_contact =
+                                Box::new(DisplayContact::new(display_name, contact.uuid));
+
+                            Some(display_contact)
+                        })
+                        .collect();
+
+                    let group_displays: Vec<Box<DisplayGroup>> = groups
+                        .into_iter()
+                        .filter_map(|groups_res| {
+                            let (group_master_key, group) = groups_res.ok()?;
+
+                            let display_name = group.title;
+                            let display_group =
+                                Box::new(DisplayGroup::new(display_name, group_master_key));
+
+                            Some(display_group)
+                        })
+                        .collect();
+
+                    let contacts_differ = contact_displays != previous_contacts;
+                    let groups_differ = group_displays != previous_groups;
+
+                    let display_recipients: Vec<Box<dyn DisplayRecipient>> = contact_displays
+                        .iter()
+                        .cloned()
+                        .map(|c| c as Box<dyn DisplayRecipient>)
+                        .chain(
+                            group_displays
+                                .iter()
+                                .cloned()
+                                .map(|g| g as Box<dyn DisplayRecipient>),
+                        )
+                        .collect();
+
+                    if contacts_differ || groups_differ {
+                        if initialized
+                            && tx.send(EventApp::ContactsList(display_recipients)).is_err()
+                        {
+                            break;
+                        }
+                        if contacts_differ {
+                            previous_contacts = contact_displays;
+                        }
+                        if groups_differ {
+                            previous_groups = group_displays;
+                        }
+                    }
                 }
-                Vec::new()
+
+                error!("Lost connection to stream, reconnecting in 3 seconds");
+                tokio::time::sleep(Duration::from_secs(3)).await;
             }
-        };
-
-        let contacts_result = contacts::list_contacts_tui(&mut manager).await;
-        let groups_result = groups::list_groups_tui(&mut manager).await;
-
-        let contacts = match contacts_result {
-            Ok(list) => list,
-            // TODO: (@jbrs) Handle that differently so the groups can be checked
             Err(e) => {
-                error!("{e}");
-                continue;
-            }
-        };
-
-        let groups = match groups_result {
-            Ok(list) => list,
-            Err(e) => {
-                error!("{e}");
-                continue;
-            }
-        };
-
-        let contact_displays: Vec<Box<DisplayContact>> = contacts
-            .into_iter()
-            .filter_map(|contact_res| {
-                let contact = contact_res.ok()?;
-
-                let uuid_str = contact.uuid.to_string();
-
-                let display_name = if !contact.name.is_empty() {
-                    contact.name
-                } else if let Some(phone) = contact.phone_number {
-                    phone.to_string()
-                } else {
-                    uuid_str.clone()
-                };
-
-                let display_contact = Box::new(DisplayContact::new(display_name, contact.uuid));
-
-                Some(display_contact)
-            })
-            .collect();
-
-        let group_displays: Vec<Box<DisplayGroup>> = groups
-            .into_iter()
-            .filter_map(|groups_res| {
-                let (group_master_key, group) = groups_res.ok()?;
-
-                let display_name = group.title;
-                let display_group = Box::new(DisplayGroup::new(display_name, group_master_key));
-
-                Some(display_group)
-            })
-            .collect();
-
-        let contacts_differ = contact_displays != previous_contacts;
-        let groups_differ = group_displays != previous_groups;
-
-        let display_recipients: Vec<Box<dyn DisplayRecipient>> = contact_displays
-            .iter()
-            .cloned()
-            .map(|c| c as Box<dyn DisplayRecipient>)
-            .chain(
-                group_displays
-                    .iter()
-                    .cloned()
-                    .map(|g| g as Box<dyn DisplayRecipient>),
-            )
-            .collect();
-
-        if contacts_differ || groups_differ {
-            if tx.send(EventApp::ContactsList(display_recipients)).is_err() {
-                break;
-            }
-            if contacts_differ {
-                previous_contacts = contact_displays;
-            }
-            if groups_differ {
-                previous_groups = group_displays;
+                error!(error = %e, "Stream failed, retry in 3 seconds");
+                tokio::time::sleep(Duration::from_secs(3)).await;
             }
         }
-
-        if !messages.is_empty() && tx.send(EventApp::ReceiveMessage).is_err() {}
     }
 }
 
