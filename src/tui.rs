@@ -12,9 +12,13 @@ use ratatui::{
     },
 };
 
+use crate::app::CurrentScreen::AccountSelector;
+use crate::config::Config;
 use crate::{
     app::{App, LinkingStatus},
+    create_registered_manager_for_account,
     devices::is_registered,
+    list_accounts,
 };
 
 pub async fn run_tui() -> Result<()> {
@@ -24,14 +28,42 @@ pub async fn run_tui() -> Result<()> {
     let backend = CrosstermBackend::new(stderr);
     let mut terminal = Terminal::new(backend)?;
 
-    let linking_status = is_registered().await?;
+    let accounts = list_accounts()?;
+    let config = Config::load();
 
-    let status = match linking_status {
-        true => LinkingStatus::Linked,
-        false => LinkingStatus::Unlinked,
+    let linking_status = if !accounts.is_empty() {
+        if let Some(current) = config.get_current_account() {
+            if accounts.contains(&current.to_string()) {
+                match create_registered_manager_for_account(current).await {
+                    Ok(_) => LinkingStatus::Linked,
+                    Err(_) => LinkingStatus::Unlinked,
+                }
+            } else {
+                let mut config = Config::load();
+                config.clear_current_account();
+                let _ = config.save();
+                LinkingStatus::Unlinked
+            }
+        } else if accounts.len() == 1 {
+            let mut config = Config::load();
+            config.set_current_account(accounts[0].clone());
+            let _ = config.save();
+            LinkingStatus::Linked
+        } else {
+            LinkingStatus::Unlinked
+        }
+    } else {
+        match is_registered().await? {
+            true => LinkingStatus::Linked,
+            false => LinkingStatus::Unlinked,
+        }
     };
 
-    let mut app = App::new(status);
+    let mut app = App::new(linking_status);
+
+    if !accounts.is_empty() && config.get_current_account().is_none() && accounts.len() > 1 {
+        app.current_screen = AccountSelector;
+    }
 
     let res = app.run(&mut terminal).await;
 

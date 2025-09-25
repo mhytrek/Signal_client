@@ -49,3 +49,24 @@ pub fn render_textarea(frame: &mut Frame, app: &App, area: Rect) {
 
     frame.render_widget(input_text, area);
 }
+
+// In render_qrcode or where the error is displayed, update the popup text:
+pub fn render_linking_error(
+    frame: &mut Frame,
+    area: Rect,
+    error_msg: &str,
+    is_account_creation: bool,
+) {
+    let retry_instruction = if is_account_creation {
+        "Press ESC to go back to account selector\nPress any other key to retry"
+    } else {
+        "Press ESC to cancel\nPress any other key to retry"
+    };
+
+    let text = format!(
+        "Error: {}\n\n{}\n\nNote: If your phone shows successful connection,\ntry waiting a moment and check your accounts list.",
+        error_msg, retry_instruction
+    );
+
+    render_popup(frame, area, &text);
+}

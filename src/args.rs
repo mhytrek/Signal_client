@@ -40,6 +40,39 @@ pub enum Command {
 
     /// Prints profile info
     GetProfile,
+
+    /// Create a new account
+    CreateAccount(CreateAccountArgs),
+
+    /// List all accounts
+    ListAccounts,
+
+    /// Switch to an account
+    SwitchAccount(SwitchAccountArgs),
+
+    /// Get current active account
+    GetCurrentAccount,
+
+    /// Run TUI with account selection
+    RunAppWithAccounts,
+}
+
+#[derive(Args)]
+pub struct CreateAccountArgs {
+    /// Name of the new account
+    #[arg(short, long)]
+    pub account_name: String,
+
+    /// Device name for Signal registration
+    #[arg(short, long)]
+    pub device_name: String,
+}
+
+#[derive(Args)]
+pub struct SwitchAccountArgs {
+    /// Name of the account to switch to
+    #[arg(short, long)]
+    pub account_name: String,
 }
 
 #[derive(Args)]

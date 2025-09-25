@@ -6,6 +6,7 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
+use crate::ui::{render_account_creation, render_account_selector};
 use crate::{
     app::{App, CurrentScreen, LinkingStatus, NetworkStatus},
     ui::{
@@ -40,7 +41,7 @@ pub fn render_ui(frame: &mut Frame, app: &mut App) {
             render_footer(frame, app, chunks[1]);
         }
         CurrentScreen::Options => {
-            render_options(frame, app); // app jest już &mut
+            render_options(frame, app);
             render_footer(frame, app, chunks[1]);
         }
         CurrentScreen::Exiting => {
@@ -56,11 +57,13 @@ pub fn render_ui(frame: &mut Frame, app: &mut App) {
                 render_paragraph(frame, chunks[1], text);
             }
             LinkingStatus::Linked => {}
-            LinkingStatus::Error(ref _error_msg) => {
-                render_popup(
+            LinkingStatus::Error(ref error_msg) => {
+                use crate::ui::linking::render_linking_error;
+                render_linking_error(
                     frame,
                     frame.area(),
-                    "Error linking device, check if you have Internet connection.\n PRESS ANY KEY TO RETRY",
+                    error_msg,
+                    app.creating_account_name.is_some(),
                 );
             }
         },
@@ -79,6 +82,14 @@ pub fn render_ui(frame: &mut Frame, app: &mut App) {
 
             render_contact_list(frame, app, horizontal_chunks[0]);
             render_contact_info_compact(frame, app, horizontal_chunks[1]);
+            render_footer(frame, app, chunks[1]);
+        }
+        CurrentScreen::AccountSelector => {
+            render_account_selector(frame, app, frame.area());
+            render_footer(frame, app, chunks[1]);
+        }
+        CurrentScreen::CreatingAccount => {
+            render_account_creation(frame, app, frame.area());
             render_footer(frame, app, chunks[1]);
         }
     }

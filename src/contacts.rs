@@ -86,3 +86,9 @@ pub async fn list_contacts_tui(
 ) -> Result<Vec<Result<Contact, SqliteStoreError>>> {
     list_contacts(manager).await
 }
+
+pub async fn initial_sync(manager: &mut Manager<SqliteStore, Registered>) -> Result<()> {
+    let current_contacts_mutex: AsyncContactsMap =
+        Arc::new(Mutex::new(get_contacts(manager).await?));
+    sync_contacts(manager, current_contacts_mutex).await
+}
