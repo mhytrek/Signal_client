@@ -301,11 +301,9 @@ impl App {
         terminal: &mut Terminal<CrosstermBackend<Stderr>>,
     ) -> io::Result<bool> {
         if self.linking_status == LinkingStatus::Linked {
-            let accounts = list_accounts().unwrap_or_default();
-
-            if !accounts.is_empty() || Path::new(paths::STORE).exists() {
+            if let Some(current) = &self.current_account {
                 if let Some(rx) = self.rx_thread.take() {
-                    match create_registered_manager().await {
+                    match create_registered_manager_for_account(current).await {
                         Ok(manager) => {
                             self.manager = Some(manager.clone());
 
@@ -314,24 +312,17 @@ impl App {
                                 rx,
                                 manager,
                                 self.retry_manager.clone(),
-                            )
-                            .await
-                            {
+                            ).await {
                                 eprintln!("Failed to init threads: {e:?}");
                             }
                             self.current_screen = CurrentScreen::Syncing;
                         }
                         Err(e) => {
                             eprintln!("Failed to create manager: {e:?}");
-                            // Reset to unlinked state to show account creation
-                            self.linking_status = LinkingStatus::Unlinked;
-                            self.current_screen = CurrentScreen::LinkingNewDevice;
+                            self.current_screen = CurrentScreen::AccountSelector;
                         }
                     }
                 }
-            } else {
-                self.linking_status = LinkingStatus::Unlinked;
-                self.current_screen = CurrentScreen::LinkingNewDevice;
             }
         }
 
@@ -851,6 +842,11 @@ impl App {
             },
             CreatingAccount => match key.code {
                 KeyCode::Esc => {
+                    let accounts = list_accounts().unwrap_or_default();
+                    if accounts.is_empty() {
+                        return Ok(false);
+                    }
+
                     self.current_screen = AccountSelector;
                     self.textarea.clear();
                     self.device_name_input.clear();

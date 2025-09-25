@@ -48,7 +48,7 @@ pub fn render_account_selector(frame: &mut Frame, app: &App, area: Rect) {
             ]),
             Line::from(""),
             Line::from(Span::styled(
-                "Select an account or create a new one",
+                "Select an account or link a new one",
                 Style::default()
                     .fg(Color::Gray)
                     .add_modifier(Modifier::ITALIC),
@@ -90,7 +90,7 @@ pub fn render_account_selector(frame: &mut Frame, app: &App, area: Rect) {
                     .add_modifier(Modifier::BOLD),
             )),
             Line::from(""),
-            Line::from("Press 'a' to create your first account"),
+            Line::from("Press 'a' to create"),
             Line::from(""),
             Line::from("Signal TUI supports multiple accounts"),
             Line::from("for easy account management"),
@@ -208,12 +208,17 @@ pub fn render_account_selector(frame: &mut Frame, app: &App, area: Rect) {
 
 /// Renders the account creation screen
 pub fn render_account_creation(frame: &mut Frame, app: &App, area: Rect) {
+    let is_first_time = app.available_accounts.is_empty();
     let popup_area = centered_rect(60, 50, area);
-
     frame.render_widget(Clear, popup_area);
+    let title = if is_first_time {
+        " 🚀 Welcome to Signal TUI - Link Your First Account "
+    } else {
+        " 🆕 Link New Account "
+    };
 
     let main_block = Block::default()
-        .title(" 🆕 Create New Account ")
+        .title(title)
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
@@ -234,7 +239,13 @@ pub fn render_account_creation(frame: &mut Frame, app: &App, area: Rect) {
         ])
         .split(inner_area);
 
-    let instructions = Paragraph::new("Create a new Signal account for multi-account support")
+    let instructions_text = if is_first_time {
+        "Let's set up your first link to Signal account!\nChoose a name for this account and device."
+    } else {
+        "Link a new Signal account for multi-account support"
+    };
+
+    let instructions = Paragraph::new(instructions_text)
         .alignment(Alignment::Center)
         .style(Style::default().fg(app.config.get_primary_color()))
         .wrap(Wrap { trim: true });
@@ -304,29 +315,27 @@ pub fn render_account_creation(frame: &mut Frame, app: &App, area: Rect) {
 
     frame.render_widget(status, chunks[3]);
 
-    let controls_text = vec![Line::from(vec![
-        Span::styled(
-            "Tab",
-            Style::default()
-                .fg(app.config.get_accent_color())
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(": Switch fields  "),
-        Span::styled(
-            "Enter",
-            Style::default()
-                .fg(app.config.get_accent_color())
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(": Create  "),
-        Span::styled(
-            "Esc",
-            Style::default()
-                .fg(app.config.get_accent_color())
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(": Cancel"),
-    ])];
+    let controls_text = if is_first_time {
+        vec![
+            Line::from(vec![
+                Span::styled("Tab", Style::default().fg(app.config.get_accent_color()).add_modifier(Modifier::BOLD)),
+                Span::raw(": Switch fields  "),
+                Span::styled("Enter", Style::default().fg(app.config.get_accent_color()).add_modifier(Modifier::BOLD)),
+                Span::raw(": Create account"),
+            ]),
+        ]
+    } else {
+        vec![
+            Line::from(vec![
+                Span::styled("Tab", Style::default().fg(app.config.get_accent_color()).add_modifier(Modifier::BOLD)),
+                Span::raw(": Switch fields  "),
+                Span::styled("Enter", Style::default().fg(app.config.get_accent_color()).add_modifier(Modifier::BOLD)),
+                Span::raw(": Create  "),
+                Span::styled("Esc", Style::default().fg(app.config.get_accent_color()).add_modifier(Modifier::BOLD)),
+                Span::raw(": Cancel"),
+            ]),
+        ]
+    };
 
     let controls = Paragraph::new(controls_text)
         .alignment(Alignment::Center)
