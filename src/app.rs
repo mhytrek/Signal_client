@@ -7,7 +7,6 @@ use crate::ui::render_ui;
 use crate::{
     ACCOUNTS_DIR, AsyncContactsMap, config::Config, contacts, create_registered_manager,
     create_registered_manager_for_account, ensure_accounts_dir, groups, list_accounts,
-    paths,
 };
 use anyhow::{Error, Result};
 use crossterm::event::{self, Event, KeyModifiers};
@@ -300,10 +299,19 @@ impl App {
         &mut self,
         terminal: &mut Terminal<CrosstermBackend<Stderr>>,
     ) -> io::Result<bool> {
+        self.refresh_accounts();
+
         if self.linking_status == LinkingStatus::Linked {
-            if let Some(current) = &self.current_account {
+            if let Some(current) = self.current_account.clone() {
+                if !self.available_accounts.contains(&current) {
+                    self.current_account = None;
+                    let mut config = Config::load();
+                    config.clear_current_account();
+                    let _ = config.save();
+                    self.linking_status = LinkingStatus::Unlinked;
+                }
                 if let Some(rx) = self.rx_thread.take() {
-                    match create_registered_manager_for_account(current).await {
+                    match create_registered_manager_for_account(&current).await {
                         Ok(manager) => {
                             self.manager = Some(manager.clone());
 

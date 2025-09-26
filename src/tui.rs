@@ -21,6 +21,11 @@ use crate::{
 use crate::app::CurrentScreen;
 
 pub async fn run_tui() -> Result<()> {
+    if let Ok(removed_accounts) = crate::cleanup_invalid_accounts().await {
+        if !removed_accounts.is_empty() {
+            println!("Removed {} invalid account(s): {:?}", removed_accounts.len(), removed_accounts);
+        }
+    }
     enable_raw_mode()?;
     let mut stderr = io::stderr();
     execute!(stderr, EnterAlternateScreen, EnableMouseCapture)?;

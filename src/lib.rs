@@ -104,3 +104,36 @@ pub async fn create_registered_manager_for_account(
         Err(err) => Err(Error::new(err)),
     }
 }
+
+pub async fn cleanup_invalid_accounts() -> Result<Vec<String>> {
+    let mut invalid_accounts = Vec::new();
+    let accounts = list_accounts()?;
+
+    for account_name in accounts {
+        let store_path = get_account_store_path(&account_name);
+        match open_store(&store_path).await {
+            Ok(store) => {
+                match Manager::load_registered(store).await {
+                    Ok(_) => {
+                    }
+                    Err(_) => {
+                        invalid_accounts.push(account_name.clone());
+                        let account_dir = format!("{}/{}", ACCOUNTS_DIR, account_name);
+                        if Path::new(&account_dir).exists() {
+                            let _ = std::fs::remove_dir_all(&account_dir);
+                        }
+                    }
+                }
+            }
+            Err(_) => {
+                invalid_accounts.push(account_name.clone());
+                let account_dir = format!("{}/{}", ACCOUNTS_DIR, account_name);
+                if Path::new(&account_dir).exists() {
+                    let _ = std::fs::remove_dir_all(&account_dir);
+                }
+            }
+        }
+    }
+
+    Ok(invalid_accounts)
+}
