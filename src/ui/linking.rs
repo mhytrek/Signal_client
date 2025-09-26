@@ -50,7 +50,6 @@ pub fn render_textarea(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(input_text, area);
 }
 
-// In render_qrcode or where the error is displayed, update the popup text:
 pub fn render_linking_error(
     frame: &mut Frame,
     area: Rect,

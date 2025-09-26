@@ -60,10 +60,6 @@ pub fn get_account_store_path(account_name: &str) -> String {
     format!("{}/{}/store.db", ACCOUNTS_DIR, account_name)
 }
 
-pub fn get_account_assets_path(account_name: &str) -> String {
-    format!("{}/{}/assets", ACCOUNTS_DIR, account_name)
-}
-
 pub fn ensure_accounts_dir() -> Result<()> {
     if !Path::new(ACCOUNTS_DIR).exists() {
         fs::create_dir_all(ACCOUNTS_DIR)?;
@@ -112,19 +108,16 @@ pub async fn cleanup_invalid_accounts() -> Result<Vec<String>> {
     for account_name in accounts {
         let store_path = get_account_store_path(&account_name);
         match open_store(&store_path).await {
-            Ok(store) => {
-                match Manager::load_registered(store).await {
-                    Ok(_) => {
-                    }
-                    Err(_) => {
-                        invalid_accounts.push(account_name.clone());
-                        let account_dir = format!("{}/{}", ACCOUNTS_DIR, account_name);
-                        if Path::new(&account_dir).exists() {
-                            let _ = std::fs::remove_dir_all(&account_dir);
-                        }
+            Ok(store) => match Manager::load_registered(store).await {
+                Ok(_) => {}
+                Err(_) => {
+                    invalid_accounts.push(account_name.clone());
+                    let account_dir = format!("{}/{}", ACCOUNTS_DIR, account_name);
+                    if Path::new(&account_dir).exists() {
+                        let _ = std::fs::remove_dir_all(&account_dir);
                     }
                 }
-            }
+            },
             Err(_) => {
                 invalid_accounts.push(account_name.clone());
                 let account_dir = format!("{}/{}", ACCOUNTS_DIR, account_name);

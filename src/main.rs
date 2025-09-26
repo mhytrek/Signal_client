@@ -1,11 +1,14 @@
 use anyhow::Result;
 use clap::Parser;
 
-use signal_client::account_management::{create_account_cli, delete_account_cli, get_current_account_cli, list_accounts_cli, switch_account_cli};
+use signal_client::account_management::{
+    create_account_cli, delete_account_cli, get_current_account_cli, list_accounts_cli,
+    switch_account_cli,
+};
 use signal_client::args::{Cli, Command};
 use signal_client::logger::init_logger;
+use signal_client::messages;
 use signal_client::{cli, contacts, tui};
-use signal_client::{devices, messages};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
@@ -14,7 +17,6 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Command::SyncContacts => contacts::sync_contacts_cli().await?,
-        Command::LinkDevice(args) => devices::link_new_device_cli(args.device_name).await?,
         Command::ListContacts => cli::print_contacts().await?,
         Command::ListGroups => cli::print_groups().await?,
         Command::RunApp => tui::run_tui().await?,
@@ -46,9 +48,7 @@ async fn main() -> Result<()> {
         Command::ListAccounts => list_accounts_cli().await?,
         Command::SwitchAccount(args) => switch_account_cli(args.account_name).await?,
         Command::GetCurrentAccount => get_current_account_cli().await?,
-        Command::DeleteAccount(args) => {
-            delete_account_cli(args.account_name).await?
-        }
+        Command::DeleteAccount(args) => delete_account_cli(args.account_name).await?,
     }
 
     Ok(())

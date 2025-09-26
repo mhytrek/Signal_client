@@ -154,7 +154,6 @@ pub struct App {
     pub deleting_account: Option<String>,
     pub available_accounts: Vec<String>,
     pub account_selected: usize,
-    pub show_account_selector: bool,
     pub device_name_input: String,
     pub account_creation_field: AccountCreationField,
 
@@ -215,10 +214,6 @@ pub enum EventApp {
     LinkingError(String),
     NetworkStatusChanged(NetworkStatus),
 
-    AccountCreated(String),
-    AccountCreationFailed(String),
-    AccountSwitched(String),
-
     ProfileReceived(Profile),
     AvatarReceived(Vec<u8>),
 
@@ -256,7 +251,6 @@ impl App {
             device_name_input: String::new(),
             account_creation_field: AccountCreationField::AccountName,
             account_selected: 0,
-            show_account_selector: false,
             recipients: vec![],
             selected_recipient: 0,
             message_selected: 0,
@@ -301,34 +295,35 @@ impl App {
     ) -> io::Result<bool> {
         self.refresh_accounts();
 
-        if self.linking_status == LinkingStatus::Linked {
-            if let Some(current) = self.current_account.clone() {
-                if !self.available_accounts.contains(&current) {
-                    self.current_account = None;
-                    let mut config = Config::load();
-                    config.clear_current_account();
-                    let _ = config.save();
-                    self.linking_status = LinkingStatus::Unlinked;
-                }
-                if let Some(rx) = self.rx_thread.take() {
-                    match create_registered_manager_for_account(&current).await {
-                        Ok(manager) => {
-                            self.manager = Some(manager.clone());
+        if self.linking_status == LinkingStatus::Linked
+            && let Some(current) = self.current_account.clone()
+        {
+            if !self.available_accounts.contains(&current) {
+                self.current_account = None;
+                let mut config = Config::load();
+                config.clear_current_account();
+                let _ = config.save();
+                self.linking_status = LinkingStatus::Unlinked;
+            }
+            if let Some(rx) = self.rx_thread.take() {
+                match create_registered_manager_for_account(&current).await {
+                    Ok(manager) => {
+                        self.manager = Some(manager.clone());
 
-                            if let Err(e) = init_background_threads(
-                                self.tx_thread.clone(),
-                                rx,
-                                manager,
-                                self.retry_manager.clone(),
-                            ).await {
-                                eprintln!("Failed to init threads: {e:?}");
-                            }
-                            self.current_screen = CurrentScreen::Syncing;
+                        if let Err(e) = init_background_threads(
+                            self.tx_thread.clone(),
+                            rx,
+                            manager,
+                            self.retry_manager.clone(),
+                        )
+                        .await
+                        {
+                            eprintln!("Failed to init threads: {e:?}");
                         }
-                        Err(e) => {
-                            eprintln!("Failed to create manager: {e:?}");
-                            self.current_screen = CurrentScreen::AccountSelector;
-                        }
+                        self.current_screen = CurrentScreen::Syncing;
+                    }
+                    Err(_e) => {
+                        self.current_screen = CurrentScreen::AccountSelector;
                     }
                 }
             }
@@ -552,8 +547,7 @@ impl App {
                                 Some(manager) => manager,
                                 None => match create_registered_manager().await {
                                     Ok(manager) => manager,
-                                    Err(e) => {
-                                        eprintln!("Failed to create manager: {e:?}");
+                                    Err(_e) => {
                                         self.current_screen = CurrentScreen::Main;
                                         return Ok(false);
                                     }
@@ -606,21 +600,6 @@ impl App {
             }
             EventApp::QrCodeGenerated => Ok(false),
             EventApp::Resize(_, _) => Ok(false),
-            EventApp::AccountCreated(account_name) => {
-                self.refresh_accounts();
-                self.current_account = Some(account_name.clone());
-
-                let mut config = Config::load();
-                config.set_current_account(account_name);
-                if let Err(e) = config.save() {
-                    eprintln!("Failed to save config: {e:?}");
-                }
-
-                self.linking_status = LinkingStatus::Linked;
-                self.current_screen = CurrentScreen::Syncing;
-                Ok(false)
-            }
-            _ => Ok(false),
         }
     }
 
@@ -955,8 +934,7 @@ impl App {
                         if let Err(e) = self.switch_account(account_name.clone()).await {
                             eprintln!("Failed to switch account: {e:?}");
                         } else {
-                            self.show_account_selector = false;
-                            self.current_screen = CurrentScreen::Syncing;
+                            self.current_screen = Syncing;
                         }
                     }
                 }
@@ -992,7 +970,7 @@ impl App {
                     self.current_screen = CurrentScreen::AccountSelector;
                 }
                 _ => {}
-            }
+            },
             Options => match key.code {
                 KeyCode::Esc | KeyCode::Char('q') => self.current_screen = Main,
                 KeyCode::Up | KeyCode::Char('w') => {
@@ -1304,79 +1282,6 @@ pub fn handle_input_events(tx: mpsc::Sender<EventApp>) {
                     }
                 }
                 _ => {}
-            }
-        }
-    }
-}
-
-pub async fn handle_account_creation(
-    tx: mpsc::Sender<EventApp>,
-    account_name: String,
-    device_name: String,
-) {
-    use crate::devices::link_new_device_for_account;
-
-    let result = link_new_device_for_account(account_name.clone(), device_name).await;
-
-    match result {
-        Ok(_manager) => {
-            if tx.send(EventApp::AccountCreated(account_name)).is_err() {
-                eprintln!("Failed to send account creation success");
-            }
-        }
-        Err(e) => {
-            let error_msg = if e.to_string().contains("connection")
-                || e.to_string().contains("network")
-                || e.to_string().contains("unreachable")
-                || e.to_string().contains("timeout")
-            {
-                "Network error: Please check your WiFi connection".to_string()
-            } else {
-                e.to_string()
-            };
-
-            if tx.send(EventApp::AccountCreationFailed(error_msg)).is_err() {
-                eprintln!("Failed to send account creation error");
-            }
-        }
-    }
-}
-
-pub async fn handle_account_creation_with_qr(
-    tx: mpsc::Sender<EventApp>,
-    account_name: String,
-    device_name: String,
-) {
-    use crate::devices::link_new_device_for_account;
-
-    let result = link_new_device_for_account(account_name.clone(), device_name).await;
-
-    match result {
-        Ok(manager) => {
-            let mut config = Config::load();
-            config.set_current_account(account_name.clone());
-            let _ = config.save();
-
-            if tx
-                .send(EventApp::LinkingFinished((true, Some(manager))))
-                .is_err()
-            {
-                eprintln!("Failed to send linking finished event");
-            }
-        }
-        Err(e) => {
-            let error_msg = if e.to_string().contains("connection")
-                || e.to_string().contains("network")
-                || e.to_string().contains("unreachable")
-                || e.to_string().contains("timeout")
-            {
-                "Network error: Please check your WiFi connection".to_string()
-            } else {
-                e.to_string()
-            };
-
-            if tx.send(EventApp::LinkingError(error_msg)).is_err() {
-                eprintln!("Failed to send account creation error");
             }
         }
     }

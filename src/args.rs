@@ -8,9 +8,6 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Link this device to your signal account
-    LinkDevice(LinkDeviceArgs),
-
     /// Synchronizes contacts with primary device
     SyncContacts,
 
@@ -80,13 +77,6 @@ pub struct SwitchAccountArgs {
     /// Name of the account to switch to
     #[arg(short, long)]
     pub account_name: String,
-}
-
-#[derive(Args)]
-pub struct LinkDeviceArgs {
-    /// Name of under which linked device should be saved
-    #[arg(short, long)]
-    pub device_name: String,
 }
 
 #[derive(Args)]

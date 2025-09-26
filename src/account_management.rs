@@ -1,10 +1,10 @@
-use std::path::Path;
 use crate::contacts::initial_sync;
 use crate::{
     ACCOUNTS_DIR, Config, ensure_accounts_dir, get_account_store_path, list_accounts, open_store,
 };
 use anyhow::{Result, anyhow};
 use presage::Manager;
+use std::path::Path;
 
 pub async fn create_account_cli(account_name: String, device_name: String) -> Result<()> {
     use futures::{channel::oneshot, future};
@@ -121,7 +121,10 @@ pub async fn delete_account_cli(account_name: String) -> Result<()> {
     let config = Config::load();
     let is_current = config.get_current_account() == Some(&account_name);
 
-    print!("Are you sure you want to delete account '{}'? This action cannot be undone! (yes/no): ", account_name);
+    print!(
+        "Are you sure you want to delete account '{}'? This action cannot be undone! (yes/no): ",
+        account_name
+    );
     io::stdout().flush()?;
 
     let mut input = String::new();
@@ -144,7 +147,10 @@ pub async fn delete_account_cli(account_name: String) -> Result<()> {
         let remaining_accounts = list_accounts()?;
         if !remaining_accounts.is_empty() {
             config.set_current_account(remaining_accounts[0].clone());
-            println!("Set '{}' as the new current account.", remaining_accounts[0]);
+            println!(
+                "Set '{}' as the new current account.",
+                remaining_accounts[0]
+            );
         }
 
         config

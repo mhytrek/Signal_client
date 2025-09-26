@@ -181,15 +181,40 @@ pub fn render_account_selector(frame: &mut Frame, app: &App, area: Rect) {
     let instructions = vec![
         Line::from(""),
         Line::from(vec![
-            Span::styled("↑↓/ws", Style::default().fg(app.config.get_accent_color()).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "↑↓/ws",
+                Style::default()
+                    .fg(app.config.get_accent_color())
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::raw(": Navigate  "),
-            Span::styled("Enter", Style::default().fg(app.config.get_accent_color()).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Enter",
+                Style::default()
+                    .fg(app.config.get_accent_color())
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::raw(": Select  "),
-            Span::styled("a", Style::default().fg(app.config.get_accent_color()).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "a",
+                Style::default()
+                    .fg(app.config.get_accent_color())
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::raw(": New  "),
-            Span::styled("d", Style::default().fg(app.config.get_accent_color()).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "d",
+                Style::default()
+                    .fg(app.config.get_accent_color())
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::raw(": Delete  "),
-            Span::styled("Esc", Style::default().fg(app.config.get_accent_color()).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Esc",
+                Style::default()
+                    .fg(app.config.get_accent_color())
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::raw(": Cancel"),
         ]),
         Line::from(""),
@@ -316,25 +341,46 @@ pub fn render_account_creation(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(status, chunks[3]);
 
     let controls_text = if is_first_time {
-        vec![
-            Line::from(vec![
-                Span::styled("Tab", Style::default().fg(app.config.get_accent_color()).add_modifier(Modifier::BOLD)),
-                Span::raw(": Switch fields  "),
-                Span::styled("Enter", Style::default().fg(app.config.get_accent_color()).add_modifier(Modifier::BOLD)),
-                Span::raw(": Create account"),
-            ]),
-        ]
+        vec![Line::from(vec![
+            Span::styled(
+                "Tab",
+                Style::default()
+                    .fg(app.config.get_accent_color())
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(": Switch fields  "),
+            Span::styled(
+                "Enter",
+                Style::default()
+                    .fg(app.config.get_accent_color())
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(": Create account"),
+        ])]
     } else {
-        vec![
-            Line::from(vec![
-                Span::styled("Tab", Style::default().fg(app.config.get_accent_color()).add_modifier(Modifier::BOLD)),
-                Span::raw(": Switch fields  "),
-                Span::styled("Enter", Style::default().fg(app.config.get_accent_color()).add_modifier(Modifier::BOLD)),
-                Span::raw(": Create  "),
-                Span::styled("Esc", Style::default().fg(app.config.get_accent_color()).add_modifier(Modifier::BOLD)),
-                Span::raw(": Cancel"),
-            ]),
-        ]
+        vec![Line::from(vec![
+            Span::styled(
+                "Tab",
+                Style::default()
+                    .fg(app.config.get_accent_color())
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(": Switch fields  "),
+            Span::styled(
+                "Enter",
+                Style::default()
+                    .fg(app.config.get_accent_color())
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(": Create  "),
+            Span::styled(
+                "Esc",
+                Style::default()
+                    .fg(app.config.get_accent_color())
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(": Cancel"),
+        ])]
     };
 
     let controls = Paragraph::new(controls_text)
