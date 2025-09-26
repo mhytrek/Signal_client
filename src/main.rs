@@ -40,7 +40,8 @@ async fn main() -> Result<()> {
             .await?
         }
         Command::CreateAccount(args) => {
-            create_account_cli(args.account_name, args.device_name).await?
+            create_account_cli(args.account_name, args.device_name).await?;
+            contacts::sync_contacts_cli().await?;
         }
         Command::ListAccounts => list_accounts_cli().await?,
         Command::SwitchAccount(args) => switch_account_cli(args.account_name).await?,

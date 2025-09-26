@@ -6,7 +6,7 @@ use crate::profile::get_profile_tui;
 use crate::ui::render_ui;
 use crate::{
     ACCOUNTS_DIR, AsyncContactsMap, config::Config, contacts, create_registered_manager,
-    create_registered_manager_for_account, devices, ensure_accounts_dir, groups, list_accounts,
+    create_registered_manager_for_account, ensure_accounts_dir, groups, list_accounts,
     paths,
 };
 use anyhow::{Error, Result};
@@ -1080,26 +1080,6 @@ impl App {
                                             })
                                         })
                                         .unwrap();
-                                } else {
-                                    let tx_link_device_event = self.tx_thread.clone();
-                                    thread::Builder::new()
-                                        .name(String::from("linking_device_thread"))
-                                        .stack_size(1024 * 1024 * 8)
-                                        .spawn(move || {
-                                            let runtime = Builder::new_multi_thread()
-                                                .thread_name("linking_device_runtime")
-                                                .enable_all()
-                                                .build()
-                                                .unwrap();
-                                            runtime.block_on(async move {
-                                                handle_linking_device(
-                                                    tx_link_device_event,
-                                                    device_name,
-                                                )
-                                                .await;
-                                            })
-                                        })
-                                        .unwrap();
                                 }
 
                                 self.linking_status = LinkingStatus::InProgress;
@@ -1971,70 +1951,6 @@ async fn handle_get_contact_info_event(
     }
 }
 
-pub async fn handle_linking_device(tx: mpsc::Sender<EventApp>, device_name: String) {
-    let accounts = list_accounts().unwrap_or_default();
-
-    if accounts.is_empty() {
-        let account_name = "default".to_string();
-        let _ = ensure_accounts_dir();
-        let account_dir = format!("{}/{}", ACCOUNTS_DIR, account_name);
-        let _ = tokio::fs::create_dir_all(&account_dir).await;
-
-        let result = devices::link_new_device_for_account(account_name.clone(), device_name).await;
-
-        match result {
-            Ok(manager) => {
-                let mut config = Config::load();
-                config.set_current_account(account_name);
-                let _ = config.save();
-
-                if tx
-                    .send(EventApp::LinkingFinished((true, Some(manager))))
-                    .is_err()
-                {
-                    eprintln!("Failed to send linking status");
-                }
-            }
-            Err(e) => {
-                let error_msg =
-                    if e.to_string().contains("connection") || e.to_string().contains("network") {
-                        "Network error: Please check your WiFi connection".to_string()
-                    } else {
-                        e.to_string()
-                    };
-
-                if tx.send(EventApp::LinkingError(error_msg)).is_err() {
-                    eprintln!("Failed to send linking error");
-                }
-            }
-        }
-    } else {
-        let result = devices::link_new_device_tui(device_name).await;
-
-        match result {
-            Ok(manager) => {
-                if tx
-                    .send(EventApp::LinkingFinished((true, Some(manager))))
-                    .is_err()
-                {
-                    eprintln!("Failed to send linking status");
-                }
-            }
-            Err(e) => {
-                let error_msg =
-                    if e.to_string().contains("connection") || e.to_string().contains("network") {
-                        "Network error: Please check your WiFi connection".to_string()
-                    } else {
-                        e.to_string()
-                    };
-
-                if tx.send(EventApp::LinkingError(error_msg)).is_err() {
-                    eprintln!("Failed to send linking error");
-                }
-            }
-        }
-    }
-}
 pub fn handle_checking_qr_code(tx: mpsc::Sender<EventApp>) {
     loop {
         if Path::new(QRCODE).exists() {

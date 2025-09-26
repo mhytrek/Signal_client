@@ -12,12 +12,10 @@ use ratatui::{
     },
 };
 
-use crate::app::CurrentScreen::AccountSelector;
 use crate::config::Config;
 use crate::{
     app::{App, LinkingStatus},
     create_registered_manager_for_account,
-    devices::is_registered,
     list_accounts,
 };
 use crate::app::CurrentScreen;
