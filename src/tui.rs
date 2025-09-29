@@ -12,15 +12,15 @@ use ratatui::{
     },
 };
 
-use crate::app::CurrentScreen;
-use crate::config::Config;
-use crate::{
-    app::{App, LinkingStatus},
-    create_registered_manager_for_account, list_accounts,
+use crate::account_management::{
+    cleanup_invalid_accounts, create_registered_manager_for_account, list_accounts,
 };
+use crate::app::CurrentScreen;
+use crate::app::{App, LinkingStatus};
+use crate::config::Config;
 
 pub async fn run_tui() -> Result<()> {
-    if let Ok(removed_accounts) = crate::cleanup_invalid_accounts().await
+    if let Ok(removed_accounts) = cleanup_invalid_accounts().await
         && !removed_accounts.is_empty()
     {
         println!(

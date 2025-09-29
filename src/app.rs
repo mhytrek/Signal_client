@@ -1,14 +1,11 @@
 use crate::contacts::get_contacts_tui;
 use crate::messages::receive::{self, MessageDto, check_contacts, contact};
 use crate::messages::send::{self, send_attachment_tui};
-use crate::paths::QRCODE;
+use crate::paths::{ACCOUNTS_DIR, QRCODE};
 use crate::profile::get_profile_tui;
 use crate::ui::render_ui;
-use crate::{
-    ACCOUNTS_DIR, AsyncContactsMap, config::Config, contacts, create_registered_manager,
-    create_registered_manager_for_account, ensure_accounts_dir, groups, list_accounts,
-};
-use anyhow::{Error, Result};
+use crate::{AsyncContactsMap, config::Config, contacts, groups};
+use anyhow::{Error, Result, anyhow, bail};
 use crossterm::event::{self, Event, KeyModifiers};
 use crossterm::event::{KeyCode, KeyEventKind};
 use futures::{StreamExt, pin_mut};
@@ -34,6 +31,11 @@ use tokio::sync::Mutex;
 use tokio_util::task::LocalPoolHandle;
 use tracing::{Level, debug, error, info, span, trace, warn};
 
+use crate::account_management::{
+    create_registered_manager, create_registered_manager_for_account, ensure_accounts_dir,
+    list_accounts,
+};
+use crate::devices::link_new_device_for_account;
 use crate::retry_manager::{OutgoingMessage, RetryManager};
 use image::ImageFormat;
 use std::thread;
@@ -142,7 +144,7 @@ pub struct ContactInfo {
 }
 
 #[derive(PartialEq, Clone)]
-pub enum AccountCreationField {
+pub enum AccountLinkingField {
     AccountName,
     DeviceName,
 }
@@ -155,7 +157,7 @@ pub struct App {
     pub available_accounts: Vec<String>,
     pub account_selected: usize,
     pub device_name_input: String,
-    pub account_creation_field: AccountCreationField,
+    pub account_linking_field: AccountLinkingField,
 
     pub selected_recipient: usize,
     pub message_selected: usize,
@@ -249,7 +251,7 @@ impl App {
             deleting_account: None,
             available_accounts,
             device_name_input: String::new(),
-            account_creation_field: AccountCreationField::AccountName,
+            account_linking_field: AccountLinkingField::AccountName,
             account_selected: 0,
             recipients: vec![],
             selected_recipient: 0,
@@ -318,7 +320,7 @@ impl App {
                         )
                         .await
                         {
-                            eprintln!("Failed to init threads: {e:?}");
+                            error!("Failed to init threads: {e:?}");
                         }
                         self.current_screen = CurrentScreen::Syncing;
                     }
@@ -347,14 +349,14 @@ impl App {
 
     pub async fn switch_account(&mut self, account_name: String) -> Result<()> {
         if !self.available_accounts.contains(&account_name) {
-            return Err(anyhow::anyhow!("Account '{}' does not exist", account_name));
+            bail!("Account '{}' does not exist", account_name);
         }
 
         let mut config = Config::load();
         config.set_current_account(account_name.clone());
         config
             .save()
-            .map_err(|e| anyhow::anyhow!("Failed to save config: {}", e))?;
+            .map_err(|e| anyhow!("Failed to save config: {e}"))?;
 
         self.current_account = Some(account_name.clone());
         self.config = Config::load();
@@ -383,11 +385,8 @@ impl App {
             )
             .await
         {
-            eprintln!("Failed to init threads: {e:?}");
-            return Err(anyhow::anyhow!(
-                "Failed to initialize background threads: {}",
-                e
-            ));
+            error!("Failed to init threads: {e:?}");
+            bail!("Failed to initialize background threads: {}", e);
         }
 
         Ok(())
@@ -396,8 +395,7 @@ impl App {
     pub async fn delete_account(&mut self, account_name: String) -> Result<()> {
         use std::path::Path;
         let is_current = self.current_account.as_ref() == Some(&account_name);
-
-        let account_dir = format!("{}/{}", ACCOUNTS_DIR, account_name);
+        let account_dir = format!("{ACCOUNTS_DIR}/{account_name}");
         if Path::new(&account_dir).exists() {
             std::fs::remove_dir_all(&account_dir)?;
         }
@@ -416,7 +414,7 @@ impl App {
 
             config
                 .save()
-                .map_err(|e| anyhow::anyhow!("Failed to save config: {}", e))?;
+                .map_err(|e| anyhow!("Failed to save config: {e}"))?;
             self.config = Config::load();
         }
 
@@ -564,7 +562,7 @@ impl App {
                             )
                             .await
                             {
-                                eprintln!("Failed to init threads: {e:?}");
+                                error!("Failed to init threads: {e:?}");
                                 self.current_screen = CurrentScreen::Main;
                                 return Ok(false);
                             }
@@ -837,18 +835,18 @@ impl App {
                     self.current_screen = AccountSelector;
                     self.textarea.clear();
                     self.device_name_input.clear();
-                    self.account_creation_field = AccountCreationField::AccountName;
+                    self.account_linking_field = AccountLinkingField::AccountName;
                 }
                 KeyCode::Tab => {
-                    self.account_creation_field = match self.account_creation_field {
-                        AccountCreationField::AccountName => AccountCreationField::DeviceName,
-                        AccountCreationField::DeviceName => AccountCreationField::AccountName,
+                    self.account_linking_field = match self.account_linking_field {
+                        AccountLinkingField::AccountName => AccountLinkingField::DeviceName,
+                        AccountLinkingField::DeviceName => AccountLinkingField::AccountName,
                     };
                 }
                 KeyCode::Enter => {
                     let account_name = self.textarea.trim().to_string();
                     let device_name = if self.device_name_input.trim().is_empty() {
-                        format!("{}-device", account_name)
+                        format!("{account_name}-device")
                     } else {
                         self.device_name_input.trim().to_string()
                     };
@@ -893,24 +891,24 @@ impl App {
                     self.linking_status = LinkingStatus::InProgress;
                     self.textarea.clear();
                     self.device_name_input.clear();
-                    self.account_creation_field = AccountCreationField::AccountName;
+                    self.account_linking_field = AccountLinkingField::AccountName;
                 }
-                KeyCode::Backspace => match self.account_creation_field {
-                    AccountCreationField::AccountName => {
+                KeyCode::Backspace => match self.account_linking_field {
+                    AccountLinkingField::AccountName => {
                         self.textarea.pop();
                     }
-                    AccountCreationField::DeviceName => {
+                    AccountLinkingField::DeviceName => {
                         self.device_name_input.pop();
                     }
                 },
                 KeyCode::Char(c) if c.is_alphanumeric() || c == '_' || c == '-' || c == ' ' => {
-                    match self.account_creation_field {
-                        AccountCreationField::AccountName => {
+                    match self.account_linking_field {
+                        AccountLinkingField::AccountName => {
                             if c != ' ' {
                                 self.textarea.push(c);
                             }
                         }
-                        AccountCreationField::DeviceName => {
+                        AccountLinkingField::DeviceName => {
                             self.device_name_input.push(c);
                         }
                     }
@@ -932,7 +930,7 @@ impl App {
                 KeyCode::Enter => {
                     if let Some(account_name) = self.available_accounts.get(self.account_selected) {
                         if let Err(e) = self.switch_account(account_name.clone()).await {
-                            eprintln!("Failed to switch account: {e:?}");
+                            warn!("Failed to switch account: {e:?}");
                         } else {
                             self.current_screen = Syncing;
                         }
@@ -959,7 +957,7 @@ impl App {
                     if let Some(account_name) = self.deleting_account.take() {
                         // Delete the account
                         if let Err(e) = self.delete_account(account_name).await {
-                            eprintln!("Failed to delete account: {e:?}");
+                            error!("Failed to delete account: {e:?}");
                         }
                         self.refresh_accounts();
                         self.current_screen = CurrentScreen::AccountSelector;
@@ -987,13 +985,13 @@ impl App {
                     0 => {
                         self.config.toggle_color_mode();
                         if let Err(e) = self.config.save() {
-                            eprintln!("Failed to save config: {e:?}");
+                            warn!("Failed to save config: {e:?}");
                         }
                     }
                     1 => {
                         self.config.toggle_show_images();
                         if let Err(e) = self.config.save() {
-                            eprintln!("Failed to save config: {e:?}");
+                            warn!("Failed to save config: {e:?}");
                         }
                         if !self.config.show_images {
                             self.avatar_image = None;
@@ -1004,7 +1002,7 @@ impl App {
                     2 => {
                         self.config.toggle_compact_messages();
                         if let Err(e) = self.config.save() {
-                            eprintln!("Failed to save config: {e:?}");
+                            warn!("Failed to save config: {e:?}");
                         }
                     }
                     _ => {}
@@ -1221,8 +1219,6 @@ pub async fn handle_linking_device_for_account(
     account_name: String,
     device_name: String,
 ) {
-    use crate::devices::link_new_device_for_account;
-
     let _ = ensure_accounts_dir();
 
     let result = link_new_device_for_account(account_name.clone(), device_name).await;
@@ -1232,7 +1228,7 @@ pub async fn handle_linking_device_for_account(
             let mut config = Config::load();
             config.set_current_account(account_name.clone());
             if let Err(e) = config.save() {
-                eprintln!("Failed to save config: {e:?}");
+                warn!("Failed to save config: {e:?}");
             }
 
             if Path::new(QRCODE).exists() {
@@ -1243,7 +1239,7 @@ pub async fn handle_linking_device_for_account(
                 .send(EventApp::LinkingFinished((true, Some(manager))))
                 .is_err()
             {
-                eprintln!("Failed to send linking finished");
+                error!("Failed to send linking finished");
             }
         }
         Err(e) => {
@@ -1259,7 +1255,7 @@ pub async fn handle_linking_device_for_account(
                 };
 
             if tx.send(EventApp::LinkingError(error_msg)).is_err() {
-                eprintln!("Failed to send error");
+                error!("Failed to send error");
             }
         }
     }
@@ -1271,13 +1267,13 @@ pub fn handle_input_events(tx: mpsc::Sender<EventApp>) {
             match event {
                 Event::Key(key_event) => {
                     if tx.send(EventApp::KeyInput(key_event)).is_err() {
-                        eprintln!("Failed to send key event");
+                        warn!("Failed to send key event");
                         break;
                     }
                 }
                 Event::Resize(cols, rows) => {
                     if tx.send(EventApp::Resize(cols, rows)).is_err() {
-                        eprintln!("Failed to send resize event");
+                        warn!("Failed to send resize event");
                         break;
                     }
                 }
@@ -1868,7 +1864,7 @@ pub fn handle_checking_qr_code(tx: mpsc::Sender<EventApp>) {
     loop {
         if Path::new(QRCODE).exists() {
             if tx.send(EventApp::QrCodeGenerated).is_err() {
-                eprintln!("Failed to send QrCodeGenerated event");
+                error!("Failed to send QrCodeGenerated event");
             }
             break;
         }

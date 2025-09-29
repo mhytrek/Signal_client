@@ -1,4 +1,4 @@
-use crate::app::AccountCreationField;
+use crate::app::AccountLinkingField;
 use crate::{app::App, ui::utils::render_scrollbar};
 use ratatui::text::Span;
 use ratatui::{
@@ -277,8 +277,8 @@ pub fn render_account_creation(frame: &mut Frame, app: &App, area: Rect) {
 
     frame.render_widget(instructions, chunks[0]);
 
-    let account_border_color = match app.account_creation_field {
-        AccountCreationField::AccountName => app.config.get_accent_color(),
+    let account_border_color = match app.account_linking_field {
+        AccountLinkingField::AccountName => app.config.get_accent_color(),
         _ => Color::DarkGray,
     };
 
@@ -293,8 +293,8 @@ pub fn render_account_creation(frame: &mut Frame, app: &App, area: Rect) {
 
     frame.render_widget(account_input, chunks[1]);
 
-    let device_border_color = match app.account_creation_field {
-        AccountCreationField::DeviceName => app.config.get_accent_color(),
+    let device_border_color = match app.account_linking_field {
+        AccountLinkingField::DeviceName => app.config.get_accent_color(),
         _ => Color::DarkGray,
     };
 
@@ -309,16 +309,16 @@ pub fn render_account_creation(frame: &mut Frame, app: &App, area: Rect) {
 
     frame.render_widget(device_input, chunks[2]);
 
-    match app.account_creation_field {
-        AccountCreationField::AccountName => {
+    match app.account_linking_field {
+        AccountLinkingField::AccountName => {
             frame.set_cursor_position((
-                chunks[1].x + app.textarea.len() as u16 + 1,
+                chunks[1].x + app.textarea.chars().count() as u16 + 1,
                 chunks[1].y + 1,
             ));
         }
-        AccountCreationField::DeviceName => {
+        AccountLinkingField::DeviceName => {
             frame.set_cursor_position((
-                chunks[2].x + app.device_name_input.len() as u16 + 1,
+                chunks[2].x + app.device_name_input.chars().count() as u16 + 1,
                 chunks[2].y + 1,
             ));
         }
@@ -332,7 +332,7 @@ pub fn render_account_creation(frame: &mut Frame, app: &App, area: Rect) {
     };
 
     let status_symbol = if is_valid { "✓" } else { "✗" };
-    let status_text = format!("{} {}", status_symbol, validation_msg);
+    let status_text = format!("{status_symbol} {validation_msg}");
 
     let status = Paragraph::new(status_text)
         .alignment(Alignment::Center)

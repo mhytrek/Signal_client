@@ -1,5 +1,5 @@
-use crate::create_registered_manager;
-use anyhow::Result;
+use crate::account_management::create_registered_manager;
+use anyhow::{Result, bail};
 use mime_guess::mime::APPLICATION_OCTET_STREAM;
 use presage::Manager;
 use presage::libsignal_service::sender::AttachmentSpec;
@@ -19,17 +19,11 @@ async fn create_attachment(attachment_path: String) -> Result<(AttachmentSpec, V
         .map_err(|_| anyhow::anyhow!("Failed to resolve path: {}", attachment_path))?;
 
     if !path.exists() {
-        return Err(anyhow::anyhow!(
-            "Attachment file not found: {}",
-            path.display()
-        ));
+        bail!("Attachment file not found: {}", path.display());
     }
 
     if !path.is_file() {
-        return Err(anyhow::anyhow!(
-            "Attachment path is not a file: {}",
-            path.display()
-        ));
+        bail!("Attachment path is not a file: {}", path.display());
     }
 
     let file_data = fs::read(&path)?;

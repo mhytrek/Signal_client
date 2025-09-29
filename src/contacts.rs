@@ -1,5 +1,6 @@
+use crate::AsyncContactsMap;
+use crate::account_management::create_registered_manager;
 use crate::messages::receive::receiving_loop;
-use crate::{AsyncContactsMap, create_registered_manager};
 use anyhow::Result;
 use presage::Manager;
 use presage::libsignal_service::prelude::Uuid;

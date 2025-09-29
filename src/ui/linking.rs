@@ -63,8 +63,7 @@ pub fn render_linking_error(
     };
 
     let text = format!(
-        "Error: {}\n\n{}\n\nNote: If your phone shows successful connection,\ntry waiting a moment and check your accounts list.",
-        error_msg, retry_instruction
+        "Error: {error_msg}\n\n{retry_instruction}\n\nNote: If your phone shows successful connection,\ntry waiting a moment and check your accounts list."
     );
 
     render_popup(frame, area, &text);

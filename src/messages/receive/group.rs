@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use anyhow::{Ok, Result, anyhow};
+use anyhow::{Ok, Result, bail};
 use presage::{
     Manager,
     libsignal_service::{prelude::Content, zkgroup::GroupMasterKeyBytes},
@@ -9,8 +9,8 @@ use presage::{
 };
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
 
+use crate::account_management::create_registered_manager;
 use crate::{
-    create_registered_manager,
     groups::find_master_key,
     messages::receive::{MessageDto, format_message},
 };
@@ -41,7 +41,7 @@ pub async fn list_messages_cli(recipient: String, from: Option<String>) -> Resul
     let master_key = find_master_key(recipient, &mut manager).await?;
     let master_key = match master_key {
         Some(mk) => mk,
-        None => return Err(anyhow!("Group with given name does not exist.")),
+        None => bail!("Group with given name does not exist."),
     };
 
     let messages = list_messages(&manager, master_key, from).await?;

@@ -1,5 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::account_management::create_registered_manager;
 use anyhow::Result;
 use presage::libsignal_service::protocol::ServiceId;
 use presage::proto::DataMessage;
@@ -8,8 +9,6 @@ use presage::{
     Manager, libsignal_service::prelude::Uuid, manager::Registered, model::contacts::Contact,
 };
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
-
-use crate::create_registered_manager;
 
 /// finds contact uuid from string that can be contact_name or contact phone_number
 pub async fn find_uuid(

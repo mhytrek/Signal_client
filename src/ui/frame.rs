@@ -95,12 +95,11 @@ pub fn render_ui(frame: &mut Frame, app: &mut App) {
         CurrentScreen::ConfirmDelete => {
             if let Some(account_name) = &app.deleting_account {
                 let text = format!(
-                    "Are you sure you want to delete account '{}'?\n\
+                    "Are you sure you want to delete account '{account_name}'?\n\
             This action cannot be undone!\n\n\
             All messages and data for this account will be lost.\n\n\
             Press 'y' to confirm deletion\n\
             Press 'n' or ESC to cancel",
-                    account_name
                 );
                 render_popup(frame, frame.area(), &text);
             }
@@ -121,7 +120,7 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
                     let failed_count = manager.failed_count();
 
                     if failed_count > 0 {
-                        format!(" | {} failed msgs", failed_count)
+                        format!(" | {failed_count} failed msgs")
                     } else {
                         String::new()
                     }
@@ -136,7 +135,7 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
                 };
 
                 Span::styled(
-                    format!("{}{}", base_text, retry_info),
+                    format!("{base_text}{retry_info}"),
                     if app.attachment_error.is_some() {
                         Style::default().fg(app.config.get_error_color())
                     } else {

@@ -39,7 +39,7 @@ pub enum Command {
     GetProfile,
 
     /// Create a new account
-    CreateAccount(CreateAccountArgs),
+    LinkAccount(CreateAccountArgs),
 
     /// List all accounts
     ListAccounts,
@@ -51,7 +51,7 @@ pub enum Command {
     GetCurrentAccount,
 
     /// Delete an account
-    DeleteAccount(DeleteAccountArgs),
+    UnlinkAccount(DeleteAccountArgs),
 }
 
 #[derive(Args)]
