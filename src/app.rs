@@ -43,6 +43,7 @@ use image::ImageFormat;
 use std::thread;
 use std::time::Duration;
 use tokio::time::interval;
+use crate::notifications::send_notification;
 
 #[derive(PartialEq, Clone)]
 pub enum RecipientId {
@@ -1443,8 +1444,38 @@ pub async fn handle_synchronization(
                         Received::Content(content) => {
                             debug!("Received content");
                             trace!("Received message: {content:#?}");
-                            if initialized && let Err(e) = tx.send(EventApp::ReceiveMessage) {
-                                error!(channel_error = %e);
+
+                            if initialized {
+                                if let Some(formatted_msg) = crate::messages::receive::format_message(&content) {
+                                    if !formatted_msg.sender {
+                                        let sender_name = {
+                                            let contacts = current_contacts_mutex.lock().await;
+                                            contacts
+                                                .get(&formatted_msg.uuid)
+                                                .map(|c| {
+                                                    if !c.name.is_empty() {
+                                                        c.name.clone()
+                                                    } else if let Some(phone) = &c.phone_number {
+                                                        phone.to_string()
+                                                    } else {
+                                                        formatted_msg.uuid.to_string()
+                                                    }
+                                                })
+                                                .unwrap_or_else(|| formatted_msg.uuid.to_string())
+                                        };
+
+                                        info!("Attempting notification for message from: {}", sender_name);
+                                        if let Err(e) = send_notification(&sender_name, &formatted_msg.text) {
+                                            error!("Failed to send notification: {}", e);
+                                        } else {
+                                            info!("Notification sent successfully");
+                                        }
+                                    }
+                                }
+
+                                if let Err(e) = tx.send(EventApp::ReceiveMessage) {
+                                    error!(channel_error = %e);
+                                }
                             }
                         }
                     }

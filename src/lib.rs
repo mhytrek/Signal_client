@@ -25,6 +25,7 @@ pub mod profile;
 mod retry_manager;
 pub mod tui;
 pub mod ui;
+mod notifications;
 
 pub mod sending {}
 
