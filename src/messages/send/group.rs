@@ -1,13 +1,12 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::{Result, anyhow};
+use crate::account_management::create_registered_manager;
+use crate::groups::find_master_key;
+use anyhow::{Result, bail};
 use presage::proto::{DataMessage, GroupContextV2};
 use presage::{Manager, libsignal_service::zkgroup::GroupMasterKeyBytes, manager::Registered};
 use presage_store_sqlite::SqliteStore;
 use tracing::error;
-
-use crate::create_registered_manager;
-use crate::groups::find_master_key;
 
 pub async fn send_message_tui(
     master_key: GroupMasterKeyBytes,
@@ -22,7 +21,7 @@ pub async fn send_message_cli(group_name: String, text_message: String) -> Resul
     let master_key = find_master_key(group_name, &mut manager).await?;
     let master_key = match master_key {
         Some(mk) => mk,
-        None => return Err(anyhow!("Group doesn't exist.")),
+        None => bail!("Group doesn't exist."),
     };
     send_message(&mut manager, master_key, text_message).await
 }

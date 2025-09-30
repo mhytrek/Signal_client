@@ -1,7 +1,7 @@
-use anyhow::{Error, Result};
+use crate::config::Config;
+use anyhow::Result;
 use presage::{
     libsignal_service::prelude::Uuid,
-    manager::{Manager, Registered},
     model::{contacts::Contact, identity::OnNewIdentity},
 };
 use presage_store_sqlite::{SqliteConnectOptions, SqliteStore, SqliteStoreError};
@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::{collections::HashMap, str::FromStr};
 use tokio::sync::Mutex;
 
+pub mod account_management;
 pub mod app;
 pub mod args;
 pub mod cli;
@@ -21,10 +22,10 @@ pub mod logger;
 pub mod messages;
 pub mod paths;
 pub mod profile;
+mod retry_manager;
 pub mod tui;
 pub mod ui;
 
-mod retry_manager;
 pub mod sending {}
 
 pub type AsyncContactsMap = Arc<Mutex<HashMap<Uuid, Contact>>>;
@@ -32,14 +33,4 @@ pub type AsyncContactsMap = Arc<Mutex<HashMap<Uuid, Contact>>>;
 pub async fn open_store(path: &str) -> Result<SqliteStore, SqliteStoreError> {
     let options = SqliteConnectOptions::from_str(path)?.create_if_missing(true);
     SqliteStore::open_with_options(options, OnNewIdentity::Trust).await
-}
-
-/// Creates new manager in registered state
-pub async fn create_registered_manager() -> Result<Manager<SqliteStore, Registered>> {
-    let store = open_store(paths::STORE).await?;
-
-    match Manager::load_registered(store).await {
-        Ok(manager) => Ok(manager),
-        Err(err) => Err(Error::new(err)),
-    }
 }

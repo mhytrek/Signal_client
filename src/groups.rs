@@ -1,11 +1,10 @@
+use crate::account_management::create_registered_manager;
 use anyhow::Result;
 use presage::libsignal_service::zkgroup::GroupMasterKeyBytes;
 use presage::model::groups::Group;
 use presage::store::ContentsStore;
 use presage::{Manager, manager::Registered};
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
-
-use crate::create_registered_manager;
 
 async fn list_groups(
     manager: &Manager<SqliteStore, Registered>,

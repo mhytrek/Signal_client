@@ -12,26 +12,69 @@ use ratatui::{
     },
 };
 
-use crate::{
-    app::{App, LinkingStatus},
-    devices::is_registered,
+use crate::account_management::{
+    cleanup_invalid_accounts, create_registered_manager_for_account, list_accounts,
 };
+use crate::app::CurrentScreen;
+use crate::app::{App, LinkingStatus};
+use crate::config::Config;
 
 pub async fn run_tui() -> Result<()> {
+    if let Ok(removed_accounts) = cleanup_invalid_accounts().await
+        && !removed_accounts.is_empty()
+    {
+        println!(
+            "Removed {} invalid account(s): {:?}",
+            removed_accounts.len(),
+            removed_accounts
+        );
+    }
     enable_raw_mode()?;
     let mut stderr = io::stderr();
     execute!(stderr, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stderr);
     let mut terminal = Terminal::new(backend)?;
 
-    let linking_status = is_registered().await?;
+    let accounts = list_accounts()?;
+    let config = Config::load();
 
-    let status = match linking_status {
-        true => LinkingStatus::Linked,
-        false => LinkingStatus::Unlinked,
+    let (linking_status, initial_screen) = if accounts.is_empty() {
+        (LinkingStatus::Unlinked, CurrentScreen::CreatingAccount)
+    } else {
+        let status = if let Some(current) = config.get_current_account() {
+            if accounts.contains(&current.to_string()) {
+                match create_registered_manager_for_account(current).await {
+                    Ok(_) => LinkingStatus::Linked,
+                    Err(_) => LinkingStatus::Unlinked,
+                }
+            } else {
+                let mut config = Config::load();
+                config.clear_current_account();
+                let _ = config.save();
+                LinkingStatus::Unlinked
+            }
+        } else if accounts.len() == 1 {
+            let mut config = Config::load();
+            config.set_current_account(accounts[0].clone());
+            let _ = config.save();
+            LinkingStatus::Linked
+        } else {
+            LinkingStatus::Unlinked
+        };
+
+        let screen = if accounts.len() > 1 && config.get_current_account().is_none() {
+            CurrentScreen::AccountSelector
+        } else if status == LinkingStatus::Linked {
+            CurrentScreen::Main
+        } else {
+            CurrentScreen::AccountSelector
+        };
+
+        (status, screen)
     };
 
-    let mut app = App::new(status);
+    let mut app = App::new(linking_status);
+    app.current_screen = initial_screen;
 
     let res = app.run(&mut terminal).await;
 

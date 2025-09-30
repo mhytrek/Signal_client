@@ -49,3 +49,22 @@ pub fn render_textarea(frame: &mut Frame, app: &App, area: Rect) {
 
     frame.render_widget(input_text, area);
 }
+
+pub fn render_linking_error(
+    frame: &mut Frame,
+    area: Rect,
+    error_msg: &str,
+    is_account_creation: bool,
+) {
+    let retry_instruction = if is_account_creation {
+        "Press ESC to go back to account selector\nPress any other key to retry"
+    } else {
+        "Press ESC to cancel\nPress any other key to retry"
+    };
+
+    let text = format!(
+        "Error: {error_msg}\n\n{retry_instruction}\n\nNote: If your phone shows successful connection,\ntry waiting a moment and check your accounts list."
+    );
+
+    render_popup(frame, area, &text);
+}

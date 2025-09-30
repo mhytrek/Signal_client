@@ -1,6 +1,10 @@
 use std::env;
 use std::sync::Arc;
 
+use crate::AsyncContactsMap;
+use crate::account_management::create_registered_manager;
+use crate::contacts::get_contacts_cli;
+use crate::env::SIGNAL_DISPLAY_FLAGS;
 use anyhow::Result;
 use futures::Stream;
 use futures::{StreamExt, pin_mut};
@@ -16,11 +20,6 @@ use presage::store::{ContentExt, ContentsStore};
 use presage_store_sqlite::SqliteStore;
 use tokio::sync::Mutex;
 use tracing::trace;
-
-use crate::AsyncContactsMap;
-use crate::contacts::get_contacts_cli;
-use crate::create_registered_manager;
-use crate::env::SIGNAL_DISPLAY_FLAGS;
 
 pub mod contact;
 pub mod group;

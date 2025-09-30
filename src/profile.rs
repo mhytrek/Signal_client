@@ -1,4 +1,4 @@
-use crate::create_registered_manager;
+use crate::account_management::create_registered_manager;
 use anyhow::Result;
 use presage::{Manager, libsignal_service::Profile, manager::Registered};
 use presage_store_sqlite::SqliteStore;

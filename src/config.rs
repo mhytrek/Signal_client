@@ -8,6 +8,7 @@ pub struct Config {
     pub color_mode: bool,       // true for color, false for black-and-white
     pub show_images: bool,      // true to show images, false to hide them
     pub compact_messages: bool, // true to have compact messages display
+    pub current_account: Option<String>,
 }
 
 impl Default for Config {
@@ -16,6 +17,7 @@ impl Default for Config {
             color_mode: true,
             show_images: true,
             compact_messages: false,
+            current_account: None,
         }
     }
 }
@@ -26,6 +28,18 @@ impl Config {
             .unwrap_or_else(|| PathBuf::from("."))
             .join("signal-tui")
             .join("config.json")
+    }
+
+    pub fn set_current_account(&mut self, account_name: String) {
+        self.current_account = Some(account_name);
+    }
+
+    pub fn get_current_account(&self) -> Option<&String> {
+        self.current_account.as_ref()
+    }
+
+    pub fn clear_current_account(&mut self) {
+        self.current_account = None;
     }
 
     pub fn load() -> Self {

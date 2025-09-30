@@ -6,6 +6,7 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
+use crate::ui::{render_account_creation, render_account_selector};
 use crate::{
     app::{App, CurrentScreen, LinkingStatus, NetworkStatus},
     ui::{
@@ -40,7 +41,7 @@ pub fn render_ui(frame: &mut Frame, app: &mut App) {
             render_footer(frame, app, chunks[1]);
         }
         CurrentScreen::Options => {
-            render_options(frame, app); // app jest już &mut
+            render_options(frame, app);
             render_footer(frame, app, chunks[1]);
         }
         CurrentScreen::Exiting => {
@@ -56,11 +57,13 @@ pub fn render_ui(frame: &mut Frame, app: &mut App) {
                 render_paragraph(frame, chunks[1], text);
             }
             LinkingStatus::Linked => {}
-            LinkingStatus::Error(ref _error_msg) => {
-                render_popup(
+            LinkingStatus::Error(ref error_msg) => {
+                use crate::ui::linking::render_linking_error;
+                render_linking_error(
                     frame,
                     frame.area(),
-                    "Error linking device, check if you have Internet connection.\n PRESS ANY KEY TO RETRY",
+                    error_msg,
+                    app.creating_account_name.is_some(),
                 );
             }
         },
@@ -81,6 +84,26 @@ pub fn render_ui(frame: &mut Frame, app: &mut App) {
             render_contact_info_compact(frame, app, horizontal_chunks[1]);
             render_footer(frame, app, chunks[1]);
         }
+        CurrentScreen::AccountSelector => {
+            render_account_selector(frame, app, frame.area());
+            render_footer(frame, app, chunks[1]);
+        }
+        CurrentScreen::CreatingAccount => {
+            render_account_creation(frame, app, frame.area());
+            render_footer(frame, app, chunks[1]);
+        }
+        CurrentScreen::ConfirmDelete => {
+            if let Some(account_name) = &app.deleting_account {
+                let text = format!(
+                    "Are you sure you want to delete account '{account_name}'?\n\
+            This action cannot be undone!\n\n\
+            All messages and data for this account will be lost.\n\n\
+            Press 'y' to confirm deletion\n\
+            Press 'n' or ESC to cancel",
+                );
+                render_popup(frame, frame.area(), &text);
+            }
+        }
     }
 }
 
@@ -89,7 +112,7 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     let current_keys_hint = {
         match app.current_screen {
             CurrentScreen::Main => Span::styled(
-                "(q) to quit | (↑ ↓) to navigate | (→) to select chat | (i) for contact info | (e) for options",
+                "(q) to quit | (↑ ↓) to navigate | (→) to select chat | (a) for account management | (i) for contact info | (e) for options",
                 Style::default().fg(app.config.get_primary_color()),
             ),
             CurrentScreen::Writing => {
@@ -97,7 +120,7 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
                     let failed_count = manager.failed_count();
 
                     if failed_count > 0 {
-                        format!(" | {} failed msgs", failed_count)
+                        format!(" | {failed_count} failed msgs")
                     } else {
                         String::new()
                     }
@@ -112,7 +135,7 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
                 };
 
                 Span::styled(
-                    format!("{}{}", base_text, retry_info),
+                    format!("{base_text}{retry_info}"),
                     if app.attachment_error.is_some() {
                         Style::default().fg(app.config.get_error_color())
                     } else {
