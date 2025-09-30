@@ -326,6 +326,7 @@ impl App {
                     }
                     Err(_e) => {
                         self.current_screen = CurrentScreen::AccountSelector;
+                        warn!("Getting manager for account wasn't successful")
                     }
                 }
             }
@@ -385,7 +386,6 @@ impl App {
             )
             .await
         {
-            error!("Failed to init threads: {e:?}");
             bail!("Failed to initialize background threads: {}", e);
         }
 
@@ -547,6 +547,7 @@ impl App {
                                     Ok(manager) => manager,
                                     Err(_e) => {
                                         self.current_screen = CurrentScreen::Main;
+                                        error!("Error getting the manager for account");
                                         return Ok(false);
                                     }
                                 },
@@ -635,7 +636,10 @@ impl App {
             .chars()
             .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
         {
-            ("Only letters, numbers, _ and - allowed".to_string(), false)
+            (
+                "Only letters, numbers, '_' and '-' allowed".to_string(),
+                false,
+            )
         } else {
             ("Ready to create account".to_string(), true)
         }
@@ -1232,7 +1236,10 @@ pub async fn handle_linking_device_for_account(
             }
 
             if Path::new(QRCODE).exists() {
-                let _ = std::fs::remove_file(QRCODE);
+                match fs::remove_file(QRCODE) {
+                    Ok(_) => {}
+                    Err(e) => error!("Failed to remove file with QR code: {e}"),
+                }
             }
 
             if tx
@@ -1244,7 +1251,10 @@ pub async fn handle_linking_device_for_account(
         }
         Err(e) => {
             if Path::new(QRCODE).exists() {
-                let _ = std::fs::remove_file(QRCODE);
+                match fs::remove_file(QRCODE) {
+                    Ok(_) => {}
+                    Err(e) => error!("Failed to remove file with QR code: {e}"),
+                }
             }
 
             let error_msg =

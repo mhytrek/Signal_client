@@ -19,7 +19,7 @@ pub async fn link_account_cli(account_name: String, device_name: String) -> Resu
 
     let accounts = list_accounts()?;
     if accounts.contains(&account_name) {
-        bail!("Account '{}' already exists", account_name);
+        bail!("Account '{account_name}' already exists");
     }
     ensure_accounts_dir()?;
 
@@ -249,7 +249,10 @@ pub async fn cleanup_invalid_accounts() -> Result<Vec<String>> {
                     invalid_accounts.push(account_name.clone());
                     let account_dir = format!("{ACCOUNTS_DIR}/{account_name}");
                     if Path::new(&account_dir).exists() {
-                        let _ = std::fs::remove_dir_all(&account_dir);
+                        match fs::remove_dir_all(&account_dir) {
+                            Ok(_) => {}
+                            Err(e) => error!("Failed to remove directory: {e}"),
+                        }
                     }
                 }
             },
@@ -257,7 +260,10 @@ pub async fn cleanup_invalid_accounts() -> Result<Vec<String>> {
                 invalid_accounts.push(account_name.clone());
                 let account_dir = format!("{ACCOUNTS_DIR}/{account_name}");
                 if Path::new(&account_dir).exists() {
-                    let _ = std::fs::remove_dir_all(&account_dir);
+                    match fs::remove_dir_all(&account_dir) {
+                        Ok(_) => {}
+                        Err(e) => error!("Failed to remove directory : {e}"),
+                    }
                 }
             }
         }
