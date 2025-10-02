@@ -9,8 +9,8 @@ use presage::{
 };
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
 
-use crate::{account_management::create_registered_manager, messages::receive::format_attachments};
 use crate::messages::receive::{MessageDto, format_message};
+use crate::{account_management::create_registered_manager, messages::receive::format_attachments};
 
 pub async fn list_messages(
     manager: &Manager<SqliteStore, Registered>,

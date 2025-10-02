@@ -10,7 +10,6 @@ pub struct Config {
     pub show_images: bool, // true to show images, false to hide them
     pub attachment_save_dir: PathBuf,
     pub current_account: Option<String>,
-
 }
 
 impl Default for Config {

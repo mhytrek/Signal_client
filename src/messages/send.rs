@@ -1,12 +1,8 @@
 use crate::messages::receive::receive_messages_cli;
-use anyhow::{Result, bail};
-use mime_guess::mime::APPLICATION_OCTET_STREAM;
+use anyhow::Result;
 use presage::Manager;
-use presage::libsignal_service::sender::AttachmentSpec;
 use presage::manager::Registered;
 use crate::{account_management::create_registered_manager, messages::attachments::create_attachment};
-use anyhow::Result;
-use presage::manager::{Manager, Registered};
 use presage_store_sqlite::SqliteStore;
 use std::time::{SystemTime, UNIX_EPOCH};
 
