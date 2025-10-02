@@ -1,6 +1,6 @@
+use std::env;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::{env, fs};
 
 use crate::AsyncContactsMap;
 use crate::account_management::create_registered_manager;
@@ -14,7 +14,9 @@ use presage::libsignal_service::prelude::Content;
 use presage::libsignal_service::prelude::Uuid;
 use presage::manager::{Manager, Registered};
 use presage::model::messages::Received;
-use presage::proto::{DataMessage, SyncMessage, sync_message::Sent, GroupContextV2,AttachmentPointer};
+use presage::proto::{
+    AttachmentPointer, DataMessage, GroupContextV2, SyncMessage, sync_message::Sent,
+};
 use presage::store::{ContentExt, ContentsStore, Thread};
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
 use tokio::sync::Mutex;
@@ -118,7 +120,7 @@ pub fn format_message(content: &Content) -> Option<MessageDto> {
         text,
         sender,
         group_context,
-        attachment: None
+        attachment: None,
     })
 }
 
@@ -163,7 +165,7 @@ fn get_message_group_context(content: &Content) -> Option<GroupContextV2> {
             None => None,
         },
         _ => None,
-}
+    }
 }
 
 /// Map a single AttachmentPointer to MessageDto
@@ -198,12 +200,10 @@ pub fn format_attachments(content: &Content) -> Vec<MessageDto> {
     let group_context = get_message_group_context(content);
 
     match &content.body {
-        ContentBody::DataMessage(DataMessage { attachments, .. }) => {
-            attachments
-                .iter()
-                .map(|att| map_attachment_to_message(att, uuid, timestamp, group_context.clone()))
-                .collect()
-        }
+        ContentBody::DataMessage(DataMessage { attachments, .. }) => attachments
+            .iter()
+            .map(|att| map_attachment_to_message(att, uuid, timestamp, group_context.clone()))
+            .collect(),
         ContentBody::SynchronizeMessage(SyncMessage {
             sent:
                 Some(Sent {
@@ -228,7 +228,6 @@ pub async fn list_messages_tui(
     let messages = list_messages(manager, recipient, from).await?;
 
     let mut result = Vec::new();
-
 
     for message in messages.into_iter().flatten() {
         if let Some(formatted_message) = format_message(&message) {

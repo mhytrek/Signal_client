@@ -163,17 +163,18 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
             };
 
             let mut save_attachment_info = "";
-            if let Some(messages) = optional_messages {
-                if let Some(Some(_att)) = messages
+            if let Some(messages) = optional_messages
+                && let Some(Some(_att)) = messages
                     .get(app.message_selected)
                     .map(|msg| msg.attachment.as_ref())
-                {
-                    save_attachment_info = " | (s) to save attachment"
-                }
+            {
+                save_attachment_info = " | (s) to save attachment"
             }
 
             Span::styled(
-                format!("(q) to exit inspection mode | (← or ESC) to go back to main{save_attachment_info}"),
+                format!(
+                    "(q) to exit inspection mode | (← or ESC) to go back to main{save_attachment_info}"
+                ),
                 Style::default().fg(app.config.get_primary_color()),
             )
         }

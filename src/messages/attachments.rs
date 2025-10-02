@@ -1,6 +1,6 @@
-use std::path::{Path, PathBuf};
-use std::fs;
 use mime_guess::mime::APPLICATION_OCTET_STREAM;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use chrono::Local;
@@ -9,7 +9,6 @@ use presage::manager::{Manager, Registered};
 use presage::proto::AttachmentPointer;
 use presage_store_sqlite::SqliteStore;
 use tracing::info;
-
 
 // save attachment to given directory
 pub async fn save_attachment(
@@ -20,7 +19,10 @@ pub async fn save_attachment(
     let attachment_data = match manager.get_attachment(&attachment_pointer).await {
         Ok(data) => data,
         Err(e) => {
-            return Err(anyhow::anyhow!("Failed to get attachment data from database: {}",e))
+            return Err(anyhow::anyhow!(
+                "Failed to get attachment data from database: {}",
+                e
+            ));
         }
     };
 
@@ -38,12 +40,16 @@ pub async fn save_attachment(
 
     let file_path = get_unique_file_path(&save_dir, &base_name);
 
-    fs::write(&file_path, &attachment_data)
-        .map_err(|e| anyhow::anyhow!("Failed to save the attachment to {} : {}", file_path.display(), e))?;
+    fs::write(&file_path, &attachment_data).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to save the attachment to {} : {}",
+            file_path.display(),
+            e
+        )
+    })?;
 
     info!("Saved attachment to : {}", file_path.display());
     Ok(file_path)
-
 }
 
 // Takes the file name and search for the files with the same name in given directory.

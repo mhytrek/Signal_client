@@ -12,7 +12,7 @@ use presage_store_sqlite::{SqliteStore, SqliteStoreError};
 use crate::account_management::create_registered_manager;
 use crate::{
     groups::find_master_key,
-    messages::receive::{format_attachments, format_message, MessageDto},
+    messages::receive::{MessageDto, format_attachments, format_message},
 };
 
 pub async fn list_messages(
