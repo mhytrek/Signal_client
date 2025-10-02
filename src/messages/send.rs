@@ -1,4 +1,5 @@
 use crate::account_management::create_registered_manager;
+use crate::messages::receive::receive_messages_cli;
 use anyhow::{Result, bail};
 use mime_guess::mime::APPLICATION_OCTET_STREAM;
 use presage::Manager;
@@ -102,6 +103,7 @@ pub async fn send_attachment_cli(
     text_message: String,
     attachment_path: String,
 ) -> Result<()> {
+    receive_messages_cli().await?;
     let mut manager = create_registered_manager().await?;
     send_attachment(&mut manager, recipient, text_message, attachment_path).await
 }
