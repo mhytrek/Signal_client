@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::{
     app::UiStatusMessage,
-    ui::{render_account_creation, render_account_selector},
+    ui::{captcha::render_captcha, render_account_creation, render_account_selector},
 };
 use crate::{
     app::{App, CurrentScreen, LinkingStatus, NetworkStatus, RecipientId},
@@ -123,6 +123,9 @@ pub fn render_ui(frame: &mut Frame, app: &mut App) {
                 None => UiStatusMessage::Info("".to_string()),
             };
             render_popup(frame, frame.area(), &status_message);
+        }
+        CurrentScreen::Recaptcha => {
+            render_captcha(frame, frame.area(), app);
         }
     }
 }

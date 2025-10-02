@@ -262,12 +262,9 @@ fn render_messages(
         };
 
         let mut x_pos = vertical_chunks[0].x;
-        let id = app.recipients[app.selected_recipient].0.id();
-        let uuid_string = match id {
-            RecipientId::Group(_) => String::new(), // TODO:
-            RecipientId::Contact(uuid) => uuid.to_string(),
-        };
-        if uuid_string != msg.uuid.to_string() {
+        // let id = app.recipients[app.selected_recipient].0.id();
+        let uuid_string = app.uuid.unwrap_or_default().to_string();
+        if uuid_string == msg.uuid.to_string() {
             x_pos = vertical_chunks[0].x + vertical_chunks[0].width - width;
         }
 

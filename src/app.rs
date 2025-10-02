@@ -1,13 +1,15 @@
+use crate::app::text_state::TextState;
 use crate::contacts::get_contacts_tui;
 use crate::messages::attachments::save_attachment;
 use crate::messages::receive::{self, MessageDto, check_contacts, contact, format_message};
-use crate::messages::send::{self, send_attachment_tui};
+use crate::messages::send::{self};
 use crate::paths::{ACCOUNTS_DIR, QRCODE};
 use crate::profile::get_profile_tui;
 use crate::ui::render_ui;
 use crate::{AsyncContactsMap, config::Config, contacts, groups};
 use anyhow::{Error, Result, anyhow, bail};
-use crossterm::event::{self, Event, KeyModifiers};
+use arboard::Clipboard;
+use crossterm::event::{self, Event, KeyModifiers, MouseEventKind};
 use crossterm::event::{KeyCode, KeyEventKind};
 use futures::{StreamExt, pin_mut};
 use presage::Manager;
@@ -20,8 +22,10 @@ use presage::proto::AttachmentPointer;
 use presage_store_sqlite::SqliteStore;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
+use ratatui::layout::Position;
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
+use regex::Regex;
 use std::collections::HashMap;
 use std::io::Stderr;
 use std::path::{Path, PathBuf};
@@ -45,6 +49,8 @@ use presage::store::ContentsStore;
 use std::thread;
 use std::time::Duration;
 use tokio::time::interval;
+
+pub mod text_state;
 
 #[derive(PartialEq, Clone)]
 pub enum RecipientId {
@@ -129,6 +135,7 @@ pub enum CurrentScreen {
     AccountSelector,
     CreatingAccount,
     ConfirmDelete,
+    Recaptcha,
 }
 
 #[derive(PartialEq)]
@@ -161,6 +168,7 @@ pub enum AccountLinkingField {
 }
 
 pub struct App {
+    pub uuid: Option<Uuid>,
     pub recipients: Vec<(Box<dyn DisplayRecipient>, String)>, // contact_uuid, contact_name, input for this contact
 
     pub current_account: Option<String>,
@@ -216,6 +224,12 @@ pub struct App {
     pub tx_tui: mpsc::Sender<EventSend>,
     pub rx_thread: Option<mpsc::Receiver<EventSend>>,
     pub creating_account_name: Option<String>,
+
+    pub captcha_token: Option<String>,
+    pub captcha_input: String,
+    pub captcha_text_state: TextState,
+
+    pub clipboard: Option<Clipboard>,
 }
 
 #[derive(PartialEq, Clone)]
@@ -232,6 +246,7 @@ pub enum UiStatusMessage {
 
 pub enum EventApp {
     KeyInput(event::KeyEvent),
+    MouseEvent(event::MouseEvent),
     ContactsList(Vec<Box<dyn DisplayRecipient>>),
     LinkingFinished((bool, Option<Manager<SqliteStore, Registered>>)),
     LinkingError(String),
@@ -249,6 +264,7 @@ pub enum EventApp {
     QrCodeGenerated,
     Resize(u16, u16),
     UiStatus(UiStatusMessage),
+    CaptchaError(String),
 }
 pub enum EventSend {
     SendText(RecipientId, String, Option<MessageDto>),
@@ -268,7 +284,18 @@ impl App {
         let available_accounts = list_accounts().unwrap_or_default();
         let current_account = Config::load().get_current_account().cloned();
 
+        let clipboard = match Clipboard::new() {
+            Ok(clipboard) => Some(clipboard),
+            Err(e) => {
+                error!(error = %e, "Couldn't initialize clipboard, app will run without it.");
+                None
+            }
+        };
+
+        const CAPTCHA_TEXT: &str = include_str!("captcha_text.txt");
+
         App {
+            uuid: None,
             linking_status,
             current_account,
             deleting_account: None,
@@ -314,6 +341,12 @@ impl App {
             tx_tui,
             rx_thread: Some(rx_thread),
             creating_account_name: None,
+
+            captcha_token: None,
+            captcha_input: String::new(),
+            captcha_text_state: TextState::new(CAPTCHA_TEXT),
+
+            clipboard,
         }
     }
 
@@ -337,6 +370,11 @@ impl App {
                 match create_registered_manager_for_account(&current).await {
                     Ok(manager) => {
                         self.manager = Some(manager.clone());
+                        let whoami_response = manager.whoami().await;
+                        match whoami_response {
+                            Ok(whoami) => self.uuid = Some(whoami.aci),
+                            Err(error) => error!(%error, "Failed to fetch whoami info"),
+                        }
 
                         if let Err(e) = init_background_threads(
                             self.tx_thread.clone(),
@@ -350,9 +388,9 @@ impl App {
                         }
                         self.current_screen = CurrentScreen::Syncing;
                     }
-                    Err(_e) => {
+                    Err(e) => {
                         self.current_screen = CurrentScreen::AccountSelector;
-                        warn!("Getting manager for account wasn't successful")
+                        warn!(error = %e, "Getting manager for account wasn't successful");
                     }
                 }
             }
@@ -390,6 +428,12 @@ impl App {
 
         let new_manager = create_registered_manager_for_account(&account_name).await?;
         self.manager = Some(new_manager.clone());
+
+        let whoami_response = new_manager.whoami().await;
+        match whoami_response {
+            Ok(whoami) => self.uuid = Some(whoami.aci),
+            Err(error) => error!(%error, "Failed to fetch whoami info"),
+        }
 
         self.recipients.clear();
         self.selected_recipient = 0;
@@ -506,12 +550,21 @@ impl App {
                 }
                 self.handle_key_event(key, tx).await
             }
+            EventApp::MouseEvent(event) => {
+                self.handle_mouse_event(event);
+                Ok(false)
+            }
             EventApp::NetworkStatusChanged(status) => {
                 self.network_status = status;
                 Ok(false)
             }
             EventApp::LinkingError(error_msg) => {
                 self.linking_status = LinkingStatus::Error(error_msg);
+                Ok(false)
+            }
+            EventApp::CaptchaError(token) => {
+                self.captcha_token = Some(token);
+                self.current_screen = CurrentScreen::Recaptcha;
                 Ok(false)
             }
             EventApp::ContactsList(recipients) => {
@@ -580,6 +633,12 @@ impl App {
                             };
 
                             self.manager = Some(new_manager.clone());
+
+                            let whoami_response = new_manager.whoami().await;
+                            match whoami_response {
+                                Ok(whoami) => self.uuid = Some(whoami.aci),
+                                Err(error) => error!(%error, "Failed to fetch whoami info"),
+                            }
 
                             if let Err(e) = init_background_threads(
                                 self.tx_thread.clone(),
@@ -1259,8 +1318,39 @@ impl App {
                 }
             },
             Syncing => {}
+            Recaptcha => match key.code {
+                KeyCode::Enter => self.current_screen = Main,
+                KeyCode::Char('p') => {
+                    if let Some(clipboard) = &mut self.clipboard {
+                        let input = clipboard.get_text().unwrap_or_default();
+                        self.captcha_input = input;
+                    }
+                }
+                _ => {}
+            },
         }
         Ok(false)
+    }
+
+    fn handle_mouse_event(&mut self, event: event::MouseEvent) {
+        #[allow(clippy::single_match)]
+        match event.kind {
+            MouseEventKind::Drag(_) => self.handle_selection(event),
+            MouseEventKind::Down(_) => self.captcha_text_state.clear_selection(),
+            _ => {}
+        }
+    }
+
+    fn handle_selection(&mut self, event: event::MouseEvent) {
+        #[allow(clippy::single_match)]
+        match self.current_screen {
+            CurrentScreen::Recaptcha => {
+                let (x, y) = (event.row, event.column);
+                let event_position = Position::new(x, y);
+                self.captcha_text_state.set_selection(event_position);
+            }
+            _ => {}
+        }
     }
 }
 
@@ -1269,6 +1359,11 @@ fn is_connection_error(e: &Error) -> bool {
     ["connection", "network", "websocket", "timeout"]
         .iter()
         .any(|keyword| msg.contains(keyword))
+}
+
+fn is_captcha_error(e: &Error) -> bool {
+    let msg = e.to_string().to_lowercase();
+    msg.contains("captcha")
 }
 
 fn is_delivery_confirmation_timeout(e: &Error) -> bool {
@@ -1436,6 +1531,12 @@ pub fn handle_input_events(tx: mpsc::Sender<EventApp>) {
                         break;
                     }
                 }
+                Event::Mouse(mouse_event) => {
+                    if tx.send(EventApp::MouseEvent(mouse_event)).is_err() {
+                        warn!("Failed to send mouse event");
+                        break;
+                    }
+                }
                 _ => {}
             }
         }
@@ -1451,6 +1552,7 @@ pub async fn handle_synchronization(
     let mut previous_contacts: Vec<Box<DisplayContact>> = Vec::new();
     let mut previous_groups: Vec<Box<DisplayGroup>> = Vec::new();
     let mut initialized = false;
+    info!("Start initial synchronization");
     loop {
         let messages_stream_result = manager.receive_messages().await;
         match messages_stream_result {
@@ -1462,6 +1564,7 @@ pub async fn handle_synchronization(
                         Received::QueueEmpty => {
                             // NOTE: This is terrible solution but works for now, will have be
                             // changed to something more graceful in furure
+                            debug!("Received queue empty");
                             if !initialized {
                                 loop {
                                     info!("Synchronizing contacts");
@@ -1478,7 +1581,6 @@ pub async fn handle_synchronization(
                                 }
                                 initialized = true;
                             }
-                            debug!("Received queue empty");
                         }
                         Received::Contacts => {
                             debug!("Received contact");
@@ -1723,12 +1825,13 @@ async fn handle_retry_tick(
     let messages_to_retry = retry_mgr.messages_to_retry();
     drop(retry_mgr);
 
+    let token_re = Regex::new(r"^.* token ([a-f0-9-]+)$").expect("Failed to compile RegEx");
     for msg in messages_to_retry {
         let result = if let Some(attachment_path) = &msg.attachment_path {
             // Fix: Handle RecipientId properly
             match &msg.recipient {
                 RecipientId::Contact(uuid) => {
-                    send_attachment_tui(
+                    send::contact::send_attachment_tui(
                         uuid.to_string(),
                         msg.text.clone(),
                         attachment_path.clone(),
@@ -1737,11 +1840,14 @@ async fn handle_retry_tick(
                     )
                     .await
                 }
-                RecipientId::Group(_) => {
-                    // TODO: Implement group attachment sending
-                    Err(anyhow::anyhow!(
-                        "Group attachment sending not yet implemented"
-                    ))
+                RecipientId::Group(master_key) => {
+                    send::group::send_attachment_tui(
+                        master_key,
+                        msg.text.clone(),
+                        attachment_path.clone(),
+                        manager.clone(),
+                    )
+                    .await
                 }
             }
         } else {
@@ -1772,6 +1878,30 @@ async fn handle_retry_tick(
             Ok(_) => {
                 retry_mgr.mark_sent(&msg.id);
                 let _ = tx_status.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+            }
+            Err(e) if is_captcha_error(&e) => {
+                warn!(error = %e);
+
+                match token_re.captures(e.to_string().as_str()) {
+                    Some(caps) => match caps.get(1) {
+                        Some(token) => {
+                            let token = token.as_str();
+                            if let Err(error) =
+                                tx_status.send(EventApp::CaptchaError(token.to_string()))
+                            {
+                                error!(%error, "Failed to send event");
+                            }
+                        }
+                        None => error!("Failed to extract token from error message."),
+                    },
+                    None => error!("Failed to extract token from error message."),
+                }
+                let mut retry_mgr = retry_manager.lock().await;
+                // Even though not send this message is marked as sent so there is no retry for it.
+                retry_mgr.mark_sent(&msg.id);
+                drop(retry_mgr);
+
+                _ = tx_status.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
             }
             Err(e) => {
                 let error_msg = e.to_string();
@@ -1921,15 +2051,41 @@ async fn handle_send_text_event(
         };
 
         match send_result {
+            // Ok(_) => {
+            //     // Mark as sent in retry manager
+            //     let mut retry_mgr = retry_manager_clone.lock().await;
+            //     retry_mgr.mark_sent(&message_id);
+            //     drop(retry_mgr);
+            //
+            //     let _ =
+            //         tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+            //     let _ = tx_status_clone.send(EventApp::ReceiveMessage);
+            // }
+            // Err(e) if is_captcha_error(&e) => {
             Ok(_) => {
-                // Mark as sent in retry manager
+                let e = "dummy token aaaa-aaaa-aaaa";
+                warn!(error = %e);
+                let token_re =
+                    Regex::new(r"^.* token ([a-f0-9-]+)$").expect("Failed to compile RegEx");
+
+                match token_re.captures(e.to_string().as_str()) {
+                    Some(caps) => match caps.get(1) {
+                        Some(token) => {
+                            let token = token.as_str();
+                            if let Err(error) =
+                                tx_status_clone.send(EventApp::CaptchaError(token.to_string()))
+                            {
+                                error!(%error, "Failed to send event");
+                            }
+                        }
+                        None => error!("Failed to extract token from error message."),
+                    },
+                    None => error!("Failed to extract token from error message."),
+                }
                 let mut retry_mgr = retry_manager_clone.lock().await;
                 retry_mgr.mark_sent(&message_id);
                 drop(retry_mgr);
-
-                let _ =
-                    tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
-                let _ = tx_status_clone.send(EventApp::ReceiveMessage);
+                _ = tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
             }
             Err(e) => {
                 // Mark as failed in retry manager
@@ -1992,7 +2148,7 @@ async fn handle_send_attachment_event(
         // Handle recipient type - for now, only Contact is implemented
         let send_result = match recipient_clone {
             RecipientId::Contact(uuid) => {
-                send_attachment_tui(
+                send::contact::send_attachment_tui(
                     uuid.to_string(),
                     text_clone,
                     attachment_path_clone,
@@ -2001,11 +2157,14 @@ async fn handle_send_attachment_event(
                 )
                 .await
             }
-            RecipientId::Group(_) => {
-                // TODO: Implement group attachment sending
-                Err(anyhow::anyhow!(
-                    "Group attachment sending not yet implemented"
-                ))
+            RecipientId::Group(master_key) => {
+                send::group::send_attachment_tui(
+                    &master_key,
+                    text_clone,
+                    attachment_path_clone,
+                    manager_clone,
+                )
+                .await
             }
         };
 
@@ -2016,9 +2175,34 @@ async fn handle_send_attachment_event(
                 retry_mgr.mark_sent(&message_id);
                 drop(retry_mgr);
 
-                let _ =
-                    tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
-                let _ = tx_status_clone.send(EventApp::ReceiveMessage);
+                _ = tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                _ = tx_status_clone.send(EventApp::ReceiveMessage);
+            }
+            Err(e) if is_captcha_error(&e) => {
+                warn!(error = %e);
+                let token_re =
+                    Regex::new(r"^.* token ([a-f0-9-]+)$").expect("Failed to compile RegEx");
+
+                match token_re.captures(e.to_string().as_str()) {
+                    Some(caps) => match caps.get(1) {
+                        Some(token) => {
+                            let token = token.as_str();
+                            if let Err(error) =
+                                tx_status_clone.send(EventApp::CaptchaError(token.to_string()))
+                            {
+                                error!(%error, "Failed to send event");
+                            }
+                        }
+                        None => error!("Failed to extract token from error message."),
+                    },
+                    None => error!("Failed to extract token from error message."),
+                }
+                let mut retry_mgr = retry_manager_clone.lock().await;
+                // Even though not send this message is marked as sent so there is no retry for it.
+                retry_mgr.mark_sent(&message_id);
+                drop(retry_mgr);
+
+                _ = tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
             }
             Err(e) => {
                 // Mark as failed in retry manager
@@ -2030,7 +2214,7 @@ async fn handle_send_attachment_event(
                 } else {
                     retry_mgr.mark_failed(&message_id, e.to_string());
                     if is_connection_error(&e) {
-                        let _ = tx_status_clone.send(EventApp::NetworkStatusChanged(
+                        _ = tx_status_clone.send(EventApp::NetworkStatusChanged(
                             NetworkStatus::Disconnected(
                                 "Cannot send: WiFi disconnected".to_string(),
                             ),

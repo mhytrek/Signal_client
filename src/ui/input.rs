@@ -28,12 +28,12 @@ pub fn render_input_and_attachment(frame: &mut Frame, app: &App, vertical_chunks
     };
 
     let attachment_style = match &app.attachment_error {
-        Some(_) => Style::default().fg(Color::Red),
+        Some(_) => Style::default().fg(Color::Rgb(255, 77, 0)),
         None => Style::default(),
     };
 
     let attachment_border_style = match &app.attachment_error {
-        Some(_) => Style::default().fg(Color::Red),
+        Some(_) => Style::default().fg(Color::Rgb(255, 77, 0)),
         None => Style::default(),
     };
 
