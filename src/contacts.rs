@@ -34,14 +34,6 @@ pub async fn sync_contacts_cli() -> Result<()> {
     sync_contacts(&mut manager, current_contacts_mutex).await
 }
 
-/// Function to sync contacts when TUI is used
-pub async fn sync_contacts_tui(
-    mut manager: Manager<SqliteStore, Registered>,
-    current_contacts_mutex: AsyncContactsMap,
-) -> Result<()> {
-    sync_contacts(&mut manager, current_contacts_mutex).await
-}
-
 async fn get_contacts(
     manager: &Manager<SqliteStore, Registered>,
 ) -> Result<HashMap<Uuid, Contact>> {
@@ -88,7 +80,7 @@ pub async fn list_contacts_tui(
     list_contacts(manager).await
 }
 
-pub async fn initial_sync(manager: &mut Manager<SqliteStore, Registered>) -> Result<()> {
+pub async fn initial_sync_cli(manager: &mut Manager<SqliteStore, Registered>) -> Result<()> {
     let current_contacts_mutex: AsyncContactsMap =
         Arc::new(Mutex::new(get_contacts(manager).await?));
     sync_contacts(manager, current_contacts_mutex).await

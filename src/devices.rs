@@ -3,7 +3,7 @@ use std::io::Write;
 use std::path::Path;
 
 use crate::account_management::{ensure_accounts_dir, get_account_store_path};
-use crate::contacts::initial_sync;
+use crate::contacts::initial_sync_cli;
 use crate::open_store;
 use crate::paths::ACCOUNTS_DIR;
 use crate::paths::{self, ASSETS, QRCODE};
@@ -114,7 +114,7 @@ pub async fn link_new_device_for_account(
     url_handler_result?;
 
     let mut manager = manager_result?;
-    if let Err(e) = initial_sync(&mut manager).await {
+    if let Err(e) = initial_sync_cli(&mut manager).await {
         warn!("Warning: Initial sync failed: {e}, but account is created");
     }
 

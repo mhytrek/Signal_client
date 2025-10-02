@@ -59,7 +59,7 @@ async fn loop_with_contents(messages: impl Stream<Item = Received>, contents: &m
     }
 }
 
-/// Function receives messages from the primary device
+/// Function receives messages from the primary device, use only in `CLI`.
 pub async fn receiving_loop(
     messages: impl Stream<Item = Received>,
     manager: &mut Manager<SqliteStore, Registered>,
@@ -154,33 +154,6 @@ fn get_message_group_context(content: &Content) -> Option<GroupContextV2> {
         },
         _ => None,
     }
-}
-
-/// Function to receive messages for TUI interface
-pub async fn receive_messages_tui(
-    manager: &mut Manager<SqliteStore, Registered>,
-    current_contacts_mutex: AsyncContactsMap,
-) -> Result<Vec<MessageDto>> {
-    let messages = manager.receive_messages().await?;
-    let mut contents = Vec::new();
-
-    receiving_loop(
-        messages,
-        manager,
-        Some(&mut contents),
-        current_contacts_mutex,
-    )
-    .await?;
-
-    let mut result = Vec::new();
-
-    for content in contents {
-        if let Some(formatted_message) = format_message(&content) {
-            result.push(formatted_message);
-        }
-    }
-
-    Ok(result)
 }
 
 /// Function to receive messages for CLI interface
