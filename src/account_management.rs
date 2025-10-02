@@ -130,8 +130,7 @@ pub async fn unlink_account_cli(account_name: String) -> Result<()> {
 
     loop {
         print!(
-            "Are you sure you want to delete account '{}'? This action cannot be undone! [y/N]: ",
-            account_name
+            "Are you sure you want to delete account '{account_name}'? This action cannot be undone! [y/N]: "
         );
         io::stdout().flush()?;
 

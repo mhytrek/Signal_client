@@ -40,7 +40,7 @@ jobs:
         run: cargo test --verbose
 
       - name: Linter
-        run: cargo clippy --all-targets --all-features
+        run: cargo clippy --all-targets --all-features -- -Wclippy::uninlined_format_args
 
       - name: Formatting
         run: cargo fmt --all -- --check
