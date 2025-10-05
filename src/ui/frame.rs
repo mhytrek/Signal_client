@@ -6,9 +6,12 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
-use crate::{app::UiStatusMessage, ui::{render_account_creation, render_account_selector}};
 use crate::{
-    app::{App, CurrentScreen, LinkingStatus, NetworkStatus, RecipientId, UiStatusInfo},
+    app::UiStatusMessage,
+    ui::{render_account_creation, render_account_selector},
+};
+use crate::{
+    app::{App, CurrentScreen, LinkingStatus, NetworkStatus, RecipientId},
     ui::{
         chat::render_chat,
         contact_list::{render_contact_info_compact, render_contact_list},
@@ -32,93 +35,95 @@ pub fn render_ui(frame: &mut Frame, app: &mut App) {
 
     match app.current_screen {
         CurrentScreen::Main => {
-                        render_contact_list(frame, app, main_chunks[0]);
-                        render_footer(frame, app, chunks[1]);
-            }
+            render_contact_list(frame, app, main_chunks[0]);
+            render_footer(frame, app, chunks[1]);
+        }
         CurrentScreen::Writing => {
-                render_contact_list(frame, app, main_chunks[0]);
-                render_chat(frame, app, main_chunks[1]);
-                render_footer(frame, app, chunks[1]);
-            }
+            render_contact_list(frame, app, main_chunks[0]);
+            render_chat(frame, app, main_chunks[1]);
+            render_footer(frame, app, chunks[1]);
+        }
         CurrentScreen::Options => {
-                render_options(frame, app);
-                render_footer(frame, app, chunks[1]);
-            }
+            render_options(frame, app);
+            render_footer(frame, app, chunks[1]);
+        }
         CurrentScreen::Exiting => {
-            let status_message = UiStatusMessage::Info("Would you like to quit? \n (y/n)".to_string());
-                render_popup(frame, frame.area(), &status_message);
-            }
+            let status_message =
+                UiStatusMessage::Info("Would you like to quit? \n (y/n)".to_string());
+            render_popup(frame, frame.area(), &status_message);
+        }
         CurrentScreen::LinkingNewDevice => match app.linking_status {
-                LinkingStatus::Unlinked => {
-                    render_textarea(frame, app, frame.area());
-                }
-                LinkingStatus::InProgress => {
-                    render_qrcode(frame, chunks[0]);
-                    let text = "Scan the QR code to link new device...";
-                    render_paragraph(frame, chunks[1], text);
-                }
-                LinkingStatus::Linked => {}
-                LinkingStatus::Error(ref error_msg) => {
-                    use crate::ui::linking::render_linking_error;
-                    render_linking_error(
-                        frame,
-                        frame.area(),
-                        error_msg,
-                        app.creating_account_name.is_some(),
-                    );
-                }
-            },
+            LinkingStatus::Unlinked => {
+                render_textarea(frame, app, frame.area());
+            }
+            LinkingStatus::InProgress => {
+                render_qrcode(frame, chunks[0]);
+                let text = "Scan the QR code to link new device...";
+                render_paragraph(frame, chunks[1], text);
+            }
+            LinkingStatus::Linked => {}
+            LinkingStatus::Error(ref error_msg) => {
+                use crate::ui::linking::render_linking_error;
+                render_linking_error(
+                    frame,
+                    frame.area(),
+                    error_msg,
+                    app.creating_account_name.is_some(),
+                );
+            }
+        },
         CurrentScreen::Syncing => {
-            let status_message = UiStatusMessage::Info("Syncing contacts and messages...".to_string());
-                render_popup(frame, frame.area(), &status_message);
-            }
+            let status_message =
+                UiStatusMessage::Info("Syncing contacts and messages...".to_string());
+            render_popup(frame, frame.area(), &status_message);
+        }
         CurrentScreen::ContactInfo => {
-                let horizontal_chunks = Layout::default()
-                    .direction(Direction::Horizontal)
-                    .constraints([
-                        Constraint::Ratio(1, 4),
-                        Constraint::Ratio(1, 4),
-                        Constraint::Ratio(2, 4),
-                    ])
-                    .split(chunks[0]);
+            let horizontal_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Ratio(1, 4),
+                    Constraint::Ratio(1, 4),
+                    Constraint::Ratio(2, 4),
+                ])
+                .split(chunks[0]);
 
-                render_contact_list(frame, app, horizontal_chunks[0]);
-                render_contact_info_compact(frame, app, horizontal_chunks[1]);
-                render_footer(frame, app, chunks[1]);
-            }
+            render_contact_list(frame, app, horizontal_chunks[0]);
+            render_contact_info_compact(frame, app, horizontal_chunks[1]);
+            render_footer(frame, app, chunks[1]);
+        }
         CurrentScreen::AccountSelector => {
-                render_account_selector(frame, app, frame.area());
-                render_footer(frame, app, chunks[1]);
-            }
+            render_account_selector(frame, app, frame.area());
+            render_footer(frame, app, chunks[1]);
+        }
         CurrentScreen::CreatingAccount => {
-                render_account_creation(frame, app, frame.area());
-                render_footer(frame, app, chunks[1]);
-            }
+            render_account_creation(frame, app, frame.area());
+            render_footer(frame, app, chunks[1]);
+        }
         CurrentScreen::ConfirmDelete => {
-                if let Some(account_name) = &app.deleting_account {
-                    let text = format!(
-                        "Are you sure you want to delete account '{account_name}'?\n\
+            if let Some(account_name) = &app.deleting_account {
+                let text = format!(
+                    "Are you sure you want to delete account '{account_name}'?\n\
             This action cannot be undone!\n\n\
             All messages and data for this account will be lost.\n\n\
             Press 'y' to confirm deletion\n\
             Press 'n' or ESC to cancel",
-                    );
-                    let status_message = UiStatusMessage::Info(text);
-                    render_popup(frame, frame.area(), &status_message);
-                }
+                );
+                let status_message = UiStatusMessage::Info(text);
+                render_popup(frame, frame.area(), &status_message);
             }
+        }
         CurrentScreen::InspectMesseges => {
-                render_contact_list(frame, app, main_chunks[0]);
-                render_chat(frame, app, main_chunks[1]);
-                render_footer(frame, app, chunks[1]);
-            }
+            render_contact_list(frame, app, main_chunks[0]);
+            render_chat(frame, app, main_chunks[1]);
+            render_footer(frame, app, chunks[1]);
+        }
         CurrentScreen::Popup => {
-            let status_message = match app.ui_status_info.clone(){
+            let status_message = match app.ui_status_info.clone() {
                 Some(message) => message.status_message,
                 None => UiStatusMessage::Info("".to_string()),
             };
             render_popup(frame, frame.area(), &status_message);
-        },
+        }
     }
 }
 

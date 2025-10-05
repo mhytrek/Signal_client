@@ -48,7 +48,6 @@ pub fn render_popup(frame: &mut Frame, area: Rect, status_message: &UiStatusMess
     frame.render_widget(paragraph, popup_area);
 }
 
-
 /// Renders a paragraph with given text
 pub fn render_paragraph(frame: &mut Frame, area: Rect, text: &str) {
     let block = Block::default().borders(Borders::ALL);

@@ -1,5 +1,4 @@
 use crate::contacts::get_contacts_tui;
-use crate::messages;
 use crate::messages::attachments::save_attachment;
 use crate::messages::receive::{self, MessageDto, check_contacts, contact};
 use crate::messages::send::{self, send_attachment_tui};
@@ -57,7 +56,6 @@ impl Default for RecipientId {
     }
 }
 
-
 pub trait DisplayRecipient: Send {
     fn display_name(&self) -> &str;
     fn id(&self) -> RecipientId;
@@ -93,7 +91,7 @@ pub struct DisplayGroup {
 #[derive(Clone)]
 pub struct UiStatusInfo {
     pub status_message: UiStatusMessage,
-    last_screen: CurrentScreen
+    last_screen: CurrentScreen,
 }
 
 impl DisplayGroup {
@@ -115,7 +113,7 @@ impl DisplayRecipient for DisplayGroup {
     }
 }
 
-#[derive(Clone,PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum CurrentScreen {
     Main,
     Syncing,
@@ -623,11 +621,14 @@ impl App {
             EventApp::QrCodeGenerated => Ok(false),
             EventApp::Resize(_, _) => Ok(false),
             EventApp::UiStatus(message) => {
-                let ui_status_info:UiStatusInfo = UiStatusInfo { status_message: message, last_screen: self.current_screen.clone() };
+                let ui_status_info: UiStatusInfo = UiStatusInfo {
+                    status_message: message,
+                    last_screen: self.current_screen.clone(),
+                };
                 self.ui_status_info = Some(ui_status_info);
                 self.current_screen = CurrentScreen::Popup;
                 Ok(false)
-            }, 
+            }
         }
     }
 
@@ -932,16 +933,13 @@ impl App {
                 }
                 _ => {}
             },
-            Popup => match key.code {
-                _ => {
-                    let last_screen:CurrentScreen = match self.ui_status_info.clone(){
-                        Some(status) => status.last_screen,
-                        None => Main,
-                    };
-                    self.current_screen = last_screen;
-                    self.ui_status_info = None;
-                }
-                
+            Popup => {
+                let last_screen: CurrentScreen = match self.ui_status_info.clone() {
+                    Some(status) => status.last_screen,
+                    None => Main,
+                };
+                self.current_screen = last_screen;
+                self.ui_status_info = None;
             }
             CreatingAccount => match key.code {
                 KeyCode::Esc => {
