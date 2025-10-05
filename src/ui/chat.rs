@@ -1,11 +1,12 @@
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
+    style::{Modifier, Style},
     widgets::{Block, BorderType, Borders, Paragraph, Wrap},
 };
 
 use crate::{
-    app::{App, RecipientId},
+    app::{App, CurrentScreen, RecipientId},
     messages::receive::MessageDto,
     ui::{
         input::render_input_and_attachment,
@@ -171,19 +172,24 @@ fn render_messages(
         let datetime_local = get_local_timestamp(msg.timestamp);
         let width = widths[idx];
         let mut height = heights[idx];
-        let para: Paragraph;
 
-        match visibility {
-            Visibility::Full => {
-                para = Paragraph::new(msg.text.clone())
-                    .block(
-                        Block::default()
-                            .borders(Borders::ALL)
-                            .border_type(BorderType::Rounded)
-                            .title(datetime_local.format("%Y-%m-%d %H:%M:%S").to_string()),
-                    )
-                    .wrap(Wrap { trim: false });
-            }
+        let mut style = Style::default();
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .title(datetime_local.format("%Y-%m-%d %H:%M:%S").to_string());
+
+        if let CurrentScreen::InspectMesseges = app.current_screen
+            && idx == app.message_selected
+        {
+            style = style.add_modifier(Modifier::REVERSED);
+        }
+
+        let para: Paragraph = match visibility {
+            Visibility::Full => Paragraph::new(msg.text.clone())
+                .style(style)
+                .block(block.clone())
+                .wrap(Wrap { trim: false }),
             Visibility::Partial(remaining_height) => {
                 let max_text_lines = remaining_height.saturating_sub(1);
                 let mut buffer = Vec::new();
@@ -214,15 +220,12 @@ fn render_messages(
                 let visible_text = buffer.join("\n");
 
                 height = *remaining_height;
-                para = Paragraph::new(visible_text)
-                    .block(
-                        Block::default()
-                            .borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM)
-                            .border_type(BorderType::Rounded),
-                    )
-                    .wrap(Wrap { trim: false });
+                Paragraph::new(visible_text)
+                    .style(style)
+                    .block(block.borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM))
+                    .wrap(Wrap { trim: false })
             }
-        }
+        };
 
         let mut x_pos = vertical_chunks[0].x;
         let id = app.recipients[app.selected_recipient].0.id();

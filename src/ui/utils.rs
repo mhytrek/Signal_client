@@ -10,6 +10,8 @@ use ratatui::{
     },
 };
 
+use crate::app::UiStatusMessage;
+
 pub fn render_scrollbar(frame: &mut Frame, position: usize, content_length: usize, area: Rect) {
     let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
 
@@ -25,15 +27,19 @@ pub fn render_scrollbar(frame: &mut Frame, position: usize, content_length: usiz
     );
 }
 
-/// Renders a popup with given text
-pub fn render_popup(frame: &mut Frame, area: Rect, text: &str) {
+/// Renders a popup with the given status message.
+pub fn render_popup(frame: &mut Frame, area: Rect, status_message: &UiStatusMessage) {
+    let (title, text) = match status_message {
+        UiStatusMessage::Info(info_text) => ("INFO", info_text.as_str()),
+        UiStatusMessage::Error(error_text) => ("ERROR", error_text.as_str()),
+    };
+
     let popup_block = Block::default()
         .borders(Borders::ALL)
-        .border_type(BorderType::Double);
+        .border_type(BorderType::Double)
+        .title(title);
 
-    let styled_text = Text::styled(text, Style::default());
-
-    let paragraph = Paragraph::new(styled_text)
+    let paragraph = Paragraph::new(Text::raw(text))
         .block(popup_block)
         .centered()
         .wrap(Wrap { trim: false });

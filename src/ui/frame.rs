@@ -6,9 +6,12 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
-use crate::ui::{render_account_creation, render_account_selector};
 use crate::{
-    app::{App, CurrentScreen, LinkingStatus, NetworkStatus},
+    app::UiStatusMessage,
+    ui::{render_account_creation, render_account_selector},
+};
+use crate::{
+    app::{App, CurrentScreen, LinkingStatus, NetworkStatus, RecipientId},
     ui::{
         chat::render_chat,
         contact_list::{render_contact_info_compact, render_contact_list},
@@ -45,7 +48,9 @@ pub fn render_ui(frame: &mut Frame, app: &mut App) {
             render_footer(frame, app, chunks[1]);
         }
         CurrentScreen::Exiting => {
-            render_popup(frame, frame.area(), "Would you like to quit? \n (y/n)");
+            let status_message =
+                UiStatusMessage::Info("Would you like to quit? \n (y/n)".to_string());
+            render_popup(frame, frame.area(), &status_message);
         }
         CurrentScreen::LinkingNewDevice => match app.linking_status {
             LinkingStatus::Unlinked => {
@@ -68,7 +73,9 @@ pub fn render_ui(frame: &mut Frame, app: &mut App) {
             }
         },
         CurrentScreen::Syncing => {
-            render_popup(frame, frame.area(), "Syncing contacts and messages...");
+            let status_message =
+                UiStatusMessage::Info("Syncing contacts and messages...".to_string());
+            render_popup(frame, frame.area(), &status_message);
         }
         CurrentScreen::ContactInfo => {
             let horizontal_chunks = Layout::default()
@@ -101,58 +108,92 @@ pub fn render_ui(frame: &mut Frame, app: &mut App) {
             Press 'y' to confirm deletion\n\
             Press 'n' or ESC to cancel",
                 );
-                render_popup(frame, frame.area(), &text);
+                let status_message = UiStatusMessage::Info(text);
+                render_popup(frame, frame.area(), &status_message);
             }
+        }
+        CurrentScreen::InspectMesseges => {
+            render_contact_list(frame, app, main_chunks[0]);
+            render_chat(frame, app, main_chunks[1]);
+            render_footer(frame, app, chunks[1]);
+        }
+        CurrentScreen::Popup => {
+            let status_message = match app.ui_status_info.clone() {
+                Some(message) => message.status_message,
+                None => UiStatusMessage::Info("".to_string()),
+            };
+            render_popup(frame, frame.area(), &status_message);
         }
     }
 }
 
 /// Renders the footer section at the bottom of the screen.
 fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
-    let current_keys_hint = {
-        match app.current_screen {
-            CurrentScreen::Main => Span::styled(
-                "(q) to quit | (↑ ↓) to navigate | (→) to select chat | (a) for account management | (i) for contact info | (e) for options",
-                Style::default().fg(app.config.get_primary_color()),
-            ),
-            CurrentScreen::Writing => {
-                let retry_info = if let Ok(manager) = app.retry_manager.try_lock() {
-                    let failed_count = manager.failed_count();
+    let current_keys_hint = match app.current_screen {
+        CurrentScreen::Main => Span::styled(
+            "(q) to quit | (↑ ↓) to navigate | (→) to select chat | (i) for contact info | (e) for options",
+            Style::default().fg(app.config.get_primary_color()),
+        ),
+        CurrentScreen::Writing => {
+            let retry_info = if let Ok(manager) = app.retry_manager.try_lock() {
+                let failed_count = manager.failed_count();
 
-                    if failed_count > 0 {
-                        format!(" | {failed_count} failed msgs")
-                    } else {
-                        String::new()
-                    }
+                if failed_count > 0 {
+                    format!(" | {failed_count} failed msgs")
                 } else {
                     String::new()
-                };
+                }
+            } else {
+                String::new()
+            };
 
-                let base_text = if app.attachment_error.is_some() {
-                    "(q) to exit | (ENTER) to send | (TAB) to switch input/attachment | Fix attachment path to send"
+            let base_text = if app.attachment_error.is_some() {
+                "(q) to exit | (ENTER) to send | (TAB) to switch input/attachment | Fix attachment path to send | (CTRL+e) to inspect messages"
+            } else {
+                "(q) to exit | (ENTER) to send | (TAB) to switch input/attachment | (CTRL+e) to inspect messages"
+            };
+
+            Span::styled(
+                format!("{base_text}{retry_info}"),
+                if app.attachment_error.is_some() {
+                    Style::default().fg(app.config.get_error_color())
                 } else {
-                    "(q) to exit | (ENTER) to send | (TAB) to switch input/attachment"
-                };
-
-                Span::styled(
-                    format!("{base_text}{retry_info}"),
-                    if app.attachment_error.is_some() {
-                        Style::default().fg(app.config.get_error_color())
-                    } else {
-                        Style::default().fg(app.config.get_primary_color())
-                    },
-                )
-            }
-            CurrentScreen::Options => Span::styled(
-                "(q) to exit | (↑ ↓) to navigate | (ENTER/SPACE) to toggle option",
-                Style::default().fg(app.config.get_primary_color()),
-            ),
-            CurrentScreen::ContactInfo => Span::styled(
-                "(q) to exit | (← or ESC) to go back to main",
-                Style::default().fg(app.config.get_primary_color()),
-            ),
-            _ => Span::default(),
+                    Style::default().fg(app.config.get_primary_color())
+                },
+            )
         }
+        CurrentScreen::Options => Span::styled(
+            "(q) to exit | (↑ ↓) to navigate | (ENTER/SPACE) to toggle option",
+            Style::default().fg(app.config.get_primary_color()),
+        ),
+        CurrentScreen::ContactInfo => Span::styled(
+            "(q) to exit | (← or ESC) to go back to main",
+            Style::default().fg(app.config.get_primary_color()),
+        ),
+        CurrentScreen::InspectMesseges => {
+            let selected_recipient_id = app.recipients[app.selected_recipient].0.id();
+            let optional_messages = match selected_recipient_id {
+                RecipientId::Contact(uuid) => app.contact_messages.get(&uuid.to_string()),
+                RecipientId::Group(group_key) => app.group_messages.get(&group_key),
+            };
+
+            let mut save_attachment_info = "";
+            if let Some(messages) = optional_messages
+                && let Some(Some(_att)) = messages
+                    .get(app.message_selected)
+                    .map(|msg| msg.attachment.as_ref())
+            {
+                save_attachment_info = " | (s) to save attachment"
+            }
+
+            Span::styled(
+                format!(
+                    "(q) to exit inspection mode | (← or ESC) to go back to main{save_attachment_info}"
+                ),
+                Style::default().fg(app.config.get_primary_color()),
+            )
+        }
+        _ => Span::default(),
     };
 
     let network_status = match &app.network_status {
