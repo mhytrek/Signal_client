@@ -1,4 +1,5 @@
 use crate::contacts::get_contacts_tui;
+use crate::messages;
 use crate::messages::attachments::save_attachment;
 use crate::messages::receive::{self, MessageDto, check_contacts, contact};
 use crate::messages::send::{self, send_attachment_tui};
@@ -56,6 +57,7 @@ impl Default for RecipientId {
     }
 }
 
+
 pub trait DisplayRecipient: Send {
     fn display_name(&self) -> &str;
     fn id(&self) -> RecipientId;
@@ -88,6 +90,11 @@ pub struct DisplayGroup {
     display_name: String,
     master_key: GroupMasterKeyBytes,
 }
+#[derive(Clone)]
+pub struct UiStatusInfo {
+    pub status_message: UiStatusMessage,
+    last_screen: CurrentScreen
+}
 
 impl DisplayGroup {
     fn new(display_name: String, master_key: GroupMasterKeyBytes) -> Self {
@@ -108,12 +115,13 @@ impl DisplayRecipient for DisplayGroup {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(Clone,PartialEq)]
 pub enum CurrentScreen {
     Main,
     Syncing,
     LinkingNewDevice,
     InspectMesseges,
+    Popup,
     Writing,
     Options,
     Exiting,
@@ -186,6 +194,8 @@ pub struct App {
 
     pub profile: Option<Profile>,
 
+    pub ui_status_info: Option<UiStatusInfo>,
+
     pub avatar_cache: Option<Vec<u8>>,
     pub picker: Option<Picker>,
     pub avatar_image: Option<StatefulProtocol>,
@@ -212,7 +222,8 @@ pub enum NetworkStatus {
     Disconnected(String),
 }
 
-pub enum UiStatus {
+#[derive(Clone)]
+pub enum UiStatusMessage {
     Info(String),
     Error(String),
 }
@@ -235,7 +246,7 @@ pub enum EventApp {
     ReceiveMessage,
     QrCodeGenerated,
     Resize(u16, u16),
-    UiStatus(UiStatus),
+    UiStatus(UiStatusMessage),
 }
 pub enum EventSend {
     SendText(RecipientId, String),
@@ -275,6 +286,8 @@ impl App {
             attachment_path: String::new(),
             attachment_error: None,
             input_focus: InputFocus::Message,
+
+            ui_status_info: None,
 
             retry_manager: Arc::new(Mutex::new(RetryManager::new())),
             message_id_map: HashMap::new(),
@@ -609,7 +622,12 @@ impl App {
             }
             EventApp::QrCodeGenerated => Ok(false),
             EventApp::Resize(_, _) => Ok(false),
-            EventApp::UiStatus(_) => Ok(false), // TODO: implement status on ui
+            EventApp::UiStatus(message) => {
+                let ui_status_info:UiStatusInfo = UiStatusInfo { status_message: message, last_screen: self.current_screen.clone() };
+                self.ui_status_info = Some(ui_status_info);
+                self.current_screen = CurrentScreen::Popup;
+                Ok(false)
+            }, 
         }
     }
 
@@ -914,6 +932,17 @@ impl App {
                 }
                 _ => {}
             },
+            Popup => match key.code {
+                _ => {
+                    let last_screen:CurrentScreen = match self.ui_status_info.clone(){
+                        Some(status) => status.last_screen,
+                        None => Main,
+                    };
+                    self.current_screen = last_screen;
+                    self.ui_status_info = None;
+                }
+                
+            }
             CreatingAccount => match key.code {
                 KeyCode::Esc => {
                     let accounts = list_accounts().unwrap_or_default();
@@ -1699,13 +1728,13 @@ async fn handle_save_attachment_event(
 ) {
     match save_attachment(attachment_pointer, manager.clone(), attachment_save_dir).await {
         Ok(path) => {
-            let _ = tx_status.send(EventApp::UiStatus(UiStatus::Info(format!(
+            let _ = tx_status.send(EventApp::UiStatus(UiStatusMessage::Info(format!(
                 "Attachment saved to {}",
                 path.display()
             ))));
         }
         Err(e) => {
-            let _ = tx_status.send(EventApp::UiStatus(UiStatus::Error(format!(
+            let _ = tx_status.send(EventApp::UiStatus(UiStatusMessage::Error(format!(
                 "Failed to save attachment: {e}"
             ))));
             error!("Failed to save attachment: {:?}", e);

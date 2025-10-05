@@ -12,7 +12,7 @@ use ratatui::{
 use tui_qrcode::{Colors, QrCodeWidget};
 
 use crate::{
-    app::App,
+    app::{App, UiStatusMessage},
     paths::QRCODE,
     ui::utils::{centered_rect_fixed_size, render_popup},
 };
@@ -31,11 +31,13 @@ pub fn render_qrcode(frame: &mut Frame, area: Rect) {
                 "Terminal too small to show QRcode.\nMinimum window size 50x25 \n Current window size {}x{}",
                 area.width, area.height
             );
-            render_popup(frame, area, &text);
+            let status_message = UiStatusMessage::Info(text);
+            render_popup(frame, area, &status_message);
         }
     } else {
-        let text = "Generating QR Code...";
-        render_popup(frame, area, text);
+        let text = "Generating QR Code...".to_string();
+        let status_message = UiStatusMessage::Info(text);
+        render_popup(frame, area, &status_message);
     }
 }
 
@@ -65,6 +67,7 @@ pub fn render_linking_error(
     let text = format!(
         "Error: {error_msg}\n\n{retry_instruction}\n\nNote: If your phone shows successful connection,\ntry waiting a moment and check your accounts list."
     );
+    let status_message = UiStatusMessage::Error(text);
 
-    render_popup(frame, area, &text);
+    render_popup(frame, area, &status_message);
 }
