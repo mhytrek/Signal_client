@@ -1,8 +1,10 @@
 use crate::messages::receive::receive_messages_cli;
+use crate::{
+    account_management::create_registered_manager, messages::attachments::create_attachment,
+};
 use anyhow::Result;
 use presage::Manager;
 use presage::manager::Registered;
-use crate::{account_management::create_registered_manager, messages::attachments::create_attachment};
 use presage_store_sqlite::SqliteStore;
 use std::time::{SystemTime, UNIX_EPOCH};
 
