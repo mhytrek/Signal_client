@@ -139,7 +139,7 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
                 let failed_count = manager.failed_count();
 
                 if failed_count > 0 {
-                    format!(" | {} failed msgs", failed_count)
+                    format!(" | {failed_count} failed msgs")
                 } else {
                     String::new()
                 }
@@ -154,7 +154,7 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
             };
 
             Span::styled(
-                format!("{}{}", base_text, retry_info),
+                format!("{base_text}{retry_info}"),
                 if app.attachment_error.is_some() {
                     Style::default().fg(app.config.get_error_color())
                 } else {
