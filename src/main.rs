@@ -23,9 +23,6 @@ async fn main() -> Result<()> {
         Command::SendMessage(args) => {
             messages::send::contact::send_message_cli(args.recipient, args.text_message).await?
         }
-        Command::SendToGroup(args) => {
-            messages::send::group::send_message_cli(args.group, args.text_message).await?
-        }
         Command::ListMessages(args) => match (args.contact, args.group) {
             (Some(c), None) => cli::print_messages_from_contact(c, args.from).await?,
             (None, Some(g)) => cli::print_messages_from_group(g, args.from).await?,

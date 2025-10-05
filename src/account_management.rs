@@ -1,4 +1,4 @@
-use crate::contacts::initial_sync;
+use crate::contacts::initial_sync_cli;
 use crate::paths::ACCOUNTS_DIR;
 use crate::{Config, open_store, paths};
 use anyhow::{Error, Result, anyhow, bail};
@@ -62,7 +62,7 @@ pub async fn link_account_cli(account_name: String, device_name: String) -> Resu
         Err(e) => bail!("Error while linking device: {e}"),
     };
 
-    initial_sync(&mut manager).await?;
+    initial_sync_cli(&mut manager).await?;
     let mut config = Config::load();
     config.set_current_account(account_name.clone());
     config
