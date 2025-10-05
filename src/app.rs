@@ -1455,79 +1455,76 @@ pub async fn handle_synchronization(
                             if initialized {
                                 if let Some(formatted_msg) =
                                     crate::messages::receive::format_message(&content)
-                                    && !formatted_msg.sender {
-                                        let config = crate::config::Config::load();
-                                        if config.notifications_enabled {
-                                            let (sender_name, group_name) = {
-                                                let contacts = current_contacts_mutex.lock().await;
-                                                let sender = contacts
-                                                    .get(&formatted_msg.uuid)
-                                                    .map(|c| {
-                                                        if !c.name.is_empty() {
-                                                            c.name.clone()
-                                                        } else if let Some(phone) = &c.phone_number
-                                                        {
-                                                            phone.to_string()
-                                                        } else {
-                                                            formatted_msg.uuid.to_string()
-                                                        }
-                                                    })
-                                                    .unwrap_or_else(|| {
-                                                        formatted_msg.uuid.to_string()
-                                                    });
-
-                                                debug!(
-                                                    "Sender UUID: {}, Resolved name: {}",
-                                                    formatted_msg.uuid, sender
-                                                );
-
-                                                let group = if let Some(group_context) =
-                                                    &formatted_msg.group_context
-                                                {
-                                                    if let Some(master_key_bytes) =
-                                                        &group_context.master_key
-                                                    {
-                                                        let mut master_key = [0u8; 32];
-                                                        master_key.copy_from_slice(
-                                                            &master_key_bytes[..32],
-                                                        );
-
-                                                        manager
-                                                            .store()
-                                                            .group(master_key)
-                                                            .await
-                                                            .ok()
-                                                            .flatten()
-                                                            .map(|g| g.title)
+                                    && !formatted_msg.sender
+                                {
+                                    let config = crate::config::Config::load();
+                                    if config.notifications_enabled {
+                                        let (sender_name, group_name) = {
+                                            let contacts = current_contacts_mutex.lock().await;
+                                            let sender = contacts
+                                                .get(&formatted_msg.uuid)
+                                                .map(|c| {
+                                                    if !c.name.is_empty() {
+                                                        c.name.clone()
+                                                    } else if let Some(phone) = &c.phone_number {
+                                                        phone.to_string()
                                                     } else {
-                                                        None
+                                                        formatted_msg.uuid.to_string()
                                                     }
+                                                })
+                                                .unwrap_or_else(|| formatted_msg.uuid.to_string());
+
+                                            debug!(
+                                                "Sender UUID: {}, Resolved name: {}",
+                                                formatted_msg.uuid, sender
+                                            );
+
+                                            let group = if let Some(group_context) =
+                                                &formatted_msg.group_context
+                                            {
+                                                if let Some(master_key_bytes) =
+                                                    &group_context.master_key
+                                                {
+                                                    let mut master_key = [0u8; 32];
+                                                    master_key
+                                                        .copy_from_slice(&master_key_bytes[..32]);
+
+                                                    manager
+                                                        .store()
+                                                        .group(master_key)
+                                                        .await
+                                                        .ok()
+                                                        .flatten()
+                                                        .map(|g| g.title)
                                                 } else {
                                                     None
-                                                };
-
-                                                (sender, group)
+                                                }
+                                            } else {
+                                                None
                                             };
 
-                                            let title = if let Some(group) = group_name {
-                                                format!("{} → {}", sender_name, group)
-                                            } else {
-                                                sender_name
-                                            };
+                                            (sender, group)
+                                        };
 
-                                            info!(
-                                                "Attempting notification for message from: {}",
-                                                title
-                                            );
-                                            if let Err(e) =
-                                                send_notification(&title, &formatted_msg.text)
-                                            {
-                                                error!("Failed to send notification: {}", e);
-                                            } else {
-                                                info!("Notification sent successfully");
-                                            }
+                                        let title = if let Some(group) = group_name {
+                                            format!("{sender_name} → {group}")
+                                        } else {
+                                            sender_name
+                                        };
+
+                                        info!(
+                                            "Attempting notification for message from: {}",
+                                            title
+                                        );
+                                        if let Err(e) =
+                                            send_notification(&title, &formatted_msg.text)
+                                        {
+                                            error!("Failed to send notification: {}", e);
+                                        } else {
+                                            info!("Notification sent successfully");
                                         }
                                     }
+                                }
 
                                 if let Err(e) = tx.send(EventApp::ReceiveMessage) {
                                     error!(channel_error = %e);
