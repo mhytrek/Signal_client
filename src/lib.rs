@@ -20,12 +20,12 @@ pub mod env;
 pub mod groups;
 pub mod logger;
 pub mod messages;
+mod notifications;
 pub mod paths;
 pub mod profile;
 mod retry_manager;
 pub mod tui;
 pub mod ui;
-mod notifications;
 
 pub mod sending {}
 

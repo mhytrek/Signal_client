@@ -38,12 +38,13 @@ use crate::account_management::{
     list_accounts,
 };
 use crate::devices::link_new_device_for_account;
+use crate::notifications::send_notification;
 use crate::retry_manager::{OutgoingMessage, RetryManager};
 use image::ImageFormat;
+use presage::store::ContentsStore;
 use std::thread;
 use std::time::Duration;
 use tokio::time::interval;
-use crate::notifications::send_notification;
 
 #[derive(PartialEq, Clone)]
 pub enum RecipientId {
@@ -1094,7 +1095,7 @@ impl App {
                     }
                 }
                 KeyCode::Down | KeyCode::Char('s') => {
-                    if self.config_selected < 1 {
+                    if self.config_selected < 2 {
                         self.config_selected += 1;
                     }
                 }
@@ -1114,6 +1115,12 @@ impl App {
                             self.avatar_image = None;
                         } else if self.avatar_cache.is_some() {
                             self.load_avatar();
+                        }
+                    }
+                    2 => {
+                        self.config.toggle_notifications();
+                        if let Err(e) = self.config.save() {
+                            warn!("Failed to save config: {e:?}");
                         }
                     }
                     _ => {}
@@ -1446,11 +1453,15 @@ pub async fn handle_synchronization(
                             trace!("Received message: {content:#?}");
 
                             if initialized {
-                                if let Some(formatted_msg) = crate::messages::receive::format_message(&content) {
-                                    if !formatted_msg.sender {
-                                        let sender_name = {
+                                if let Some(formatted_msg) =
+                                    crate::messages::receive::format_message(&content)
+                                    && !formatted_msg.sender
+                                {
+                                    let config = crate::config::Config::load();
+                                    if config.notifications_enabled {
+                                        let (sender_name, group_name) = {
                                             let contacts = current_contacts_mutex.lock().await;
-                                            contacts
+                                            let sender = contacts
                                                 .get(&formatted_msg.uuid)
                                                 .map(|c| {
                                                     if !c.name.is_empty() {
@@ -1461,12 +1472,45 @@ pub async fn handle_synchronization(
                                                         formatted_msg.uuid.to_string()
                                                     }
                                                 })
-                                                .unwrap_or_else(|| formatted_msg.uuid.to_string())
+                                                .unwrap_or_else(|| formatted_msg.uuid.to_string());
+
+                                            let group = if let Some(group_context) =
+                                                &formatted_msg.group_context
+                                            {
+                                                if let Some(master_key_bytes) =
+                                                    &group_context.master_key
+                                                {
+                                                    let mut master_key = [0u8; 32];
+                                                    master_key
+                                                        .copy_from_slice(&master_key_bytes[..32]);
+
+                                                    manager
+                                                        .store()
+                                                        .group(master_key)
+                                                        .await
+                                                        .ok()
+                                                        .flatten()
+                                                        .map(|g| g.title)
+                                                } else {
+                                                    None
+                                                }
+                                            } else {
+                                                None
+                                            };
+
+                                            (sender, group)
                                         };
 
-                                        info!("Attempting notification for message from: {}", sender_name);
-                                        if let Err(e) = send_notification(&sender_name, &formatted_msg.text) {
-                                            error!("Failed to send notification: {}", e);
+                                        let title = if let Some(group) = group_name {
+                                            format!("{sender_name} → {group}")
+                                        } else {
+                                            sender_name
+                                        };
+
+                                        if let Err(e) =
+                                            send_notification(&title, &formatted_msg.text)
+                                        {
+                                            error!("Failed to send notification: {e}");
                                         } else {
                                             info!("Notification sent successfully");
                                         }

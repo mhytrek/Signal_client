@@ -145,6 +145,14 @@ pub fn render_options(frame: &mut Frame, app: &mut App) {
                 "Disabled"
             }
         ),
+        format!(
+            "Notifications: {}",
+            if app.config.notifications_enabled {
+                "Enabled"
+            } else {
+                "Disabled"
+            }
+        ),
     ];
 
     let config_items: Vec<ListItem> = config_options
