@@ -1,6 +1,6 @@
 use crate::contacts::get_contacts_tui;
-use crate::messages::receive::{self, MessageDto, check_contacts, contact, format_message};
 use crate::messages::attachments::save_attachment;
+use crate::messages::receive::{self, MessageDto, check_contacts, contact, format_message};
 use crate::messages::send::{self, send_attachment_tui};
 use crate::paths::{ACCOUNTS_DIR, QRCODE};
 use crate::profile::get_profile_tui;
