@@ -10,6 +10,7 @@ pub struct Config {
     pub show_images: bool, // true to show images, false to hide them
     pub attachment_save_dir: PathBuf,
     pub current_account: Option<String>,
+    pub notifications_enabled: bool,
 }
 
 impl Default for Config {
@@ -25,6 +26,7 @@ impl Default for Config {
             color_mode: true,
             show_images: true,
             current_account: None,
+            notifications_enabled: true,
             attachment_save_dir: download_dir,
         }
     }
@@ -125,5 +127,10 @@ impl Config {
         } else {
             Color::default()
         }
+    }
+
+    /// Enbale/Disable notifications for new messages
+    pub fn toggle_notifications(&mut self) {
+        self.notifications_enabled = !self.notifications_enabled;
     }
 }

@@ -1,6 +1,6 @@
 use crate::contacts::get_contacts_tui;
 use crate::messages::attachments::save_attachment;
-use crate::messages::receive::{self, MessageDto, check_contacts, contact};
+use crate::messages::receive::{self, MessageDto, check_contacts, contact, format_message};
 use crate::messages::send::{self, send_attachment_tui};
 use crate::paths::{ACCOUNTS_DIR, QRCODE};
 use crate::profile::get_profile_tui;
@@ -38,8 +38,10 @@ use crate::account_management::{
     list_accounts,
 };
 use crate::devices::link_new_device_for_account;
+use crate::notifications::send_notification;
 use crate::retry_manager::{OutgoingMessage, RetryManager};
 use image::ImageFormat;
+use presage::store::ContentsStore;
 use std::thread;
 use std::time::Duration;
 use tokio::time::interval;
@@ -1093,7 +1095,7 @@ impl App {
                     }
                 }
                 KeyCode::Down | KeyCode::Char('s') => {
-                    if self.config_selected < 1 {
+                    if self.config_selected < 2 {
                         self.config_selected += 1;
                     }
                 }
@@ -1113,6 +1115,12 @@ impl App {
                             self.avatar_image = None;
                         } else if self.avatar_cache.is_some() {
                             self.load_avatar();
+                        }
+                    }
+                    2 => {
+                        self.config.toggle_notifications();
+                        if let Err(e) = self.config.save() {
+                            warn!("Failed to save config: {e:?}");
                         }
                     }
                     _ => {}
@@ -1443,8 +1451,22 @@ pub async fn handle_synchronization(
                         Received::Content(content) => {
                             debug!("Received content");
                             trace!("Received message: {content:#?}");
-                            if initialized && let Err(e) = tx.send(EventApp::ReceiveMessage) {
-                                error!(channel_error = %e);
+
+                            if initialized {
+                                if let Some(formatted_msg) = format_message(&content)
+                                    && !formatted_msg.sender
+                                {
+                                    handle_notification(
+                                        &formatted_msg,
+                                        &current_contacts_mutex,
+                                        &manager,
+                                    )
+                                    .await;
+                                }
+
+                                if let Err(e) = tx.send(EventApp::ReceiveMessage) {
+                                    error!(channel_error = %e);
+                                }
                             }
                         }
                     }
@@ -1542,6 +1564,72 @@ pub async fn handle_synchronization(
                 tokio::time::sleep(Duration::from_secs(3)).await;
             }
         }
+    }
+}
+
+async fn handle_notification(
+    formatted_msg: &MessageDto,
+    current_contacts_mutex: &AsyncContactsMap,
+    manager: &Manager<SqliteStore, Registered>,
+) {
+    let config = Config::load();
+    if !config.notifications_enabled {
+        return;
+    }
+
+    let (sender_name, group_name) = {
+        let contacts = current_contacts_mutex.lock().await;
+        let sender = contacts
+            .get(&formatted_msg.uuid)
+            .map(|c| {
+                if !c.name.is_empty() {
+                    c.name.clone()
+                } else if let Some(phone) = &c.phone_number {
+                    phone.to_string()
+                } else {
+                    formatted_msg.uuid.to_string()
+                }
+            })
+            .unwrap_or_else(|| formatted_msg.uuid.to_string());
+
+        debug!(
+            "Sender UUID: {}, Resolved name: {}",
+            formatted_msg.uuid, sender
+        );
+
+        let group = if let Some(group_context) = &formatted_msg.group_context {
+            if let Some(master_key_bytes) = &group_context.master_key {
+                let mut master_key = [0u8; 32];
+                master_key.copy_from_slice(&master_key_bytes[..32]);
+
+                manager
+                    .store()
+                    .group(master_key)
+                    .await
+                    .ok()
+                    .flatten()
+                    .map(|g| g.title)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        (sender, group)
+    };
+
+    let title = if let Some(group) = group_name {
+        format!("{sender_name} → {group}")
+    } else {
+        sender_name
+    };
+
+    info!("Attempting notification for message from: {}", title);
+    if let Err(e) = send_notification(&title, &formatted_msg.text) {
+        error!("Failed to send notification: {}", e);
+    } else {
+        info!("Notification sent successfully");
     }
 }
 
