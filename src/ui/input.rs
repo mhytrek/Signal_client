@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
-use crate::app::{App, CurrentScreen, InputFocus};
+use crate::{app::{App, CurrentScreen, InputFocus}, ui::input};
 // renders input and attachment boxes
 pub fn render_input_and_attachment(frame: &mut Frame, app: &App, vertical_chunks: &[Rect]) {
     let input_area_chunks = Layout::default()
@@ -14,8 +14,13 @@ pub fn render_input_and_attachment(frame: &mut Frame, app: &App, vertical_chunks
         .constraints([Constraint::Ratio(3, 5), Constraint::Ratio(2, 5)])
         .split(vertical_chunks[1]);
 
+    let input_title = match !app.quoted_message.is_none(){
+        true => "Input - Replying",
+        false => "Input",
+    };
+
     let input_window = Paragraph::new(app.recipients[app.selected_recipient].1.clone())
-        .block(Block::default().title("Input").borders(Borders::ALL));
+        .block(Block::default().title(input_title).borders(Borders::ALL));
 
     let attachment_title = match &app.attachment_error {
         Some(error) => format!("Attachment Path - ERROR: {error}"),
