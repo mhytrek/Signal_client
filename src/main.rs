@@ -21,7 +21,8 @@ async fn main() -> Result<()> {
         Command::ListGroups => cli::print_groups().await?,
         Command::RunApp => tui::run_tui().await?,
         Command::SendMessage(args) => {
-            messages::send::contact::send_message_cli(args.recipient, args.text_message).await?
+            messages::send::contact::send_message_cli(args.recipient, args.text_message, args.quote)
+                .await?
         }
         Command::ListMessages(args) => match (args.contact, args.group) {
             (Some(c), None) => cli::print_messages_from_contact(c, args.from).await?,
@@ -35,6 +36,7 @@ async fn main() -> Result<()> {
                 args.recipient,
                 args.text_message,
                 args.attachment_path,
+                args.quote,
             )
             .await?
         }

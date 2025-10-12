@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::account_management::create_registered_manager;
 use crate::messages::attachments::create_attachment;
+use crate::messages::format_message;
 use crate::messages::receive::MessageDto;
 use crate::messages::receive::receive_messages_cli;
 use anyhow::{Result, bail};
@@ -152,9 +153,26 @@ pub async fn send_delete_message_tui(
 }
 
 /// sends text message to recipient ( phone number or name ), for usage with CLI
-pub async fn send_message_cli(recipient: String, text_message: String) -> Result<()> {
+pub async fn send_message_cli(
+    recipient: String,
+    text_message: String,
+    quoted_message: Option<u64>,
+) -> Result<()> {
     let mut manager = create_registered_manager().await?;
-    send_message(&mut manager, recipient, text_message, None).await
+    let quoted_message_dto = match quoted_message {
+        Some(quote_ts) => {
+            let recipient_uuid = Uuid::from_str(&recipient)?;
+            let thread = Thread::Contact(recipient_uuid);
+            let quoted_data_message = manager.store().message(&thread, quote_ts).await?;
+            if let Some(content) = quoted_data_message {
+                format_message(&content)
+            } else {
+                None
+            }
+        }
+        None => None,
+    };
+    send_message(&mut manager, recipient, text_message, quoted_message_dto).await
 }
 
 async fn send_attachment(

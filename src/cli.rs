@@ -3,9 +3,9 @@ use crate::{
     groups::list_groups_cli,
     messages::receive::{MessageDto, contact, group, receive_messages_cli},
     profile::{get_my_profile_avatar_cli, get_profile_cli},
+    ui::utils::get_local_timestamp,
 };
 use anyhow::Result;
-use chrono::{DateTime, Local, Utc};
 use presage::model::{contacts::Contact, groups::Group};
 use viuer::{Config, print_from_file};
 
@@ -52,22 +52,33 @@ pub async fn print_groups() -> Result<()> {
 }
 
 fn print_message(message: &MessageDto) {
-    let millis = message.timestamp;
-    let secs = (millis / 1000) as i64;
-    let datetime_utc: DateTime<Utc> = DateTime::from_timestamp(secs, 0).expect("Invalid timestamp");
-    let datetime_local = datetime_utc.with_timezone(&Local);
+    let datetime_local = get_local_timestamp(message.timestamp);
+
+    let quote_text = match &message.quote {
+        Some(qu) => {
+            let datetime_guote_utc = get_local_timestamp(qu.id());
+            format!(
+                "┆ Reply:\n┆ {}\n┆ {}\n",
+                datetime_guote_utc.format("%Y-%m-%d %H:%M:%S"),
+                qu.text.clone().unwrap_or("<no text>".to_string())
+            )
+        }
+        None => "".to_string(),
+    };
 
     match message.sender {
         true => {
             println!(
-                "[{}] Me -> {}",
+                "{}[{}] Me -> {}",
+                quote_text,
                 datetime_local.format("%Y-%m-%d %H:%M:%S"),
                 message.text
             );
         }
         false => {
             println!(
-                "[{}] Them <- {}",
+                "{}[{}] Them <- {}",
+                quote_text,
                 datetime_local.format("%Y-%m-%d %H:%M:%S"),
                 message.text
             );
