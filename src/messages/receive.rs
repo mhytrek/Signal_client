@@ -14,7 +14,7 @@ use presage::libsignal_service::prelude::Content;
 use presage::libsignal_service::prelude::Uuid;
 use presage::manager::{Manager, Registered};
 use presage::model::messages::Received;
-use presage::proto::data_message:: Quote;
+use presage::proto::data_message::Quote;
 use presage::proto::{
     AttachmentPointer, DataMessage, GroupContextV2, SyncMessage, sync_message::Sent,
 };
@@ -94,22 +94,25 @@ async fn list_messages(
         .collect())
 }
 
-fn format_data_message(data_message: &DataMessage) -> (Option<String>,Option<Quote>) {
+fn format_data_message(data_message: &DataMessage) -> (Option<String>, Option<Quote>) {
     match data_message {
         DataMessage {
             body: Some(body),
-            quote, ..
+            quote,
+            ..
         } => {
             let text = body.to_string();
-            ((!text.is_empty()).then_some(text),quote.clone())
+            ((!text.is_empty()).then_some(text), quote.clone())
         }
         DataMessage {
             flags: Some(flag),
-            quote, ..
-        } if env::var(SIGNAL_DISPLAY_FLAGS).is_ok() => {
-            (Some(format!("[FLAG] Data message (flag: {flag})")),quote.clone())
-        }
-        _ => (None,None),
+            quote,
+            ..
+        } if env::var(SIGNAL_DISPLAY_FLAGS).is_ok() => (
+            Some(format!("[FLAG] Data message (flag: {flag})")),
+            quote.clone(),
+        ),
+        _ => (None, None),
     }
 }
 
@@ -117,7 +120,7 @@ fn format_data_message(data_message: &DataMessage) -> (Option<String>,Option<Quo
 pub fn format_message(content: &Content) -> Option<MessageDto> {
     let timestamp: u64 = content.timestamp();
     let uuid = content.metadata.sender.raw_uuid();
-    let (text, sender,quote) = get_message_text(content);
+    let (text, sender, quote) = get_message_text(content);
     let group_context = get_message_group_context(content);
     text.map(|text| MessageDto {
         uuid,
@@ -130,10 +133,10 @@ pub fn format_message(content: &Content) -> Option<MessageDto> {
     })
 }
 
-fn get_message_text(content: &Content) -> (Option<String>, bool,Option<Quote>) {
+fn get_message_text(content: &Content) -> (Option<String>, bool, Option<Quote>) {
     let mut sender = false;
-    let (text,quote): (Option<String>,Option<Quote>) = match &content.body {
-        ContentBody::NullMessage(_) => (Some("[NULL] <null message>".to_string()),None),
+    let (text, quote): (Option<String>, Option<Quote>) = match &content.body {
+        ContentBody::NullMessage(_) => (Some("[NULL] <null message>".to_string()), None),
         ContentBody::DataMessage(data_message) => format_data_message(data_message),
         ContentBody::SynchronizeMessage(sync_message) => match sync_message {
             SyncMessage {
@@ -147,17 +150,17 @@ fn get_message_text(content: &Content) -> (Option<String>, bool,Option<Quote>) {
                 sender = true;
                 format_data_message(data_message)
             }
-            _ => (None,None),
+            _ => (None, None),
         },
-        ContentBody::CallMessage(_) => (Some("[CALL]".to_string()),None),
-        ContentBody::ReceiptMessage(_) => (None,None),
+        ContentBody::CallMessage(_) => (Some("[CALL]".to_string()), None),
+        ContentBody::ReceiptMessage(_) => (None, None),
         // ContentBody::TypingMessage(_) => Some("Typing...".to_string()),
-        ContentBody::TypingMessage(_) => (None,None),
-        ContentBody::StoryMessage(_) => (Some("[STORY] <story message>".to_string()),None),
-        ContentBody::PniSignatureMessage(_) => (None,None),
-        ContentBody::EditMessage(_) => (Some("[EDIT] <edit message>".to_string()),None),
+        ContentBody::TypingMessage(_) => (None, None),
+        ContentBody::StoryMessage(_) => (Some("[STORY] <story message>".to_string()), None),
+        ContentBody::PniSignatureMessage(_) => (None, None),
+        ContentBody::EditMessage(_) => (Some("[EDIT] <edit message>".to_string()), None),
     };
-    (text, sender,quote)
+    (text, sender, quote)
 }
 
 fn get_message_group_context(content: &Content) -> Option<GroupContextV2> {
@@ -195,7 +198,7 @@ fn map_attachment_to_message(
         sender: true,
         group_context,
         attachment: Some(att.clone()),
-        quote:None,
+        quote: None,
     }
 }
 

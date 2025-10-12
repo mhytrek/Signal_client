@@ -1,6 +1,9 @@
 use presage::proto::data_message::Quote;
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect}, style::{Modifier, Style}, widgets::{Block, BorderType, Borders, Paragraph, Wrap}, Frame
+    Frame,
+    layout::{Constraint, Direction, Layout, Rect},
+    style::{Modifier, Style},
+    widgets::{Block, BorderType, Borders, Paragraph, Wrap},
 };
 
 use crate::{
@@ -45,7 +48,7 @@ pub fn render_chat(frame: &mut Frame, app: &App, area: Rect) {
         let min_width = 21; // hardcoded date format width
 
         let (heights, widths) =
-            calculate_message_dimensions(messages, max_width, msg_padding, min_width,app);
+            calculate_message_dimensions(messages, max_width, msg_padding, min_width, app);
         let last_visible_start = calculate_last_visible_start(&heights, available_height);
         let start_index = app.message_selected.min(last_visible_start);
         let visible_msgs = get_visible_messages(
@@ -142,7 +145,8 @@ fn calculate_quote_block(app: &App, quote: &Quote, max_width: usize) -> (u16, us
         .count()
         .max(quoted_preview.chars().count());
 
-    let quote_lines = (1 + (quoted_preview.len() / max_width + 1) + (info_line.len() / max_width + 1)) as u16;
+    let quote_lines =
+        (1 + (quoted_preview.len() / max_width + 1) + (info_line.len() / max_width + 1)) as u16;
     (quote_lines, max_line_len.min(max_width))
 }
 
@@ -217,16 +221,21 @@ fn render_messages(
         }
 
         if let Some(quoted) = &app.quoted_message
-            && quoted.timestamp == msg.timestamp {
-                style = style.add_modifier(Modifier::REVERSED);
-            }
+            && quoted.timestamp == msg.timestamp
+        {
+            style = style.add_modifier(Modifier::REVERSED);
+        }
 
         let text_content = build_message_content(app, msg);
 
         let para: Paragraph = match visibility {
             Visibility::Full => Paragraph::new(text_content)
                 .style(style)
-                .block(block.clone().title(datetime_local.format("%Y-%m-%d %H:%M:%S").to_string()))
+                .block(
+                    block
+                        .clone()
+                        .title(datetime_local.format("%Y-%m-%d %H:%M:%S").to_string()),
+                )
                 .wrap(Wrap { trim: false }),
 
             Visibility::Partial(remaining_height) => {
@@ -238,7 +247,11 @@ fn render_messages(
                     .map(|s| s.to_string())
                     .collect();
 
-                let visible_text = visible_lines.into_iter().rev().collect::<Vec<_>>().join("\n");
+                let visible_text = visible_lines
+                    .into_iter()
+                    .rev()
+                    .collect::<Vec<_>>()
+                    .join("\n");
                 height = *remaining_height;
 
                 Paragraph::new(visible_text)
@@ -310,9 +323,10 @@ fn render_quote_block(app: &App, quote: &Quote) -> String {
 fn get_display_name(app: &App, author_aci: &str) -> String {
     for (recipient, _) in &app.recipients {
         if let RecipientId::Contact(uuid) = recipient.id()
-            && uuid.to_string() == author_aci {
-                return recipient.display_name().to_string();
-            }
+            && uuid.to_string() == author_aci
+        {
+            return recipient.display_name().to_string();
+        }
     }
     "Unknown".to_string()
 }

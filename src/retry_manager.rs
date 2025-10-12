@@ -18,7 +18,7 @@ pub struct OutgoingMessage {
     pub id: String,
     pub recipient: RecipientId,
     pub text: String,
-    pub quoted_message:Option<MessageDto>,
+    pub quoted_message: Option<MessageDto>,
     pub attachment_path: Option<String>,
     pub status: DeliveryStatus,
     pub retry_count: u32,
@@ -27,7 +27,12 @@ pub struct OutgoingMessage {
 }
 
 impl OutgoingMessage {
-    pub fn new(recipient: RecipientId, text: String, attachment_path: Option<String>,quoted_message:Option<MessageDto>) -> Self {
+    pub fn new(
+        recipient: RecipientId,
+        text: String,
+        attachment_path: Option<String>,
+        quoted_message: Option<MessageDto>,
+    ) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
             recipient,

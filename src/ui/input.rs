@@ -14,7 +14,7 @@ pub fn render_input_and_attachment(frame: &mut Frame, app: &App, vertical_chunks
         .constraints([Constraint::Ratio(3, 5), Constraint::Ratio(2, 5)])
         .split(vertical_chunks[1]);
 
-    let input_title = match app.quoted_message.is_some(){
+    let input_title = match app.quoted_message.is_some() {
         true => "Input - Replying",
         false => "Input",
     };

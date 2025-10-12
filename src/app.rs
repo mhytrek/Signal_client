@@ -251,8 +251,8 @@ pub enum EventApp {
     UiStatus(UiStatusMessage),
 }
 pub enum EventSend {
-    SendText(RecipientId, String,Option<MessageDto>),
-    SendAttachment(RecipientId, String,String,Option<MessageDto>),
+    SendText(RecipientId, String, Option<MessageDto>),
+    SendAttachment(RecipientId, String, String, Option<MessageDto>),
     GetMessagesForContact(String),
     GetMessagesForGroup(GroupMasterKeyBytes),
     GetContactInfo(String),
@@ -726,13 +726,17 @@ impl App {
                         recipient.id(),
                         message_text.clone(),
                         self.attachment_path.clone(),
-                        self.quoted_message.clone()
+                        self.quoted_message.clone(),
                     ))
                     .unwrap();
                     self.attachment_path.clear();
                 } else {
-                    tx.send(EventSend::SendText(recipient.id(), message_text,self.quoted_message.clone()))
-                        .unwrap();
+                    tx.send(EventSend::SendText(
+                        recipient.id(),
+                        message_text,
+                        self.quoted_message.clone(),
+                    ))
+                    .unwrap();
                 }
 
                 input.clear();
@@ -843,7 +847,7 @@ impl App {
                     }
                 }
 
-                KeyCode::Char('r') =>{
+                KeyCode::Char('r') => {
                     let selected_recipient_id = self.recipients[self.selected_recipient].0.id();
                     self.quoted_message = match selected_recipient_id {
                         RecipientId::Contact(uuid) => {
@@ -1752,8 +1756,13 @@ async fn handle_retry_tick(
                     .await
                 }
                 RecipientId::Group(master_key) => {
-                    send::group::send_message_tui(*master_key, msg.text.clone(), manager.clone(),msg.quoted_message.clone())
-                        .await
+                    send::group::send_message_tui(
+                        *master_key,
+                        msg.text.clone(),
+                        manager.clone(),
+                        msg.quoted_message.clone(),
+                    )
+                    .await
                 }
             }
         };
@@ -1794,7 +1803,7 @@ async fn handle_incoming_event(
     local_pool: &LocalPoolHandle,
 ) {
     match event {
-        EventSend::SendText(recipient, text,quoted_message) => {
+        EventSend::SendText(recipient, text, quoted_message) => {
             handle_send_text_event(
                 recipient,
                 text,
@@ -1806,7 +1815,7 @@ async fn handle_incoming_event(
             )
             .await;
         }
-        EventSend::SendAttachment(recipient, text, attachment_path,quoted_message) => {
+        EventSend::SendAttachment(recipient, text, attachment_path, quoted_message) => {
             handle_send_attachment_event(
                 recipient,
                 text,
@@ -1871,7 +1880,12 @@ async fn handle_send_text_event(
     retry_manager: &Arc<Mutex<RetryManager>>,
     local_pool: &LocalPoolHandle,
 ) {
-    let outgoing_msg = OutgoingMessage::new(recipient.clone(), text.clone(), None,quoted_message.clone());
+    let outgoing_msg = OutgoingMessage::new(
+        recipient.clone(),
+        text.clone(),
+        None,
+        quoted_message.clone(),
+    );
     let message_id = {
         let mut retry_mgr = retry_manager.lock().await;
         retry_mgr.add_message(outgoing_msg)
@@ -1887,10 +1901,22 @@ async fn handle_send_text_event(
     local_pool.spawn_pinned(move || async move {
         let send_result = match recipient_clone {
             RecipientId::Contact(uuid) => {
-                send::contact::send_message_tui(uuid.to_string(), text_clone,quoted_message_clone, manager_clone).await
+                send::contact::send_message_tui(
+                    uuid.to_string(),
+                    text_clone,
+                    quoted_message_clone,
+                    manager_clone,
+                )
+                .await
             }
             RecipientId::Group(master_key) => {
-                send::group::send_message_tui(master_key, text_clone, manager_clone,quoted_message_clone).await
+                send::group::send_message_tui(
+                    master_key,
+                    text_clone,
+                    manager_clone,
+                    quoted_message_clone,
+                )
+                .await
             }
         };
 
