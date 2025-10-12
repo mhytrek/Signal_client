@@ -139,7 +139,7 @@ fn calculate_quote_block(app: &App, quote: &Quote, max_width: usize) -> (u16, us
         .take(80)
         .collect::<String>();
 
-    let info_line = format!("{} · {}", author_name, quote_time);
+    let info_line = format!("{author_name} · {quote_time}");
     let max_line_len = info_line
         .chars()
         .count()
@@ -313,11 +313,7 @@ fn render_quote_block(app: &App, quote: &Quote) -> String {
         .collect::<String>();
 
     format!(
-        "┆ {} · {}\n┆ {}\n",
-        author_name,
-        quote_time,
-        quoted_preview.trim()
-    )
+        "┆ {author_name} · {quote_time}\n┆ {}\n", quoted_preview.trim())
 }
 
 fn get_display_name(app: &App, author_aci: &str) -> String {
