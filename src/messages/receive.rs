@@ -21,7 +21,7 @@ use presage::proto::{
 use presage::store::{ContentExt, ContentsStore, Thread};
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
 use tokio::sync::Mutex;
-use tracing::{info, trace};
+use tracing::trace;
 
 pub mod contact;
 pub mod group;

@@ -1931,6 +1931,7 @@ async fn handle_send_text_event(
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_send_attachment_event(
     recipient: RecipientId,
     text: String,

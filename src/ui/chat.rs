@@ -216,11 +216,10 @@ fn render_messages(
             style = style.add_modifier(Modifier::REVERSED);
         }
 
-        if let Some(quoted) = &app.quoted_message {
-            if quoted.timestamp == msg.timestamp {
+        if let Some(quoted) = &app.quoted_message
+            && quoted.timestamp == msg.timestamp {
                 style = style.add_modifier(Modifier::REVERSED);
             }
-        }
 
         let text_content = build_message_content(app, msg);
 
@@ -310,11 +309,10 @@ fn render_quote_block(app: &App, quote: &Quote) -> String {
 
 fn get_display_name(app: &App, author_aci: &str) -> String {
     for (recipient, _) in &app.recipients {
-        if let RecipientId::Contact(uuid) = recipient.id() {
-            if uuid.to_string() == author_aci {
+        if let RecipientId::Contact(uuid) = recipient.id()
+            && uuid.to_string() == author_aci {
                 return recipient.display_name().to_string();
             }
-        }
     }
     "Unknown".to_string()
 }

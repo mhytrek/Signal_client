@@ -56,7 +56,7 @@ pub fn create_data_message(text_message: String, timestamp: u64,quote_message: O
                 .map_err(|_| anyhow::anyhow!("Failed to parse text message!"))?,
         ),
         timestamp: Some(timestamp),
-        quote: quote,
+        quote,
         ..Default::default()
     };
     Ok(data_msg)

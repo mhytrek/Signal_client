@@ -155,7 +155,7 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
 
             let mut reply_info = "";
 
-            if !app.quoted_message.is_none(){
+            if app.quoted_message.is_some(){
                 reply_info = " | (CTRL+r) to stop replying"
             }
 
