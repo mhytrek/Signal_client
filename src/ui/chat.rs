@@ -313,7 +313,9 @@ fn render_quote_block(app: &App, quote: &Quote) -> String {
         .collect::<String>();
 
     format!(
-        "┆ {author_name} · {quote_time}\n┆ {}\n", quoted_preview.trim())
+        "┆ {author_name} · {quote_time}\n┆ {}\n",
+        quoted_preview.trim()
+    )
 }
 
 fn get_display_name(app: &App, author_aci: &str) -> String {
