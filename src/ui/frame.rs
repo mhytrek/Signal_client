@@ -148,13 +148,19 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
             };
 
             let base_text = if app.attachment_error.is_some() {
-                "(q) to exit | (ENTER) to send | (TAB) to switch input/attachment | Fix attachment path to send | (CTRL+e) to inspect messages"
+                "(q) to exit | Fix attachment path to send | (TAB) to switch input/attachment | (CTRL+e) to inspect messages"
             } else {
                 "(q) to exit | (ENTER) to send | (TAB) to switch input/attachment | (CTRL+e) to inspect messages"
             };
 
+            let mut reply_info = "";
+
+            if app.quoted_message.is_some() {
+                reply_info = " | (CTRL+r) to stop replying"
+            }
+
             Span::styled(
-                format!("{base_text}{retry_info}"),
+                format!("{base_text}{reply_info}{retry_info}"),
                 if app.attachment_error.is_some() {
                     Style::default().fg(app.config.get_error_color())
                 } else {
@@ -188,7 +194,7 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
 
             Span::styled(
                 format!(
-                    "(q) to exit inspection mode | (← or ESC) to go back to main{save_attachment_info}"
+                    "(q) to exit inspection mode | (← or ESC) to go back to main | (r) to reply{save_attachment_info}"
                 ),
                 Style::default().fg(app.config.get_primary_color()),
             )

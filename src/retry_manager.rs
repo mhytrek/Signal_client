@@ -1,4 +1,5 @@
 use crate::app::RecipientId;
+use crate::messages::receive::MessageDto;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -17,6 +18,7 @@ pub struct OutgoingMessage {
     pub id: String,
     pub recipient: RecipientId,
     pub text: String,
+    pub quoted_message: Option<MessageDto>,
     pub attachment_path: Option<String>,
     pub status: DeliveryStatus,
     pub retry_count: u32,
@@ -25,12 +27,18 @@ pub struct OutgoingMessage {
 }
 
 impl OutgoingMessage {
-    pub fn new(recipient: RecipientId, text: String, attachment_path: Option<String>) -> Self {
+    pub fn new(
+        recipient: RecipientId,
+        text: String,
+        attachment_path: Option<String>,
+        quoted_message: Option<MessageDto>,
+    ) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
             recipient,
             text,
             attachment_path,
+            quoted_message,
             status: DeliveryStatus::Pending,
             retry_count: 0,
             created_at: Self::current_timestamp(),

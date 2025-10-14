@@ -14,17 +14,19 @@ use presage::libsignal_service::prelude::Content;
 use presage::libsignal_service::prelude::Uuid;
 use presage::manager::{Manager, Registered};
 use presage::model::messages::Received;
+use presage::proto::data_message::Quote;
 use presage::proto::{
     AttachmentPointer, DataMessage, GroupContextV2, SyncMessage, sync_message::Sent,
 };
 use presage::store::{ContentExt, ContentsStore, Thread};
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
 use tokio::sync::Mutex;
-use tracing::{info, trace};
+use tracing::trace;
 
 pub mod contact;
 pub mod group;
 
+#[derive(Clone)]
 pub struct MessageDto {
     pub uuid: Uuid,
     pub timestamp: u64,
@@ -32,6 +34,7 @@ pub struct MessageDto {
     pub sender: bool,
     pub group_context: Option<GroupContextV2>,
     pub attachment: Option<AttachmentPointer>,
+    pub quote: Option<Quote>,
 }
 
 async fn loop_no_contents(messages: impl Stream<Item = Received>) {
@@ -91,20 +94,25 @@ async fn list_messages(
         .collect())
 }
 
-fn format_data_message(data_message: &DataMessage) -> Option<String> {
+fn format_data_message(data_message: &DataMessage) -> (Option<String>, Option<Quote>) {
     match data_message {
         DataMessage {
-            body: Some(body), ..
+            body: Some(body),
+            quote,
+            ..
         } => {
             let text = body.to_string();
-            (!text.is_empty()).then_some(text)
+            ((!text.is_empty()).then_some(text), quote.clone())
         }
         DataMessage {
-            flags: Some(flag), ..
-        } if env::var(SIGNAL_DISPLAY_FLAGS).is_ok() => {
-            Some(format!("[FLAG] Data message (flag: {flag})"))
-        }
-        _ => None,
+            flags: Some(flag),
+            quote,
+            ..
+        } if env::var(SIGNAL_DISPLAY_FLAGS).is_ok() => (
+            Some(format!("[FLAG] Data message (flag: {flag})")),
+            quote.clone(),
+        ),
+        _ => (None, None),
     }
 }
 
@@ -112,7 +120,7 @@ fn format_data_message(data_message: &DataMessage) -> Option<String> {
 pub fn format_message(content: &Content) -> Option<MessageDto> {
     let timestamp: u64 = content.timestamp();
     let uuid = content.metadata.sender.raw_uuid();
-    let (text, sender) = get_message_text(content);
+    let (text, sender, quote) = get_message_text(content);
     let group_context = get_message_group_context(content);
     text.map(|text| MessageDto {
         uuid,
@@ -121,13 +129,14 @@ pub fn format_message(content: &Content) -> Option<MessageDto> {
         sender,
         group_context,
         attachment: None,
+        quote,
     })
 }
 
-fn get_message_text(content: &Content) -> (Option<String>, bool) {
+fn get_message_text(content: &Content) -> (Option<String>, bool, Option<Quote>) {
     let mut sender = false;
-    let text: Option<String> = match &content.body {
-        ContentBody::NullMessage(_) => Some("[NULL] <null message>".to_string()),
+    let (text, quote): (Option<String>, Option<Quote>) = match &content.body {
+        ContentBody::NullMessage(_) => (Some("[NULL] <null message>".to_string()), None),
         ContentBody::DataMessage(data_message) => format_data_message(data_message),
         ContentBody::SynchronizeMessage(sync_message) => match sync_message {
             SyncMessage {
@@ -141,17 +150,17 @@ fn get_message_text(content: &Content) -> (Option<String>, bool) {
                 sender = true;
                 format_data_message(data_message)
             }
-            _ => None,
+            _ => (None, None),
         },
-        ContentBody::CallMessage(_) => Some("[CALL]".to_string()),
-        ContentBody::ReceiptMessage(_) => None,
+        ContentBody::CallMessage(_) => (Some("[CALL]".to_string()), None),
+        ContentBody::ReceiptMessage(_) => (None, None),
         // ContentBody::TypingMessage(_) => Some("Typing...".to_string()),
-        ContentBody::TypingMessage(_) => None,
-        ContentBody::StoryMessage(_) => Some("[STORY] <story message>".to_string()),
-        ContentBody::PniSignatureMessage(_) => None,
-        ContentBody::EditMessage(_) => Some("[EDIT] <edit message>".to_string()),
+        ContentBody::TypingMessage(_) => (None, None),
+        ContentBody::StoryMessage(_) => (Some("[STORY] <story message>".to_string()), None),
+        ContentBody::PniSignatureMessage(_) => (None, None),
+        ContentBody::EditMessage(_) => (Some("[EDIT] <edit message>".to_string()), None),
     };
-    (text, sender)
+    (text, sender, quote)
 }
 
 fn get_message_group_context(content: &Content) -> Option<GroupContextV2> {
@@ -189,12 +198,12 @@ fn map_attachment_to_message(
         sender: true,
         group_context,
         attachment: Some(att.clone()),
+        quote: None,
     }
 }
 
 /// Format attachements in Content to list of MessageDto
 pub fn format_attachments(content: &Content) -> Vec<MessageDto> {
-    info!("formatting attachments");
     let timestamp = content.timestamp();
     let uuid = content.metadata.sender.raw_uuid();
     let group_context = get_message_group_context(content);

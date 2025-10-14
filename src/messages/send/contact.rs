@@ -1,9 +1,11 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::account_management::create_registered_manager;
+use crate::messages::receive::MessageDto;
 use anyhow::Result;
 use presage::libsignal_service::protocol::ServiceId;
 use presage::proto::DataMessage;
+use presage::proto::data_message::Quote;
 use presage::store::ContentsStore;
 use presage::{
     Manager, libsignal_service::prelude::Uuid, manager::Registered, model::contacts::Contact,
@@ -42,7 +44,20 @@ pub async fn get_address(
     Ok(ServiceId::Aci(recipient_uuid.into()))
 }
 
-pub fn create_data_message(text_message: String, timestamp: u64) -> Result<DataMessage> {
+pub fn create_data_message(
+    text_message: String,
+    timestamp: u64,
+    quote_message: Option<MessageDto>,
+) -> Result<DataMessage> {
+    let quote = match quote_message {
+        Some(mes) => Some(Quote {
+            id: Some(mes.timestamp),
+            text: Some(mes.text),
+            author_aci: Some(mes.uuid.to_string()),
+            ..Default::default()
+        }),
+        None => None,
+    };
     let data_msg = DataMessage {
         body: Some(
             text_message
@@ -50,6 +65,7 @@ pub fn create_data_message(text_message: String, timestamp: u64) -> Result<DataM
                 .map_err(|_| anyhow::anyhow!("Failed to parse text message!"))?,
         ),
         timestamp: Some(timestamp),
+        quote,
         ..Default::default()
     };
     Ok(data_msg)
@@ -72,10 +88,11 @@ async fn send_message(
     manager: &mut Manager<SqliteStore, Registered>,
     recipient: String,
     text_message: String,
+    quoted_message: Option<MessageDto>,
 ) -> Result<()> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
     let recipient_address = get_address(recipient, manager).await?;
-    let data_message = create_data_message(text_message, timestamp)?;
+    let data_message = create_data_message(text_message, timestamp, quoted_message)?;
 
     send(manager, recipient_address, data_message, timestamp).await?;
 
@@ -86,14 +103,15 @@ async fn send_message(
 pub async fn send_message_tui(
     recipient: String,
     text_message: String,
+    quoted_message: Option<MessageDto>,
     mut manager: Manager<SqliteStore, Registered>,
 ) -> Result<()> {
     // let mut manager = create_registered_manager().await?;
-    send_message(&mut manager, recipient, text_message).await
+    send_message(&mut manager, recipient, text_message, quoted_message).await
 }
 
 /// sends text message to recipient ( phone number or name ), for usage with CLI
 pub async fn send_message_cli(recipient: String, text_message: String) -> Result<()> {
     let mut manager = create_registered_manager().await?;
-    send_message(&mut manager, recipient, text_message).await
+    send_message(&mut manager, recipient, text_message, None).await
 }
