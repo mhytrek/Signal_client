@@ -2051,19 +2051,19 @@ async fn handle_send_text_event(
         };
 
         match send_result {
-            // Ok(_) => {
-            //     // Mark as sent in retry manager
-            //     let mut retry_mgr = retry_manager_clone.lock().await;
-            //     retry_mgr.mark_sent(&message_id);
-            //     drop(retry_mgr);
-            //
-            //     let _ =
-            //         tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
-            //     let _ = tx_status_clone.send(EventApp::ReceiveMessage);
-            // }
-            // Err(e) if is_captcha_error(&e) => {
             Ok(_) => {
-                let e = "dummy token aaaa-aaaa-aaaa";
+                // Mark as sent in retry manager
+                let mut retry_mgr = retry_manager_clone.lock().await;
+                retry_mgr.mark_sent(&message_id);
+                drop(retry_mgr);
+
+                let _ =
+                    tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                let _ = tx_status_clone.send(EventApp::ReceiveMessage);
+            }
+            Err(e) if is_captcha_error(&e) => {
+                // Ok(_) => {
+                // let e = "dummy token aaaa-aaaa-aaaa";
                 warn!(error = %e);
                 let token_re =
                     Regex::new(r"^.* token ([a-f0-9-]+)$").expect("Failed to compile RegEx");
