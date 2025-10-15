@@ -33,7 +33,7 @@ uuid = { version = "1.18.0", features = ["v4"] }
 notify-rust = "4"
 directories = "6.0.0"
 regex = "1.11.3"
-arboard = "3.6.1"
+arboard = { version = "3.6.1", features = ["wayland-data-control"] }
 
 [patch.crates-io]
 curve25519-dalek = { git = 'https://github.com/signalapp/curve25519-dalek', tag = 'signal-curve25519-4.1.3' }

@@ -1313,6 +1313,14 @@ impl App {
                         self.captcha_input = input;
                     }
                 }
+                KeyCode::Char('y') => {
+                    const CAPTCHA_URL: &str = "https://signalcaptchas.org/challenge/generate";
+                    if let Some(clipboard) = &mut self.clipboard
+                        && let Err(error) = clipboard.set_text(CAPTCHA_URL)
+                    {
+                        error!(%error, "Unable to copy captcha url into clipboard.");
+                    }
+                }
                 _ => {}
             },
         }
