@@ -1306,7 +1306,34 @@ impl App {
             },
             Syncing => {}
             Recaptcha => match key.code {
-                KeyCode::Enter => self.current_screen = Main,
+                KeyCode::Enter => {
+                    const CAPTCHA_PREFIX: &str = "signalcaptcha://";
+                    let captcha = self.captcha_input.clone();
+
+                    match captcha.strip_prefix(CAPTCHA_PREFIX) {
+                        Some(captcha) => {
+                            if let Err(error) = self
+                                .manager
+                                .as_ref()
+                                .expect("Manager not found")
+                                .submit_recaptcha_challenge(
+                                    self.captcha_token.as_ref().expect(
+                                        "Captcha token not found during active captcha challenge",
+                                    ),
+                                    captcha,
+                                )
+                                .await
+                            {
+                                error!(%error, "Failed to complete captcha challenge.");
+                            }
+                        }
+                        None => {
+                            error!("Invalid captcha input");
+                        }
+                    };
+
+                    self.current_screen = Main;
+                }
                 KeyCode::Char('p') => {
                     if let Some(clipboard) = &mut self.clipboard {
                         let input = clipboard.get_text().unwrap_or_default();
