@@ -1,4 +1,3 @@
-use crate::app::text_state::TextState;
 use crate::contacts::get_contacts_tui;
 use crate::messages::attachments::save_attachment;
 use crate::messages::receive::{self, MessageDto, check_contacts, contact, format_message};
@@ -9,7 +8,7 @@ use crate::ui::render_ui;
 use crate::{AsyncContactsMap, config::Config, contacts, groups};
 use anyhow::{Error, Result, anyhow, bail};
 use arboard::Clipboard;
-use crossterm::event::{self, Event, KeyModifiers, MouseEventKind};
+use crossterm::event::{self, Event, KeyModifiers};
 use crossterm::event::{KeyCode, KeyEventKind};
 use futures::{StreamExt, pin_mut};
 use presage::Manager;
@@ -22,7 +21,6 @@ use presage::proto::AttachmentPointer;
 use presage_store_sqlite::SqliteStore;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
-use ratatui::layout::Position;
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use regex::Regex;
@@ -49,8 +47,6 @@ use presage::store::ContentsStore;
 use std::thread;
 use std::time::Duration;
 use tokio::time::interval;
-
-pub mod text_state;
 
 #[derive(PartialEq, Clone)]
 pub enum RecipientId {
@@ -227,7 +223,6 @@ pub struct App {
 
     pub captcha_token: Option<String>,
     pub captcha_input: String,
-    pub captcha_text_state: TextState,
 
     pub clipboard: Option<Clipboard>,
 }
@@ -246,7 +241,6 @@ pub enum UiStatusMessage {
 
 pub enum EventApp {
     KeyInput(event::KeyEvent),
-    MouseEvent(event::MouseEvent),
     ContactsList(Vec<Box<dyn DisplayRecipient>>),
     LinkingFinished((bool, Option<Manager<SqliteStore, Registered>>)),
     LinkingError(String),
@@ -291,8 +285,6 @@ impl App {
                 None
             }
         };
-
-        const CAPTCHA_TEXT: &str = include_str!("captcha_text.txt");
 
         App {
             uuid: None,
@@ -344,7 +336,6 @@ impl App {
 
             captcha_token: None,
             captcha_input: String::new(),
-            captcha_text_state: TextState::new(CAPTCHA_TEXT),
 
             clipboard,
         }
@@ -549,10 +540,6 @@ impl App {
                     return Ok(false);
                 }
                 self.handle_key_event(key, tx).await
-            }
-            EventApp::MouseEvent(event) => {
-                self.handle_mouse_event(event);
-                Ok(false)
             }
             EventApp::NetworkStatusChanged(status) => {
                 self.network_status = status;
@@ -1331,27 +1318,6 @@ impl App {
         }
         Ok(false)
     }
-
-    fn handle_mouse_event(&mut self, event: event::MouseEvent) {
-        #[allow(clippy::single_match)]
-        match event.kind {
-            MouseEventKind::Drag(_) => self.handle_selection(event),
-            MouseEventKind::Down(_) => self.captcha_text_state.clear_selection(),
-            _ => {}
-        }
-    }
-
-    fn handle_selection(&mut self, event: event::MouseEvent) {
-        #[allow(clippy::single_match)]
-        match self.current_screen {
-            CurrentScreen::Recaptcha => {
-                let (x, y) = (event.row, event.column);
-                let event_position = Position::new(x, y);
-                self.captcha_text_state.set_selection(event_position);
-            }
-            _ => {}
-        }
-    }
 }
 
 fn is_connection_error(e: &Error) -> bool {
@@ -1528,12 +1494,6 @@ pub fn handle_input_events(tx: mpsc::Sender<EventApp>) {
                 Event::Resize(cols, rows) => {
                     if tx.send(EventApp::Resize(cols, rows)).is_err() {
                         warn!("Failed to send resize event");
-                        break;
-                    }
-                }
-                Event::Mouse(mouse_event) => {
-                    if tx.send(EventApp::MouseEvent(mouse_event)).is_err() {
-                        warn!("Failed to send mouse event");
                         break;
                     }
                 }

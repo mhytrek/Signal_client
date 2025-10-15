@@ -8,13 +8,14 @@ use ratatui::{
 
 use crate::app::App;
 
+const CAPTCHA_TEXT: &str = include_str!("captcha_text.txt");
+
 pub fn render_captcha(frame: &mut Frame, area: Rect, app: &mut App) {
     // let area = centered_rect(80, 35, area);
     let layout = Layout::vertical([Constraint::Fill(1), Constraint::Length(3)]).split(area);
     let block = Block::default().borders(Borders::ALL);
-    let captcha_text = app.captcha_text_state.to_string();
 
-    let styled_text = Text::styled(captcha_text, Style::default().fg(Color::default()));
+    let styled_text = Text::styled(CAPTCHA_TEXT, Style::default().fg(Color::default()));
     let input_text = Text::styled(&app.captcha_input, Style::default().fg(Color::default()));
 
     let paragraph = Paragraph::new(styled_text)
