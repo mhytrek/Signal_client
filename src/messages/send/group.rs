@@ -104,7 +104,7 @@ async fn send_attachment(
         .next()
         .ok_or_else(|| anyhow::anyhow!("Failed to get attachment pointer"))?;
 
-    let mut data_message = create_data_message(text_message, master_key, timestamp);
+    let mut data_message = create_data_message(text_message, master_key, timestamp, None);
     data_message.attachments = vec![attachment_pointer];
 
     send(manager, master_key, data_message, timestamp).await?;
