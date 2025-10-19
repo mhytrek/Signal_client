@@ -1328,7 +1328,9 @@ impl App {
                             }
                         }
                         None => {
+                            self.captcha_input = "Invalid captcha result! Result should start with `signalcaptcha://`".to_string();
                             error!("Invalid captcha input");
+                            return Ok(false);
                         }
                     };
 
@@ -1347,6 +1349,9 @@ impl App {
                     {
                         error!(%error, "Unable to copy captcha url into clipboard.");
                     }
+                }
+                KeyCode::Esc => {
+                    self.current_screen = CurrentScreen::Main;
                 }
                 _ => {}
             },
@@ -2057,8 +2062,6 @@ async fn handle_send_text_event(
                 let _ = tx_status_clone.send(EventApp::ReceiveMessage);
             }
             Err(e) if is_captcha_error(&e) => {
-                // Ok(_) => {
-                // let e = "dummy token aaaa-aaaa-aaaa";
                 warn!(error = %e);
                 let token_re =
                     Regex::new(r"^.* token ([a-f0-9-]+)$").expect("Failed to compile RegEx");
