@@ -7,7 +7,7 @@ use crate::messages::receive::receive_messages_cli;
 use anyhow::Result;
 use presage::libsignal_service::protocol::ServiceId;
 use presage::proto::DataMessage;
-use presage::proto::data_message::Quote;
+use presage::proto::data_message::{Delete, Quote};
 use presage::store::ContentsStore;
 use presage::{
     Manager, libsignal_service::prelude::Uuid, manager::Registered, model::contacts::Contact,
@@ -73,6 +73,16 @@ pub fn create_data_message(
     Ok(data_msg)
 }
 
+pub fn create_delete_data_message(timestamp:u64,target_send_timestamp:u64) -> Result<DataMessage>{
+    let del_mes = Delete{ target_sent_timestamp: Some(target_send_timestamp) };
+    let data_msg = DataMessage {
+        timestamp:Some(timestamp),
+        delete: Some(del_mes),
+        ..Default::default()
+    };
+    Ok(data_msg)
+}
+
 pub async fn send(
     manager: &mut Manager<SqliteStore, Registered>,
     recipient_addr: ServiceId,
@@ -101,6 +111,20 @@ async fn send_message(
     Ok(())
 }
 
+async fn send_delete_message(
+    manager: &mut Manager<SqliteStore, Registered>,
+    recipient: String,
+    target_send_timestamp:u64
+) -> Result<()> {
+    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
+    let recipient_address = get_address(recipient, manager).await?;
+    let data_message = create_delete_data_message(timestamp,target_send_timestamp)?;
+
+    send(manager, recipient_address, data_message, timestamp).await?;
+
+    Ok(())
+}
+
 /// sends text message to recipient ( phone number or name ), for usage with TUI
 pub async fn send_message_tui(
     recipient: String,
@@ -110,6 +134,14 @@ pub async fn send_message_tui(
 ) -> Result<()> {
     // let mut manager = create_registered_manager().await?;
     send_message(&mut manager, recipient, text_message, quoted_message).await
+}
+
+pub async fn send_delete_message_tui(
+    mut manager: Manager<SqliteStore, Registered>,
+    recipient: String,
+    target_send_timestamp:u64
+) -> Result<()> {
+    send_delete_message(&mut manager, recipient, target_send_timestamp).await
 }
 
 /// sends text message to recipient ( phone number or name ), for usage with CLI
