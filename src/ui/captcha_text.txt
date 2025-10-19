@@ -4,9 +4,10 @@ send messages only to people who have messaged you
 during the current session.
 
 1. Open https://signalcaptchas.org/challenge/generate
+   - Press 'y' to copy URL to clipboard
 2. Complete the captcha challenge.
 3. Upon completion right click the "Open Signal"
    button that appears under the captcha box and
    copy the link.
-4. Paste the link in the input field below
-   and press ENTER.
+4. Paste the link in the input field below (press 'p' to
+   paste from clipboard) and press ENTER.
