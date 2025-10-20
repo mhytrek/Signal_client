@@ -1,18 +1,20 @@
+use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::account_management::create_registered_manager;
 use crate::messages::attachments::create_attachment;
 use crate::messages::receive::MessageDto;
 use crate::messages::receive::receive_messages_cli;
-use anyhow::Result;
+use anyhow::{bail, Result};
 use presage::libsignal_service::protocol::ServiceId;
 use presage::proto::DataMessage;
 use presage::proto::data_message::{Delete, Quote};
-use presage::store::ContentsStore;
+use presage::store::{ContentsStore, Thread};
 use presage::{
     Manager, libsignal_service::prelude::Uuid, manager::Registered, model::contacts::Contact,
 };
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
+use tracing::error;
 
 /// finds contact uuid from string that can be contact_name or contact phone_number
 pub async fn find_uuid(
@@ -218,11 +220,24 @@ pub async fn send_attachment_cli(
     send_attachment(&mut manager, recipient, text_message, attachment_path, None).await
 
 }
-pub async fn send_delete_message_cli(
-    recipient: String,
-    target_send_timestamp:u64
-) -> Result<()> {
-    let mut manager = create_registered_manager().await?;
-    send_delete_message(&mut manager, recipient, target_send_timestamp).await
+pub async fn send_delete_message_cli(recipient: String, target_send_timestamp: u64) -> Result<()> {
+    let mut manager: Manager<SqliteStore, Registered> = create_registered_manager().await?;
+        let uuid = Uuid::from_str(&recipient)?;
+        let thread = Thread::Contact(uuid);
+
+    let sender = match manager.store().message(&thread,target_send_timestamp).await? {
+        Some(con) => con.metadata.sender,
+        None => bail!("Message with given timestamp not found."),
+    };
+
+    let user = manager.whoami().await?;
+
+    match sender.raw_uuid() == user.aci {
+        true =>     send_delete_message(&mut manager, recipient, target_send_timestamp).await,
+        false => {
+            error!("Cannot delete message not send by this user");
+            Ok(())
+        },
+    }
 }
 

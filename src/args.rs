@@ -122,6 +122,10 @@ pub struct SendAttachmentArgs {
 }
 
 #[derive(Args)]
+#[command(group(
+    ArgGroup::new("recipient")
+        .required(true)
+))]
 pub struct DeleteMessageArgs {
     /// Uuid of the contact conversation from which the message would be deleted
     #[arg(short, long, group = "recipient")]
@@ -132,5 +136,6 @@ pub struct DeleteMessageArgs {
     pub group: Option<String>,
 
     /// timestamp of the message that would be deleted
+    #[arg(short,long)]
     pub timestamp: u64,
 }
