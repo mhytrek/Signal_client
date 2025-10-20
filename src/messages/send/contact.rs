@@ -222,10 +222,14 @@ pub async fn send_attachment_cli(
 }
 pub async fn send_delete_message_cli(recipient: String, target_send_timestamp: u64) -> Result<()> {
     let mut manager: Manager<SqliteStore, Registered> = create_registered_manager().await?;
-        let uuid = Uuid::from_str(&recipient)?;
-        let thread = Thread::Contact(uuid);
+    let uuid = Uuid::from_str(&recipient)?;
+    let thread = Thread::Contact(uuid);
 
-    let sender = match manager.store().message(&thread,target_send_timestamp).await? {
+    let sender = match manager
+        .store()
+        .message(&thread, target_send_timestamp)
+        .await?
+    {
         Some(con) => con.metadata.sender,
         None => bail!("Message with given timestamp not found."),
     };
@@ -233,11 +237,11 @@ pub async fn send_delete_message_cli(recipient: String, target_send_timestamp: u
     let user = manager.whoami().await?;
 
     match sender.raw_uuid() == user.aci {
-        true =>     send_delete_message(&mut manager, recipient, target_send_timestamp).await,
+        true => send_delete_message(&mut manager, recipient, target_send_timestamp).await,
         false => {
             error!("Cannot delete message not send by this user");
             Ok(())
-        },
+        }
     }
 }
 

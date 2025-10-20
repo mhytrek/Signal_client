@@ -136,6 +136,6 @@ pub struct DeleteMessageArgs {
     pub group: Option<String>,
 
     /// timestamp of the message that would be deleted
-    #[arg(short,long)]
+    #[arg(short, long)]
     pub timestamp: u64,
 }

@@ -6,8 +6,8 @@ use crate::messages::receive::MessageDto;
 use anyhow::{Result, bail};
 use presage::proto::data_message::{Delete, Quote};
 use presage::proto::{DataMessage, GroupContextV2};
-use presage::{Manager, libsignal_service::zkgroup::GroupMasterKeyBytes, manager::Registered};
 use presage::store::{ContentsStore, Thread};
+use presage::{Manager, libsignal_service::zkgroup::GroupMasterKeyBytes, manager::Registered};
 use presage_store_sqlite::SqliteStore;
 use tracing::error;
 
@@ -41,7 +41,11 @@ pub async fn send_delete_message_cli(recipient: String, target_send_timestamp: u
 
     let thread = Thread::Group(master_key);
 
-    let sender = match manager.store().message(&thread,target_send_timestamp).await? {
+    let sender = match manager
+        .store()
+        .message(&thread, target_send_timestamp)
+        .await?
+    {
         Some(con) => con.metadata.sender,
         None => bail!("Message with given timestamp not found."),
     };
@@ -53,9 +57,8 @@ pub async fn send_delete_message_cli(recipient: String, target_send_timestamp: u
         false => {
             error!("Cannot delete message not send by this user");
             Ok(())
-        },
+        }
     }
-
 }
 
 async fn send_message(
