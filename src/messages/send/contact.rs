@@ -73,10 +73,15 @@ pub fn create_data_message(
     Ok(data_msg)
 }
 
-pub fn create_delete_data_message(timestamp:u64,target_send_timestamp:u64) -> Result<DataMessage>{
-    let del_mes = Delete{ target_sent_timestamp: Some(target_send_timestamp) };
+pub fn create_delete_data_message(
+    timestamp: u64,
+    target_send_timestamp: u64,
+) -> Result<DataMessage> {
+    let del_mes = Delete {
+        target_sent_timestamp: Some(target_send_timestamp),
+    };
     let data_msg = DataMessage {
-        timestamp:Some(timestamp),
+        timestamp: Some(timestamp),
         delete: Some(del_mes),
         ..Default::default()
     };
@@ -114,11 +119,11 @@ async fn send_message(
 async fn send_delete_message(
     manager: &mut Manager<SqliteStore, Registered>,
     recipient: String,
-    target_send_timestamp:u64
+    target_send_timestamp: u64,
 ) -> Result<()> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
     let recipient_address = get_address(recipient, manager).await?;
-    let data_message = create_delete_data_message(timestamp,target_send_timestamp)?;
+    let data_message = create_delete_data_message(timestamp, target_send_timestamp)?;
 
     send(manager, recipient_address, data_message, timestamp).await?;
 
@@ -139,7 +144,7 @@ pub async fn send_message_tui(
 pub async fn send_delete_message_tui(
     mut manager: Manager<SqliteStore, Registered>,
     recipient: String,
-    target_send_timestamp:u64
+    target_send_timestamp: u64,
 ) -> Result<()> {
     send_delete_message(&mut manager, recipient, target_send_timestamp).await
 }

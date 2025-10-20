@@ -263,7 +263,7 @@ pub enum EventApp {
 pub enum EventSend {
     SendText(RecipientId, String, Option<MessageDto>),
     SendAttachment(RecipientId, String, String, Option<MessageDto>),
-    DeleteMessage(RecipientId,u64),
+    DeleteMessage(RecipientId, u64),
     GetMessagesForContact(String),
     GetMessagesForGroup(GroupMasterKeyBytes),
     GetContactInfo(String),
@@ -963,10 +963,13 @@ impl App {
                             }
                         }
                     };
-                    if let Some(target_send) = target_send_option{
+                    if let Some(target_send) = target_send_option {
                         // TODO: handle unwraps
                         self.tx_tui
-                            .send(EventSend::DeleteMessage(selected_recipient_id, target_send.timestamp))
+                            .send(EventSend::DeleteMessage(
+                                selected_recipient_id,
+                                target_send.timestamp,
+                            ))
                             .unwrap()
                     };
                 }
@@ -1985,9 +1988,16 @@ async fn handle_incoming_event(
             )
             .await;
         }
-        EventSend::DeleteMessage(recipient, target_send_timestamp ) =>{
-            handle_delete_message_event(recipient, target_send_timestamp, manager, tx_status, retry_manager, local_pool).await;
-
+        EventSend::DeleteMessage(recipient, target_send_timestamp) => {
+            handle_delete_message_event(
+                recipient,
+                target_send_timestamp,
+                manager,
+                tx_status,
+                retry_manager,
+                local_pool,
+            )
+            .await;
         }
         EventSend::GetMessagesForContact(uuid_str) => {
             handle_get_contact_messages_event(uuid_str, manager, tx_status, local_pool).await;
@@ -2261,7 +2271,7 @@ async fn handle_send_attachment_event(
 
 async fn handle_delete_message_event(
     recipient: RecipientId,
-    target_send_timestamp:u64,
+    target_send_timestamp: u64,
     manager: &Manager<SqliteStore, Registered>,
     tx_status: &mpsc::Sender<EventApp>,
     retry_manager: &Arc<Mutex<RetryManager>>,

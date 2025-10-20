@@ -127,7 +127,7 @@ pub struct DeleteMessageArgs {
     #[arg(short, long, group = "recipient")]
     pub contact: Option<String>,
 
-    /// Name of the group from which the message would be deleted 
+    /// Name of the group from which the message would be deleted
     #[arg(short, long, group = "recipient")]
     pub group: Option<String>,
 

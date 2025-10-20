@@ -33,7 +33,7 @@ impl OutgoingMessage {
         text: String,
         attachment_path: Option<String>,
         quoted_message: Option<MessageDto>,
-        delete_target_send_timestamp:Option<u64>,
+        delete_target_send_timestamp: Option<u64>,
     ) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
