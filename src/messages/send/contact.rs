@@ -211,4 +211,13 @@ pub async fn send_attachment_cli(
     receive_messages_cli().await?;
     let mut manager = create_registered_manager().await?;
     send_attachment(&mut manager, recipient, text_message, attachment_path, None).await
+
 }
+pub async fn send_delete_message_cli(
+    recipient: String,
+    target_send_timestamp:u64
+) -> Result<()> {
+    let mut manager = create_registered_manager().await?;
+    send_delete_message(&mut manager, recipient, target_send_timestamp).await
+}
+

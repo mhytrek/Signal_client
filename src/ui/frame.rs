@@ -176,7 +176,7 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(app.config.get_primary_color()),
         ),
         CurrentScreen::ContactInfo => Span::styled(
-            "(q) to exit | (← or ESC) to go back to main",
+            "(q) to exit | (← or ESC) to go back",
             Style::default().fg(app.config.get_primary_color()),
         ),
         CurrentScreen::InspectMesseges => {
@@ -197,7 +197,7 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
 
             Span::styled(
                 format!(
-                    "(q) to exit inspection mode | (← or ESC) to go back to main | (r) to reply{save_attachment_info}"
+                    "(q) to exit inspection mode | (← or ESC) to go back | (r) to reply | (d) to delete{save_attachment_info}"
                 ),
                 Style::default().fg(app.config.get_primary_color()),
             )

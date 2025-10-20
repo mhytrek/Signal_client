@@ -1,7 +1,9 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::account_management::create_registered_manager;
+use crate::groups::find_master_key;
 use crate::messages::receive::MessageDto;
-use anyhow::Result;
+use anyhow::{bail, Result};
 use presage::proto::data_message::{Delete, Quote};
 use presage::proto::{DataMessage, GroupContextV2};
 use presage::{Manager, libsignal_service::zkgroup::GroupMasterKeyBytes, manager::Registered};
@@ -24,6 +26,21 @@ pub async fn send_delete_message_tui(
     mut manager: Manager<SqliteStore, Registered>,
     target_send_timestamp:u64,
 ) -> Result<()> {
+    send_delete_message(&mut manager, master_key, target_send_timestamp).await
+}
+
+pub async fn send_delete_message_cli(
+    recipient: String,
+    target_send_timestamp:u64,
+) -> Result<()> {
+    let mut manager = create_registered_manager().await?;
+
+    let master_key = find_master_key(recipient, &mut manager).await?;
+    let master_key = match master_key {
+        Some(mk) => mk,
+        None => bail!("Group with given name does not exist."),
+    };
+
     send_delete_message(&mut manager, master_key, target_send_timestamp).await
 }
 
