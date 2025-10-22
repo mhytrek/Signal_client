@@ -3,7 +3,6 @@ use std::io::Write;
 use std::path::Path;
 
 use crate::account_management::{ensure_accounts_dir, get_account_store_path};
-use crate::contacts::initial_sync_cli;
 use crate::open_store;
 use crate::paths::ACCOUNTS_DIR;
 use crate::paths::{self, ASSETS, QRCODE};
@@ -14,7 +13,6 @@ use presage::{Manager, libsignal_service::configuration::SignalServers};
 use presage_store_sqlite::SqliteStore;
 use tokio::fs;
 use tracing::error;
-use tracing::log::warn;
 // Links a new device to the Signal account using the given name.
 // Generates a QR code and prints it in the terminal, then waits for the user to scan it to complete the linking process.
 // pub async fn link_new_device_cli(device_name: String) -> Result<()> {
@@ -113,10 +111,5 @@ pub async fn link_new_device_for_account(
 
     url_handler_result?;
 
-    let mut manager = manager_result?;
-    if let Err(e) = initial_sync_cli(&mut manager).await {
-        warn!("Warning: Initial sync failed: {e}, but account is created");
-    }
-
-    Ok(manager)
+    Ok(manager_result?)
 }

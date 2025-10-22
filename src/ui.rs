@@ -1,4 +1,5 @@
 mod account_selector;
+pub mod captcha;
 pub mod chat;
 pub mod contact_list;
 pub mod frame;

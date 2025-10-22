@@ -1,0 +1,16 @@
+Captcha challenge is required to continue using Signal.
+If you don't submit the challenge you will be able to
+send messages only to people who have messaged you
+during the current session.
+
+Press ESC to return to main screen.
+
+1. Open https://signalcaptchas.org/challenge/generate
+   - Press 'y' to copy URL to clipboard
+2. Complete the captcha challenge.
+3. Upon completion close the popup window when one shows up.
+4. Right click the "Open Signal"
+   button that appears under the captcha box and
+   copy the link.
+5. Paste the link in the input field below (press 'p' to
+   paste from clipboard) and press ENTER.

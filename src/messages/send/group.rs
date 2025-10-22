@@ -8,6 +8,8 @@ use presage::{Manager, libsignal_service::zkgroup::GroupMasterKeyBytes, manager:
 use presage_store_sqlite::SqliteStore;
 use tracing::error;
 
+use crate::messages::attachments::create_attachment;
+
 pub async fn send_message_tui(
     master_key: GroupMasterKeyBytes,
     text_message: String,
@@ -75,4 +77,47 @@ pub fn create_data_message(
         quote,
         ..Default::default()
     }
+}
+
+/// Send message with attachment
+async fn send_attachment(
+    manager: &mut Manager<SqliteStore, Registered>,
+    master_key: &GroupMasterKeyBytes,
+    text_message: String,
+    attachment_path: String,
+) -> Result<()> {
+    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
+
+    let attachment_spec = create_attachment(attachment_path).await?;
+
+    let attachment_specs = vec![attachment_spec];
+
+    let attachments: Result<Vec<_>, _> = manager
+        .upload_attachments(attachment_specs)
+        .await?
+        .into_iter()
+        .collect();
+    let attachments = attachments?;
+
+    let attachment_pointer = attachments
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("Failed to get attachment pointer"))?;
+
+    let mut data_message = create_data_message(text_message, master_key, timestamp, None);
+    data_message.attachments = vec![attachment_pointer];
+
+    send(manager, master_key, data_message, timestamp).await?;
+
+    Ok(())
+}
+
+/// sends attachment to recipient ( phone number or name ), for usage with TUI
+pub async fn send_attachment_tui(
+    master_key: &GroupMasterKeyBytes,
+    text_message: String,
+    attachment_path: String,
+    mut manager: Manager<SqliteStore, Registered>,
+) -> Result<()> {
+    send_attachment(&mut manager, master_key, text_message, attachment_path).await
 }
