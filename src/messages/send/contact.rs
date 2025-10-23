@@ -5,7 +5,7 @@ use crate::account_management::create_registered_manager;
 use crate::messages::attachments::create_attachment;
 use crate::messages::receive::MessageDto;
 use crate::messages::receive::receive_messages_cli;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use presage::libsignal_service::protocol::ServiceId;
 use presage::proto::DataMessage;
 use presage::proto::data_message::{Delete, Quote};
@@ -218,7 +218,6 @@ pub async fn send_attachment_cli(
     receive_messages_cli().await?;
     let mut manager = create_registered_manager().await?;
     send_attachment(&mut manager, recipient, text_message, attachment_path, None).await
-
 }
 pub async fn send_delete_message_cli(recipient: String, target_send_timestamp: u64) -> Result<()> {
     let mut manager: Manager<SqliteStore, Registered> = create_registered_manager().await?;
@@ -244,4 +243,3 @@ pub async fn send_delete_message_cli(recipient: String, target_send_timestamp: u
         }
     }
 }
-
