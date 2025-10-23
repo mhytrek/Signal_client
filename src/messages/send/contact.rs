@@ -232,10 +232,24 @@ pub async fn send_attachment_cli(
     recipient: String,
     text_message: String,
     attachment_path: String,
+    quoted_message: Option<u64>
 ) -> Result<()> {
     receive_messages_cli().await?;
     let mut manager = create_registered_manager().await?;
-    send_attachment(&mut manager, recipient, text_message, attachment_path, None).await
+    let quoted_message_dto = match quoted_message {
+        Some(quote_ts) => {
+            let recipient_uuid = Uuid::from_str(&recipient)?;
+            let thread = Thread::Contact(recipient_uuid);
+            let quoted_data_message = manager.store().message(&thread, quote_ts).await?;
+            if let Some(content) = quoted_data_message {
+                format_message(&content)
+            } else {
+                None
+            }
+        }
+        None => None,
+    };
+    send_attachment(&mut manager, recipient, text_message, attachment_path, quoted_message_dto).await
 }
 pub async fn send_delete_message_cli(recipient: String, target_send_timestamp: u64) -> Result<()> {
     let mut manager: Manager<SqliteStore, Registered> = create_registered_manager().await?;
