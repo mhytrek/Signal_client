@@ -117,6 +117,12 @@ Get profile info
 cargo run get-profile
 ```
 
+### **delete-message**
+Delete chosen message
+```bash
+cargo run delete-message --contact "example uuid" --timestamp 1234
+```
+
 
 ### **help**
 Prints this help message or details for specific subcommands.

@@ -1,18 +1,20 @@
+use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::account_management::create_registered_manager;
 use crate::messages::attachments::create_attachment;
 use crate::messages::receive::MessageDto;
 use crate::messages::receive::receive_messages_cli;
-use anyhow::Result;
+use anyhow::{Result, bail};
 use presage::libsignal_service::protocol::ServiceId;
 use presage::proto::DataMessage;
-use presage::proto::data_message::Quote;
-use presage::store::ContentsStore;
+use presage::proto::data_message::{Delete, Quote};
+use presage::store::{ContentsStore, Thread};
 use presage::{
     Manager, libsignal_service::prelude::Uuid, manager::Registered, model::contacts::Contact,
 };
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
+use tracing::error;
 
 /// finds contact uuid from string that can be contact_name or contact phone_number
 pub async fn find_uuid(
@@ -73,6 +75,21 @@ pub fn create_data_message(
     Ok(data_msg)
 }
 
+pub fn create_delete_data_message(
+    timestamp: u64,
+    target_send_timestamp: u64,
+) -> Result<DataMessage> {
+    let del_mes = Delete {
+        target_sent_timestamp: Some(target_send_timestamp),
+    };
+    let data_msg = DataMessage {
+        timestamp: Some(timestamp),
+        delete: Some(del_mes),
+        ..Default::default()
+    };
+    Ok(data_msg)
+}
+
 pub async fn send(
     manager: &mut Manager<SqliteStore, Registered>,
     recipient_addr: ServiceId,
@@ -101,6 +118,20 @@ async fn send_message(
     Ok(())
 }
 
+async fn send_delete_message(
+    manager: &mut Manager<SqliteStore, Registered>,
+    recipient: String,
+    target_send_timestamp: u64,
+) -> Result<()> {
+    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
+    let recipient_address = get_address(recipient, manager).await?;
+    let data_message = create_delete_data_message(timestamp, target_send_timestamp)?;
+
+    send(manager, recipient_address, data_message, timestamp).await?;
+
+    Ok(())
+}
+
 /// sends text message to recipient ( phone number or name ), for usage with TUI
 pub async fn send_message_tui(
     recipient: String,
@@ -110,6 +141,14 @@ pub async fn send_message_tui(
 ) -> Result<()> {
     // let mut manager = create_registered_manager().await?;
     send_message(&mut manager, recipient, text_message, quoted_message).await
+}
+
+pub async fn send_delete_message_tui(
+    mut manager: Manager<SqliteStore, Registered>,
+    recipient: String,
+    target_send_timestamp: u64,
+) -> Result<()> {
+    send_delete_message(&mut manager, recipient, target_send_timestamp).await
 }
 
 /// sends text message to recipient ( phone number or name ), for usage with CLI
@@ -179,4 +218,28 @@ pub async fn send_attachment_cli(
     receive_messages_cli().await?;
     let mut manager = create_registered_manager().await?;
     send_attachment(&mut manager, recipient, text_message, attachment_path, None).await
+}
+pub async fn send_delete_message_cli(recipient: String, target_send_timestamp: u64) -> Result<()> {
+    let mut manager: Manager<SqliteStore, Registered> = create_registered_manager().await?;
+    let uuid = Uuid::from_str(&recipient)?;
+    let thread = Thread::Contact(uuid);
+
+    let sender = match manager
+        .store()
+        .message(&thread, target_send_timestamp)
+        .await?
+    {
+        Some(con) => con.metadata.sender,
+        None => bail!("Message with given timestamp not found."),
+    };
+
+    let user = manager.whoami().await?;
+
+    match sender.raw_uuid() == user.aci {
+        true => send_delete_message(&mut manager, recipient, target_send_timestamp).await,
+        false => {
+            error!("Cannot delete message not send by this user");
+            Ok(())
+        }
+    }
 }

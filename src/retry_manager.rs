@@ -19,6 +19,7 @@ pub struct OutgoingMessage {
     pub recipient: RecipientId,
     pub text: String,
     pub quoted_message: Option<MessageDto>,
+    pub delete_target_send_timestamp: Option<u64>,
     pub attachment_path: Option<String>,
     pub status: DeliveryStatus,
     pub retry_count: u32,
@@ -32,6 +33,7 @@ impl OutgoingMessage {
         text: String,
         attachment_path: Option<String>,
         quoted_message: Option<MessageDto>,
+        delete_target_send_timestamp: Option<u64>,
     ) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
@@ -39,6 +41,7 @@ impl OutgoingMessage {
             text,
             attachment_path,
             quoted_message,
+            delete_target_send_timestamp,
             status: DeliveryStatus::Pending,
             retry_count: 0,
             created_at: Self::current_timestamp(),

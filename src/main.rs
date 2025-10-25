@@ -46,6 +46,15 @@ async fn main() -> Result<()> {
         Command::SwitchAccount(args) => switch_account_cli(args.account_name).await?,
         Command::GetCurrentAccount => get_current_account_cli().await?,
         Command::UnlinkAccount(args) => unlink_account_cli(args.account_name).await?,
+        Command::DeleteMessage(args) => match (args.contact, args.group) {
+            (Some(c), None) => {
+                messages::send::contact::send_delete_message_cli(c, args.timestamp).await?
+            }
+            (None, Some(g)) => {
+                messages::send::group::send_delete_message_cli(g, args.timestamp).await?
+            }
+            _ => unreachable!(),
+        },
     }
 
     Ok(())

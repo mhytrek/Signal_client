@@ -263,6 +263,7 @@ pub enum EventApp {
 pub enum EventSend {
     SendText(RecipientId, String, Option<MessageDto>),
     SendAttachment(RecipientId, String, String, Option<MessageDto>),
+    DeleteMessage(RecipientId, u64),
     GetMessagesForContact(String),
     GetMessagesForGroup(GroupMasterKeyBytes),
     GetContactInfo(String),
@@ -761,6 +762,7 @@ impl App {
                         None
                     },
                     self.quoted_message.clone(),
+                    None,
                 );
 
                 if let Ok(mut manager) = self.retry_manager.try_lock() {
@@ -943,6 +945,33 @@ impl App {
                             ))
                             .unwrap();
                     }
+                }
+
+                KeyCode::Char('d') => {
+                    let selected_recipient_id = self.recipients[self.selected_recipient].0.id();
+                    let target_send_option = match selected_recipient_id {
+                        RecipientId::Contact(uuid) => {
+                            match self.contact_messages.get(&uuid.to_string()) {
+                                Some(messeges) => messeges.get(self.message_selected),
+                                None => None,
+                            }
+                        }
+                        RecipientId::Group(group_key) => {
+                            match self.group_messages.get(&group_key) {
+                                Some(messeges) => messeges.get(self.message_selected),
+                                None => None,
+                            }
+                        }
+                    };
+                    if let Some(target_send) = target_send_option {
+                        // TODO: handle unwraps
+                        self.tx_tui
+                            .send(EventSend::DeleteMessage(
+                                selected_recipient_id,
+                                target_send.timestamp,
+                            ))
+                            .unwrap()
+                    };
                 }
 
                 _ => {}
@@ -1959,6 +1988,17 @@ async fn handle_incoming_event(
             )
             .await;
         }
+        EventSend::DeleteMessage(recipient, target_send_timestamp) => {
+            handle_delete_message_event(
+                recipient,
+                target_send_timestamp,
+                manager,
+                tx_status,
+                retry_manager,
+                local_pool,
+            )
+            .await;
+        }
         EventSend::GetMessagesForContact(uuid_str) => {
             handle_get_contact_messages_event(uuid_str, manager, tx_status, local_pool).await;
         }
@@ -2015,6 +2055,7 @@ async fn handle_send_text_event(
         text.clone(),
         None,
         quoted_message.clone(),
+        None,
     );
     let message_id = {
         let mut retry_mgr = retry_manager.lock().await;
@@ -2128,6 +2169,7 @@ async fn handle_send_attachment_event(
         text.clone(),
         Some(attachment_path.clone()),
         quoted_message.clone(),
+        None,
     );
     let message_id = {
         let mut retry_mgr = retry_manager.lock().await;
@@ -2219,6 +2261,88 @@ async fn handle_send_attachment_event(
                         ));
                     } else {
                         error!("Error sending attachment: {e:?}");
+                    }
+                }
+                drop(retry_mgr);
+            }
+        }
+    });
+}
+
+async fn handle_delete_message_event(
+    recipient: RecipientId,
+    target_send_timestamp: u64,
+    manager: &Manager<SqliteStore, Registered>,
+    tx_status: &mpsc::Sender<EventApp>,
+    retry_manager: &Arc<Mutex<RetryManager>>,
+    local_pool: &LocalPoolHandle,
+) {
+    let outgoing_msg = OutgoingMessage::new(
+        recipient.clone(),
+        "".to_string(),
+        None,
+        None,
+        Some(target_send_timestamp),
+    );
+    let message_id = {
+        let mut retry_mgr = retry_manager.lock().await;
+        retry_mgr.add_message(outgoing_msg)
+    };
+
+    let recipient_clone = recipient.clone();
+    let tx_status_clone = tx_status.clone();
+    let retry_manager_clone = Arc::clone(retry_manager);
+    let manager_clone = manager.clone();
+
+    local_pool.spawn_pinned(move || async move {
+        let send_result = match recipient_clone {
+            RecipientId::Contact(uuid) => {
+                send::contact::send_delete_message_tui(
+                    manager_clone,
+                    uuid.to_string(),
+                    target_send_timestamp,
+                )
+                .await
+            }
+            RecipientId::Group(master_key) => {
+                send::group::send_delete_message_tui(
+                    master_key,
+                    manager_clone,
+                    target_send_timestamp,
+                )
+                .await
+            }
+        };
+
+        match send_result {
+            Ok(_) => {
+                // Mark as sent in retry manager
+                let mut retry_mgr = retry_manager_clone.lock().await;
+                retry_mgr.mark_sent(&message_id);
+                drop(retry_mgr);
+
+                let _ =
+                    tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+                let _ = tx_status_clone.send(EventApp::ReceiveMessage);
+            }
+            Err(e) => {
+                // Mark as failed in retry manager
+                let mut retry_mgr = retry_manager_clone.lock().await;
+
+                if is_delivery_confirmation_timeout(&e) {
+                    retry_mgr.mark_sent(&message_id);
+                    warn!("Message likely delivered despite confirmation timeout");
+                } else {
+                    retry_mgr.mark_failed(&message_id, e.to_string());
+
+                    if is_connection_error(&e) {
+                        let _ = tx_status_clone.send(EventApp::NetworkStatusChanged(
+                            NetworkStatus::Disconnected(
+                                "Cannot send: WiFi disconnected".to_string(),
+                            ),
+                        ));
+                    } else {
+                        error!("Error sending message: {e:?}");
                     }
                 }
                 drop(retry_mgr);

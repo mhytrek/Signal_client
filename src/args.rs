@@ -26,6 +26,9 @@ pub enum Command {
     /// Send attachment
     SendAttachment(SendAttachmentArgs),
 
+    /// Delete message
+    DeleteMessage(DeleteMessageArgs),
+
     /// Prints messages from given point in time
     ListMessages(ListMessagesArgs),
 
@@ -116,4 +119,23 @@ pub struct SendAttachmentArgs {
 
     /// Full path to attachment
     pub attachment_path: String,
+}
+
+#[derive(Args)]
+#[command(group(
+    ArgGroup::new("recipient")
+        .required(true)
+))]
+pub struct DeleteMessageArgs {
+    /// Uuid of the contact conversation from which the message would be deleted
+    #[arg(short, long, group = "recipient")]
+    pub contact: Option<String>,
+
+    /// Name of the group from which the message would be deleted
+    #[arg(short, long, group = "recipient")]
+    pub group: Option<String>,
+
+    /// timestamp of the message that would be deleted
+    #[arg(short, long)]
+    pub timestamp: u64,
 }

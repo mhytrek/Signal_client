@@ -1,9 +1,12 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::account_management::create_registered_manager;
+use crate::groups::find_master_key;
 use crate::messages::receive::MessageDto;
-use anyhow::Result;
-use presage::proto::data_message::Quote;
+use anyhow::{Result, bail};
+use presage::proto::data_message::{Delete, Quote};
 use presage::proto::{DataMessage, GroupContextV2};
+use presage::store::{ContentsStore, Thread};
 use presage::{Manager, libsignal_service::zkgroup::GroupMasterKeyBytes, manager::Registered};
 use presage_store_sqlite::SqliteStore;
 use tracing::error;
@@ -19,6 +22,45 @@ pub async fn send_message_tui(
     send_message(&mut manager, master_key, text_message, quoted_message).await
 }
 
+pub async fn send_delete_message_tui(
+    master_key: GroupMasterKeyBytes,
+    mut manager: Manager<SqliteStore, Registered>,
+    target_send_timestamp: u64,
+) -> Result<()> {
+    send_delete_message(&mut manager, master_key, target_send_timestamp).await
+}
+
+pub async fn send_delete_message_cli(recipient: String, target_send_timestamp: u64) -> Result<()> {
+    let mut manager = create_registered_manager().await?;
+
+    let master_key = find_master_key(recipient, &mut manager).await?;
+    let master_key = match master_key {
+        Some(mk) => mk,
+        None => bail!("Group with given name does not exist."),
+    };
+
+    let thread = Thread::Group(master_key);
+
+    let sender = match manager
+        .store()
+        .message(&thread, target_send_timestamp)
+        .await?
+    {
+        Some(con) => con.metadata.sender,
+        None => bail!("Message with given timestamp not found."),
+    };
+
+    let user = manager.whoami().await?;
+
+    match sender.raw_uuid() == user.aci {
+        true => send_delete_message(&mut manager, master_key, target_send_timestamp).await,
+        false => {
+            error!("Cannot delete message not send by this user");
+            Ok(())
+        }
+    }
+}
+
 async fn send_message(
     manager: &mut Manager<SqliteStore, Registered>,
     master_key: GroupMasterKeyBytes,
@@ -28,6 +70,21 @@ async fn send_message(
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
 
     let data_message = create_data_message(text_message, &master_key, timestamp, quoted_message);
+
+    let send_result = send(manager, &master_key, data_message, timestamp).await;
+    if let Err(e) = send_result {
+        error!("{e}");
+    }
+    Ok(())
+}
+
+async fn send_delete_message(
+    manager: &mut Manager<SqliteStore, Registered>,
+    master_key: GroupMasterKeyBytes,
+    target_send_timestamp: u64,
+) -> Result<()> {
+    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
+    let data_message = create_delete_data_message(&master_key, timestamp, target_send_timestamp);
 
     let send_result = send(manager, &master_key, data_message, timestamp).await;
     if let Err(e) = send_result {
@@ -120,4 +177,28 @@ pub async fn send_attachment_tui(
     mut manager: Manager<SqliteStore, Registered>,
 ) -> Result<()> {
     send_attachment(&mut manager, master_key, text_message, attachment_path).await
+}
+
+pub fn create_delete_data_message(
+    master_key: &GroupMasterKeyBytes,
+    timestamp: u64,
+    target_send_timestamp: u64,
+) -> DataMessage {
+    let master_key = master_key.to_vec();
+    let del_mes = Delete {
+        target_sent_timestamp: Some(target_send_timestamp),
+    };
+
+    DataMessage {
+        group_v2: Some(GroupContextV2 {
+            master_key: Some(master_key),
+
+            // NOTE: This needs to be checked what does it do
+            revision: Some(0),
+            ..Default::default()
+        }),
+        timestamp: Some(timestamp),
+        delete: Some(del_mes),
+        ..Default::default()
+    }
 }
