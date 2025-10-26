@@ -12,12 +12,12 @@ use crossterm::event::{self, Event, KeyModifiers};
 use crossterm::event::{KeyCode, KeyEventKind};
 use futures::{StreamExt, pin_mut};
 use presage::Manager;
-use presage::libsignal_service::Profile;
 use presage::libsignal_service::prelude::Uuid;
 use presage::libsignal_service::zkgroup::GroupMasterKeyBytes;
+use presage::libsignal_service::{Profile, master_key};
 use presage::manager::Registered;
 use presage::model::messages::Received;
-use presage::proto::AttachmentPointer;
+use presage::proto::{AttachmentPointer, Member};
 use presage_store_sqlite::SqliteStore;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
@@ -129,6 +129,7 @@ pub enum CurrentScreen {
     Options,
     Exiting,
     ContactInfo,
+    GroupInfo,
     AccountSelector,
     CreatingAccount,
     ConfirmDelete,
@@ -158,6 +159,13 @@ pub struct ContactInfo {
     pub has_avatar: bool,
 }
 
+#[derive(Clone)]
+pub struct GroupInfo {
+    pub master_key: GroupMasterKeyBytes,
+    pub name: String,
+    pub members: Vec<Member>,
+}
+
 #[derive(PartialEq, Clone)]
 pub enum AccountLinkingField {
     AccountName,
@@ -182,6 +190,8 @@ pub struct App {
     pub selected_contact_info: Option<ContactInfo>,
     pub contact_avatar_cache: Option<Vec<u8>>,
     pub contact_avatar_image: Option<StatefulProtocol>,
+
+    pub selected_group_info: Option<GroupInfo>,
 
     pub current_screen: CurrentScreen,
     pub linking_status: LinkingStatus,
@@ -268,6 +278,7 @@ pub enum EventSend {
     GetMessagesForContact(String),
     GetMessagesForGroup(GroupMasterKeyBytes),
     GetContactInfo(String),
+    GetGroupInfo(GroupMasterKeyBytes),
     SaveAttachment(Box<AttachmentPointer>, PathBuf),
 }
 
@@ -843,15 +854,20 @@ impl App {
                 }
                 KeyCode::Char('i') => {
                     let selected_recipient_id = self.recipients[self.selected_recipient].0.id();
-                    let contact_uuid = match selected_recipient_id {
-                        RecipientId::Contact(uuid) => uuid.to_string(),
-                        // TODO: (@jbrs) Get group info
-                        RecipientId::Group(_) => return Ok(false),
+                    match selected_recipient_id {
+                        RecipientId::Contact(uuid) => {
+                            self.tx_tui
+                                .send(EventSend::GetContactInfo(uuid.into()))
+                                .unwrap();
+                            self.current_screen = ContactInfo;
+                        }
+                        RecipientId::Group(master_key) => {
+                            self.tx_tui
+                                .send(EventSend::GetGroupInfo(master_key))
+                                .unwrap();
+                            self.current_screen = GroupInfo;
+                        }
                     };
-                    self.tx_tui
-                        .send(EventSend::GetContactInfo(contact_uuid))
-                        .unwrap();
-                    self.current_screen = ContactInfo;
 
                     self.contact_avatar_cache = None;
                     self.contact_avatar_image = None;
@@ -1239,6 +1255,15 @@ impl App {
                 _ => {}
             },
             ContactInfo => match key.code {
+                KeyCode::Esc | KeyCode::Left | KeyCode::Char('q') => {
+                    self.current_screen = Main;
+                    self.selected_contact_info = None;
+                    self.contact_avatar_cache = None;
+                    self.contact_avatar_image = None;
+                }
+                _ => {}
+            },
+            GroupInfo => match key.code {
                 KeyCode::Esc | KeyCode::Left | KeyCode::Char('q') => {
                     self.current_screen = Main;
                     self.selected_contact_info = None;
@@ -2009,6 +2034,9 @@ async fn handle_incoming_event(
         }
         EventSend::GetContactInfo(uuid_str) => {
             handle_get_contact_info_event(uuid_str, current_contacts_mutex, tx_status).await;
+        }
+        EventSend::GetGroupInfo(master_key) => {
+            // TODO
         }
         EventSend::SaveAttachment(attachment_pointer, attachment_save_dir) => {
             handle_save_attachment_event(
