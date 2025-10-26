@@ -29,6 +29,7 @@ use std::io::Stderr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
+
 use std::{fs, io};
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
@@ -1874,6 +1875,7 @@ async fn handle_retry_tick(
                         master_key,
                         msg.text.clone(),
                         attachment_path.clone(),
+                        msg.quoted_message.clone(),
                         manager.clone(),
                     )
                     .await
@@ -2202,6 +2204,7 @@ async fn handle_send_attachment_event(
                     &master_key,
                     text_clone,
                     attachment_path_clone,
+                    quoted_message_clone,
                     manager_clone,
                 )
                 .await

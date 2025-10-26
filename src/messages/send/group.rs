@@ -141,6 +141,7 @@ async fn send_attachment(
     manager: &mut Manager<SqliteStore, Registered>,
     master_key: &GroupMasterKeyBytes,
     text_message: String,
+    quoted_message: Option<MessageDto>,
     attachment_path: String,
 ) -> Result<()> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
@@ -161,7 +162,7 @@ async fn send_attachment(
         .next()
         .ok_or_else(|| anyhow::anyhow!("Failed to get attachment pointer"))?;
 
-    let mut data_message = create_data_message(text_message, master_key, timestamp, None);
+    let mut data_message = create_data_message(text_message, master_key, timestamp, quoted_message);
     data_message.attachments = vec![attachment_pointer];
 
     send(manager, master_key, data_message, timestamp).await?;
@@ -174,9 +175,17 @@ pub async fn send_attachment_tui(
     master_key: &GroupMasterKeyBytes,
     text_message: String,
     attachment_path: String,
+    quoted_message: Option<MessageDto>,
     mut manager: Manager<SqliteStore, Registered>,
 ) -> Result<()> {
-    send_attachment(&mut manager, master_key, text_message, attachment_path).await
+    send_attachment(
+        &mut manager,
+        master_key,
+        text_message,
+        quoted_message,
+        attachment_path,
+    )
+    .await
 }
 
 pub fn create_delete_data_message(
