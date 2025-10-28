@@ -1,7 +1,7 @@
 use crate::contacts::get_contacts_tui;
 use crate::messages::attachments::save_attachment;
 use crate::messages::receive::{self, MessageDto, check_contacts, contact, format_message};
-use crate::messages::send::{self};
+use crate::messages::send;
 use crate::paths::{ACCOUNTS_DIR, QRCODE};
 use crate::profile::get_profile_tui;
 use crate::ui::render_ui;
@@ -12,9 +12,9 @@ use crossterm::event::{self, Event, KeyModifiers};
 use crossterm::event::{KeyCode, KeyEventKind};
 use futures::{StreamExt, pin_mut};
 use presage::Manager;
-use presage::libsignal_service::prelude::{Member, Uuid};
+use presage::libsignal_service::Profile;
+use presage::libsignal_service::prelude::Uuid;
 use presage::libsignal_service::zkgroup::GroupMasterKeyBytes;
-use presage::libsignal_service::{Profile, master_key};
 use presage::manager::Registered;
 use presage::model::messages::Received;
 use presage::proto::AttachmentPointer;
@@ -270,6 +270,8 @@ pub enum EventApp {
 
     ContactInfoReceived(ContactInfo),
     ContactAvatarReceived(Vec<u8>),
+
+    GroupInfoReceived(GroupInfo),
 
     GetContactMessageHistory(String, Vec<MessageDto>),
     GetGroupMessageHistory(GroupMasterKeyBytes, Vec<MessageDto>),
@@ -611,6 +613,10 @@ impl App {
                 if self.config.show_images {
                     self.load_contact_avatar();
                 }
+                Ok(false)
+            }
+            EventApp::GroupInfoReceived(group_info) => {
+                self.selected_group_info = Some(group_info);
                 Ok(false)
             }
             EventApp::LinkingFinished((result, manager_optional)) => {
@@ -2645,22 +2651,42 @@ async fn handle_get_group_info_event(
     let members: Vec<DisplayMember> = group
         .members
         .iter()
-        .filter_map(|member| {
+        .map(|member| {
             let member_uuid = member.uuid;
-            contacts.get(&member_uuid)
-        })
-        .map(|contact| {
-            let uuid = contact.uuid;
-            let name = contact.name.clone();
-            let phone_number = contact.phone_number.as_ref().map(|pn| pn.to_string());
-            let name = if name.is_empty() { None } else { Some(name) };
-            DisplayMember {
-                uuid,
-                name,
-                phone_number,
+            let contact_option = contacts.get(&member_uuid);
+            match contact_option {
+                Some(contact) => {
+                    let name = match contact.name.is_empty() {
+                        true => None,
+                        false => Some(contact.name.clone()),
+                    };
+                    let phone_number = contact.phone_number.as_ref().map(|pn| pn.to_string());
+                    let uuid = contact.uuid;
+
+                    DisplayMember {
+                        uuid,
+                        phone_number,
+                        name,
+                    }
+                }
+                None => DisplayMember {
+                    uuid: member_uuid,
+                    phone_number: None,
+                    name: None,
+                },
             }
         })
         .collect();
+    drop(contacts);
+
+    let group_info = GroupInfo {
+        master_key,
+        name: group.title,
+        members,
+    };
+    if let Err(error) = tx_status.send(EventApp::GroupInfoReceived(group_info)) {
+        error!(%error, "Unable to send `GroupInfo` via chanel.");
+    }
 }
 
 pub fn handle_checking_qr_code(tx: mpsc::Sender<EventApp>) {
