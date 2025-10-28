@@ -2,7 +2,7 @@ use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, BorderType, Borders, ListItem, Paragraph, Wrap},
+    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
 use ratatui_image::{Resize, StatefulImage};
 
@@ -85,16 +85,12 @@ pub fn render_group_info(frame: &mut Frame, app: &mut App, area: Rect) {
 
     let mut info_text = String::new();
 
-    if let Some(contact) = &app.selected_contact_info {
+    if let Some(group) = &app.selected_group_info {
         info_text.push_str(&format!(
-            "\nNAME:\n{}\n\nPHONE:\n{}\n\nVERIFIED:\n{}\n\nAVATAR:\n{}\n",
-            contact.name,
-            contact.phone_number.as_deref().unwrap_or("Not set"),
-            match contact.verified_state {
-                Some(state) if state > 0 => "Yes",
-                _ => "No",
-            },
-            if contact.has_avatar { "Set" } else { "Not set" },
+            "\nNAME:\n{}\n\nAVATAR:\n{}\n",
+            group.name,
+            "Not set",
+            // if contact.has_avatar { "Set" } else { "Not set" },
         ));
     } else {
         info_text.push_str("Loading...");
@@ -106,7 +102,7 @@ pub fn render_group_info(frame: &mut Frame, app: &mut App, area: Rect) {
         .alignment(Alignment::Left)
         .style(Style::default().fg(app.config.get_primary_color()));
 
-    let contacts_list: Vec<ListItem> = match &app.selected_group_info {
+    let members_list: Vec<ListItem> = match &app.selected_group_info {
         Some(group_info) => group_info
             .members
             .iter()
@@ -132,8 +128,13 @@ pub fn render_group_info(frame: &mut Frame, app: &mut App, area: Rect) {
         None => vec![],
     };
 
+    let members_widget = List::new(members_list).block(members_block);
+    let mut members_state = ListState::default();
+    members_state.select(Some(app.selected_group_member));
+
     if app.config.show_images {
         frame.render_widget(info_paragraph, info_layout[0]);
+        frame.render_stateful_widget(members_widget, info_layout[1], &mut members_state);
     } else {
         frame.render_widget(info_paragraph, area);
     }

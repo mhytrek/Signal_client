@@ -196,6 +196,10 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
             "(q) to exit | (← or ESC) to go back",
             Style::default().fg(app.config.get_primary_color()),
         ),
+        CurrentScreen::GroupInfo => Span::styled(
+            "(q) to exit | (← or ESC) to go back",
+            Style::default().fg(app.config.get_primary_color()),
+        ),
         CurrentScreen::InspectMesseges => {
             let selected_recipient_id = app.recipients[app.selected_recipient].0.id();
             let optional_messages = match selected_recipient_id {
