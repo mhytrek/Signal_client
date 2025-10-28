@@ -1,8 +1,8 @@
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
-    widgets::{Block, BorderType, Borders, Paragraph, Wrap},
+    style::{Color, Modifier, Style},
+    widgets::{Block, BorderType, Borders, ListItem, Paragraph, Wrap},
 };
 use ratatui_image::{Resize, StatefulImage};
 
@@ -13,6 +13,10 @@ pub fn render_group_info(frame: &mut Frame, app: &mut App, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(15), Constraint::Min(1)])
         .split(area);
+    let info_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
+        .split(layout[1]);
 
     let avatar_block = Block::default()
         .title("Avatar")
@@ -73,6 +77,12 @@ pub fn render_group_info(frame: &mut Frame, app: &mut App, area: Rect) {
         .border_type(BorderType::Double)
         .border_style(Style::default().fg(app.config.get_primary_color()));
 
+    let members_block = Block::default()
+        .title("Group Members")
+        .borders(Borders::ALL)
+        .border_type(BorderType::Double)
+        .border_style(Style::default().fg(app.config.get_primary_color()));
+
     let mut info_text = String::new();
 
     if let Some(contact) = &app.selected_contact_info {
@@ -96,8 +106,34 @@ pub fn render_group_info(frame: &mut Frame, app: &mut App, area: Rect) {
         .alignment(Alignment::Left)
         .style(Style::default().fg(app.config.get_primary_color()));
 
+    let contacts_list: Vec<ListItem> = match &app.selected_group_info {
+        Some(group_info) => group_info
+            .members
+            .iter()
+            .enumerate()
+            .map(|(idx, member)| {
+                let mut style = Style::default().fg(app.config.get_primary_color());
+                if idx == app.selected_group_member {
+                    style = style
+                        .add_modifier(Modifier::BOLD)
+                        .add_modifier(Modifier::UNDERLINED)
+                        .fg(app.config.get_accent_color());
+                }
+                let display_name = match &member.name {
+                    Some(name) => name.clone(),
+                    None => match &member.phone_number {
+                        Some(phone) => phone.clone(),
+                        None => member.uuid.to_string(),
+                    },
+                };
+                ListItem::new(display_name).style(style)
+            })
+            .collect(),
+        None => vec![],
+    };
+
     if app.config.show_images {
-        frame.render_widget(info_paragraph, layout[1]);
+        frame.render_widget(info_paragraph, info_layout[0]);
     } else {
         frame.render_widget(info_paragraph, area);
     }
