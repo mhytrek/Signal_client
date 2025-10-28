@@ -336,6 +336,8 @@ impl App {
             contact_avatar_cache: None,
             contact_avatar_image: None,
 
+            selected_group_info: None,
+
             config: Config::load(),
             config_selected: 0,
 
