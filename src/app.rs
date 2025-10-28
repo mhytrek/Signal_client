@@ -12,12 +12,12 @@ use crossterm::event::{self, Event, KeyModifiers};
 use crossterm::event::{KeyCode, KeyEventKind};
 use futures::{StreamExt, pin_mut};
 use presage::Manager;
-use presage::libsignal_service::prelude::Uuid;
+use presage::libsignal_service::prelude::{Member, Uuid};
 use presage::libsignal_service::zkgroup::GroupMasterKeyBytes;
 use presage::libsignal_service::{Profile, master_key};
 use presage::manager::Registered;
 use presage::model::messages::Received;
-use presage::proto::{AttachmentPointer, Member};
+use presage::proto::AttachmentPointer;
 use presage_store_sqlite::SqliteStore;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
@@ -163,7 +163,14 @@ pub struct ContactInfo {
 pub struct GroupInfo {
     pub master_key: GroupMasterKeyBytes,
     pub name: String,
-    pub members: Vec<Member>,
+    pub members: Vec<DisplayMember>,
+}
+
+#[derive(Clone)]
+pub struct DisplayMember {
+    pub uuid: Uuid,
+    pub phone_number: Option<String>,
+    pub name: Option<String>,
 }
 
 #[derive(PartialEq, Clone)]
@@ -192,6 +199,7 @@ pub struct App {
     pub contact_avatar_image: Option<StatefulProtocol>,
 
     pub selected_group_info: Option<GroupInfo>,
+    pub selected_group_member: usize,
 
     pub current_screen: CurrentScreen,
     pub linking_status: LinkingStatus,
@@ -337,6 +345,7 @@ impl App {
             contact_avatar_image: None,
 
             selected_group_info: None,
+            selected_group_member: 0,
 
             config: Config::load(),
             config_selected: 0,
@@ -1268,9 +1277,7 @@ impl App {
             GroupInfo => match key.code {
                 KeyCode::Esc | KeyCode::Left | KeyCode::Char('q') => {
                     self.current_screen = Main;
-                    self.selected_contact_info = None;
-                    self.contact_avatar_cache = None;
-                    self.contact_avatar_image = None;
+                    self.selected_group_info = None;
                 }
                 _ => {}
             },
@@ -2038,7 +2045,8 @@ async fn handle_incoming_event(
             handle_get_contact_info_event(uuid_str, current_contacts_mutex, tx_status).await;
         }
         EventSend::GetGroupInfo(master_key) => {
-            // TODO
+            handle_get_group_info_event(master_key, manager, current_contacts_mutex, tx_status)
+                .await;
         }
         EventSend::SaveAttachment(attachment_pointer, attachment_save_dir) => {
             handle_save_attachment_event(
@@ -2495,6 +2503,49 @@ async fn handle_get_contact_info_event(
             }
         }
     }
+}
+
+async fn handle_get_group_info_event(
+    master_key: GroupMasterKeyBytes,
+    manager: &Manager<SqliteStore, Registered>,
+    current_contacts_mutex: &AsyncContactsMap,
+    tx_status: &mpsc::Sender<EventApp>,
+) {
+    let group_result = manager.store().group(master_key).await;
+    let group = match group_result {
+        Ok(group_option) => match group_option {
+            Some(g) => g,
+            None => {
+                error!("Group with given master key does not exist");
+                return;
+            }
+        },
+        Err(error) => {
+            error!(%error, "Feild to retrieve group from the store");
+            return;
+        }
+    };
+
+    let contacts = current_contacts_mutex.lock().await;
+    let members: Vec<DisplayMember> = group
+        .members
+        .iter()
+        .filter_map(|member| {
+            let member_uuid = member.uuid;
+            contacts.get(&member_uuid)
+        })
+        .map(|contact| {
+            let uuid = contact.uuid;
+            let name = contact.name.clone();
+            let phone_number = contact.phone_number.as_ref().map(|pn| pn.to_string());
+            let name = if name.is_empty() { None } else { Some(name) };
+            DisplayMember {
+                uuid,
+                name,
+                phone_number,
+            }
+        })
+        .collect();
 }
 
 pub fn handle_checking_qr_code(tx: mpsc::Sender<EventApp>) {

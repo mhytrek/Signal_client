@@ -99,8 +99,8 @@ pub fn render_ui(frame: &mut Frame, app: &mut App) {
                 .direction(Direction::Horizontal)
                 .constraints([
                     Constraint::Ratio(1, 4),
-                    Constraint::Ratio(1, 4),
                     Constraint::Ratio(2, 4),
+                    Constraint::Ratio(1, 4),
                 ])
                 .split(chunks[0]);
 
