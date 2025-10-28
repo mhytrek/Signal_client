@@ -85,14 +85,14 @@ Functionalities in app:
 Sends a text message.
 
 ```bash
-cargo run send-message --recipient "recipient_uuid" "Hello, this is a test message!"
+cargo run send-message --recipient "recipient_uuid" --text-message "Hello, this is a test message!" [--quote 123456789 ]
 ```
 
 ### **send-attachment**
 Sends a text message.
 
 ```bash
-cargo run send-attachment --recipient "recipient_uuid" "Hello, this is a test message!" "Full/path/to/file"
+cargo run send-attachment --recipient "recipient_uuid" --text-message "Hello, this is a test message!" "Full/path/to/file" [--quote 123456789 ]
 ```
 
 ### **list-message**

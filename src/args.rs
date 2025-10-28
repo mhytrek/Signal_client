@@ -90,6 +90,7 @@ pub struct SendMessageArgs {
     pub text_message: String,
 
     /// Timestamp of the message that would be replied to
+    #[arg(short, long)]
     pub quote: Option<u64>,
 }
 
@@ -126,6 +127,7 @@ pub struct SendAttachmentArgs {
     pub attachment_path: String,
 
     /// Timestamp of the message that would be replied to
+    #[arg(short, long)]
     pub quote: Option<u64>,
 }
 
