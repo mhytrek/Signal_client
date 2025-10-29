@@ -617,6 +617,7 @@ impl App {
             }
             EventApp::GroupInfoReceived(group_info) => {
                 self.selected_group_info = Some(group_info);
+                self.selected_group_member = 0;
                 Ok(false)
             }
             EventApp::LinkingFinished((result, manager_optional)) => {
@@ -1284,6 +1285,18 @@ impl App {
                 KeyCode::Esc | KeyCode::Left | KeyCode::Char('q') => {
                     self.current_screen = Main;
                     self.selected_group_info = None;
+                }
+                KeyCode::Down | KeyCode::Char('s') => {
+                    if let Some(group_info) = &self.selected_group_info
+                        && self.selected_group_member < (group_info.members.len() - 1)
+                    {
+                        self.selected_group_member += 1;
+                    }
+                }
+                KeyCode::Up | KeyCode::Char('w') => {
+                    if self.selected_group_member > 0 {
+                        self.selected_group_member -= 1;
+                    }
                 }
                 _ => {}
             },
