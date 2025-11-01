@@ -1762,9 +1762,7 @@ pub async fn handle_synchronization(
                         .collect();
 
                     if contacts_differ || groups_differ {
-                        if initialized
-                            && tx.send(EventApp::ContactsList(display_recipients)).is_err()
-                        {
+                        if tx.send(EventApp::ContactsList(display_recipients)).is_err() {
                             break;
                         }
                         if contacts_differ {
