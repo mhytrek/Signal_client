@@ -60,7 +60,10 @@ pub fn render_input_and_attachment(frame: &mut Frame, app: &App, vertical_chunks
     let attachment_available_height = input_area_chunks[1].height.saturating_sub(2) as usize;
 
     let attachment_total_lines = if attachment_available_width > 0 {
-        app.attachment_path.chars().count().div_ceil(attachment_available_width)
+        app.attachment_path
+            .chars()
+            .count()
+            .div_ceil(attachment_available_width)
     } else {
         1
     };
@@ -102,7 +105,8 @@ pub fn render_input_and_attachment(frame: &mut Frame, app: &App, vertical_chunks
                 ));
             }
             InputFocus::Attachment => {
-                let line_in_view = attachment_total_lines.saturating_sub(attachment_available_height);
+                let line_in_view =
+                    attachment_total_lines.saturating_sub(attachment_available_height);
                 let current_line = (app.attachment_path.chars().count()
                     / attachment_available_width)
                     .saturating_sub(line_in_view);
