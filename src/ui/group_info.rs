@@ -93,8 +93,7 @@ pub fn render_group_info(frame: &mut Frame, app: &mut App, area: Rect) {
             AVATAR:\n{}\n",
             group.name,
             group.description,
-            "Not set",
-            // if contact.has_avatar { "Set" } else { "Not set" },
+            if group.has_avatar { "Set" } else { "Not set" },
         ));
     } else {
         info_text.push_str("Loading...");

@@ -164,6 +164,7 @@ pub struct GroupInfo {
     pub master_key: GroupMasterKeyBytes,
     pub name: String,
     pub description: String,
+    pub has_avatar: bool,
     pub members: Vec<DisplayMember>,
 }
 
@@ -200,6 +201,8 @@ pub struct App {
     pub contact_avatar_image: Option<StatefulProtocol>,
 
     pub selected_group_info: Option<GroupInfo>,
+    pub group_avatar_cache: Option<Vec<u8>>,
+    pub group_avatar_image: Option<StatefulProtocol>,
     pub selected_group_member: usize,
 
     pub current_screen: CurrentScreen,
@@ -273,6 +276,7 @@ pub enum EventApp {
     ContactAvatarReceived(Vec<u8>),
 
     GroupInfoReceived(GroupInfo),
+    GroupAvatarReceived(Vec<u8>),
 
     GetContactMessageHistory(String, Vec<MessageDto>),
     GetGroupMessageHistory(GroupMasterKeyBytes, Vec<MessageDto>),
@@ -349,6 +353,8 @@ impl App {
 
             selected_group_info: None,
             selected_group_member: 0,
+            group_avatar_cache: None,
+            group_avatar_image: None,
 
             config: Config::load(),
             config_selected: 0,
@@ -560,6 +566,27 @@ impl App {
         }
     }
 
+    pub fn load_group_avatar(&mut self) {
+        if let (Some(avatar_data), Some(picker)) = (&self.group_avatar_cache, &mut self.picker) {
+            match image::load_from_memory(avatar_data) {
+                Ok(dynamic_image) => {
+                    self.contact_avatar_image = Some(picker.new_resize_protocol(dynamic_image));
+                }
+                Err(_) => {
+                    if let Ok(dynamic_image) =
+                        image::load_from_memory_with_format(avatar_data, ImageFormat::Png)
+                    {
+                        self.contact_avatar_image = Some(picker.new_resize_protocol(dynamic_image));
+                    } else if let Ok(dynamic_image) =
+                        image::load_from_memory_with_format(avatar_data, ImageFormat::Jpeg)
+                    {
+                        self.contact_avatar_image = Some(picker.new_resize_protocol(dynamic_image));
+                    }
+                }
+            }
+        }
+    }
+
     async fn handle_event(&mut self, event: EventApp, tx: &Sender<EventSend>) -> io::Result<bool> {
         match event {
             EventApp::KeyInput(key) => {
@@ -619,6 +646,13 @@ impl App {
             EventApp::GroupInfoReceived(group_info) => {
                 self.selected_group_info = Some(group_info);
                 self.selected_group_member = 0;
+                Ok(false)
+            }
+            EventApp::GroupAvatarReceived(avatar_bytes) => {
+                self.group_avatar_cache = Some(avatar_bytes);
+                if self.config.show_images {
+                    self.load_group_avatar();
+                }
                 Ok(false)
             }
             EventApp::LinkingFinished((result, manager_optional)) => {
@@ -2633,8 +2667,8 @@ async fn handle_get_contact_info_event(
 
         if let Some(ref avatar_attachment) = contact.avatar {
             let avatar_bytes: Vec<u8> = avatar_attachment.reader.to_vec();
-            if let Err(e) = tx_status.send(EventApp::ContactAvatarReceived(avatar_bytes)) {
-                error!("Failed to send ContactAvatarReceived event: {}", e);
+            if let Err(error) = tx_status.send(EventApp::ContactAvatarReceived(avatar_bytes)) {
+                error!(%error, "Failed to send ContactAvatarReceived event.");
             }
         }
     }
@@ -2698,10 +2732,18 @@ async fn handle_get_group_info_event(
         master_key,
         name: group.title,
         description,
+        has_avatar: !group.avatar.is_empty(),
         members,
     };
     if let Err(error) = tx_status.send(EventApp::GroupInfoReceived(group_info)) {
         error!(%error, "Unable to send `GroupInfo` via chanel.");
+    }
+
+    if !group.avatar.is_empty() {
+        let avatar_bytes = group.avatar.as_bytes().to_vec();
+        if let Err(error) = tx_status.send(EventApp::GroupAvatarReceived(avatar_bytes)) {
+            error!(%error, "Failed to send GroupAvatarReceived event.");
+        }
     }
 }
 
