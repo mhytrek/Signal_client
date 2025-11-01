@@ -87,8 +87,12 @@ pub fn render_group_info(frame: &mut Frame, app: &mut App, area: Rect) {
 
     if let Some(group) = &app.selected_group_info {
         info_text.push_str(&format!(
-            "\nNAME:\n{}\n\nAVATAR:\n{}\n",
+            "\n \
+            NAME:\n{}\n\n \
+            DESCRIPTION:\n{}\n\n \
+            AVATAR:\n{}\n",
             group.name,
+            group.description,
             "Not set",
             // if contact.has_avatar { "Set" } else { "Not set" },
         ));
