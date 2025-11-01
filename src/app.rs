@@ -163,6 +163,7 @@ pub struct ContactInfo {
 pub struct GroupInfo {
     pub master_key: GroupMasterKeyBytes,
     pub name: String,
+    pub description: String,
     pub members: Vec<DisplayMember>,
 }
 
@@ -2692,9 +2693,11 @@ async fn handle_get_group_info_event(
         .collect();
     drop(contacts);
 
+    let description = group.description.unwrap_or_default();
     let group_info = GroupInfo {
         master_key,
         name: group.title,
+        description,
         members,
     };
     if let Err(error) = tx_status.send(EventApp::GroupInfoReceived(group_info)) {
