@@ -13,10 +13,17 @@ pub fn render_group_info(frame: &mut Frame, app: &mut App, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(15), Constraint::Min(1)])
         .split(area);
-    let info_layout = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
-        .split(layout[1]);
+    let info_layout = if app.config.show_images {
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
+            .split(layout[1])
+    } else {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
+            .split(area)
+    };
 
     let avatar_block = Block::default()
         .title("Avatar")
@@ -134,10 +141,6 @@ pub fn render_group_info(frame: &mut Frame, app: &mut App, area: Rect) {
     let mut members_state = ListState::default();
     members_state.select(Some(app.selected_group_member));
 
-    if app.config.show_images {
-        frame.render_widget(info_paragraph, info_layout[0]);
-        frame.render_stateful_widget(members_widget, info_layout[1], &mut members_state);
-    } else {
-        frame.render_widget(info_paragraph, area);
-    }
+    frame.render_widget(info_paragraph, info_layout[0]);
+    frame.render_stateful_widget(members_widget, info_layout[1], &mut members_state);
 }
