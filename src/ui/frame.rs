@@ -151,9 +151,9 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
             };
 
             let base_text = if app.attachment_error.is_some() {
-                "(q) to exit | Fix attachment path to send | (TAB) to switch input/attachment | (CTRL+e) to inspect messages"
+                "(q) to exit | Fix attachment path to send | (CTRL+t) to switch input/attachment | (TAB) autocomplete path | (CTRL+e) to inspect messages"
             } else {
-                "(q) to exit | (ENTER) to send | (TAB) to switch input/attachment | (CTRL+e) to inspect messages"
+                "(q) to exit | (ENTER) to send | (CTRL+t) to switch input/attachment | (TAB) autocomplete path | (CTRL+e) to inspect messages"
             };
 
             let mut reply_info = "";

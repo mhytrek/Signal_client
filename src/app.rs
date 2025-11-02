@@ -993,6 +993,11 @@ impl App {
                     self.current_screen = Main
                 }
                 KeyCode::Tab => {
+                    if matches!(self.input_focus, InputFocus::Attachment) {
+                        self.autocomplete_path();
+                    }
+                }
+                KeyCode::Char('t') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     self.input_focus = match self.input_focus {
                         InputFocus::Message => InputFocus::Attachment,
                         InputFocus::Attachment => InputFocus::Message,
@@ -1006,8 +1011,12 @@ impl App {
                 KeyCode::Char(to_insert) => match self.input_focus {
                     InputFocus::Message => self.enter_char(to_insert),
                     InputFocus::Attachment => {
-                        self.attachment_path.push(to_insert);
-                        self.validate_attachment_path();
+                        if to_insert == '\t' {
+                            self.autocomplete_path();
+                        } else {
+                            self.attachment_path.push(to_insert);
+                            self.validate_attachment_path();
+                        }
                     }
                 },
                 KeyCode::Backspace => match self.input_focus {
@@ -1388,6 +1397,114 @@ impl App {
         }
         Ok(false)
     }
+
+    fn autocomplete_path(&mut self) {
+        use std::fs;
+
+        let current_path = self.attachment_path.trim();
+        if current_path.is_empty() {
+            self.attachment_path = "./".to_string();
+            return;
+        }
+
+        let expanded_path = if current_path.starts_with('~') {
+            if let Ok(home) = std::env::var("HOME") {
+                current_path.replacen('~', &home, 1)
+            } else {
+                current_path.to_string()
+            }
+        } else {
+            current_path.to_string()
+        };
+
+        let path = Path::new(&expanded_path);
+        let (dir, prefix) = if expanded_path.ends_with('/') || expanded_path.ends_with('\\') {
+            (path, "")
+        } else if let Some(parent) = path.parent() {
+            let prefix = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            (parent, prefix)
+        } else {
+            (Path::new("."), expanded_path.as_str())
+        };
+
+        let dir_to_read = if dir.as_os_str().is_empty() {
+            Path::new(".")
+        } else {
+            dir
+        };
+
+        if let Ok(entries) = fs::read_dir(dir_to_read) {
+            let mut matches: Vec<_> = entries
+                .flatten()
+                .filter(|e| {
+                    e.file_name()
+                        .to_str()
+                        .map(|n| n.starts_with(prefix))
+                        .unwrap_or(false)
+                })
+                .collect();
+
+            matches.sort_by_key(|e| e.file_name());
+
+            if matches.len() == 1 {
+                if let Some(entry) = matches.first() {
+                    let new_path =
+                        if dir_to_read.as_os_str() == "." && !expanded_path.starts_with('.') {
+                            entry.file_name().to_string_lossy().to_string()
+                        } else {
+                            entry.path().to_string_lossy().to_string()
+                        };
+
+                    let mut path_str = new_path;
+                    if entry.path().is_dir() {
+                        path_str.push('/');
+                    }
+                    self.attachment_path = path_str;
+                    self.validate_attachment_path();
+                }
+            } else if matches.len() > 1 {
+                let common_prefix = find_common_prefix(
+                    &matches
+                        .iter()
+                        .filter_map(|e| e.file_name().to_str().map(String::from))
+                        .collect::<Vec<_>>(),
+                );
+
+                if common_prefix.len() > prefix.len() {
+                    let new_path =
+                        if dir_to_read.as_os_str() == "." && !expanded_path.starts_with('.') {
+                            common_prefix
+                        } else {
+                            dir_to_read
+                                .join(&common_prefix)
+                                .to_string_lossy()
+                                .to_string()
+                        };
+                    self.attachment_path = new_path;
+                    self.validate_attachment_path();
+                }
+            }
+        }
+    }
+}
+
+fn find_common_prefix(strings: &[String]) -> String {
+    if strings.is_empty() {
+        return String::new();
+    }
+
+    let mut prefix = strings[0].clone();
+
+    for s in strings.iter().skip(1) {
+        while !s.starts_with(&prefix) {
+            prefix.pop();
+            if prefix.is_empty() {
+                return String::new();
+            }
+        }
+    }
+
+    prefix
 }
 
 fn is_connection_error(e: &Error) -> bool {
