@@ -570,18 +570,32 @@ impl App {
         if let (Some(avatar_data), Some(picker)) = (&self.group_avatar_cache, &mut self.picker) {
             match image::load_from_memory(avatar_data) {
                 Ok(dynamic_image) => {
-                    self.contact_avatar_image = Some(picker.new_resize_protocol(dynamic_image));
+                    self.group_avatar_image = Some(picker.new_resize_protocol(dynamic_image));
                 }
-                Err(_) => {
-                    if let Ok(dynamic_image) =
-                        image::load_from_memory_with_format(avatar_data, ImageFormat::Png)
-                    {
-                        self.contact_avatar_image = Some(picker.new_resize_protocol(dynamic_image));
-                    } else if let Ok(dynamic_image) =
-                        image::load_from_memory_with_format(avatar_data, ImageFormat::Jpeg)
-                    {
-                        self.contact_avatar_image = Some(picker.new_resize_protocol(dynamic_image));
+                Err(error) => {
+                    warn!(%error, "Unable to load image, trying specific formats.");
+                    let load_result =
+                        image::load_from_memory_with_format(avatar_data, ImageFormat::Png);
+                    match load_result {
+                        Ok(dynamic_image) => {
+                            self.group_avatar_image =
+                                Some(picker.new_resize_protocol(dynamic_image));
+                            return;
+                        }
+                        Err(error) => warn!(%error, "Failed to load avatar in PNG format."),
                     }
+
+                    let load_result =
+                        image::load_from_memory_with_format(avatar_data, ImageFormat::Jpeg);
+                    match load_result {
+                        Ok(dynamic_image) => {
+                            self.group_avatar_image =
+                                Some(picker.new_resize_protocol(dynamic_image));
+                            return;
+                        }
+                        Err(error) => warn!(%error, "Failed to load avatar in JPEG format."),
+                    }
+                    error!("Failed to load group avatar.");
                 }
             }
         }
@@ -924,6 +938,8 @@ impl App {
 
                     self.contact_avatar_cache = None;
                     self.contact_avatar_image = None;
+                    self.group_avatar_cache = None;
+                    self.group_avatar_image = None;
                 }
                 _ => {}
             },
@@ -2667,8 +2683,9 @@ async fn handle_get_contact_info_event(
 
         if let Some(ref avatar_attachment) = contact.avatar {
             let avatar_bytes: Vec<u8> = avatar_attachment.reader.to_vec();
-            if let Err(error) = tx_status.send(EventApp::ContactAvatarReceived(avatar_bytes)) {
-                error!(%error, "Failed to send ContactAvatarReceived event.");
+            match tx_status.send(EventApp::ContactAvatarReceived(avatar_bytes)) {
+                Ok(_) => info!("Contact avatar received"),
+                Err(error) => error!(%error, "Failed to send ContactAvatarReceived event."),
             }
         }
     }
@@ -2685,12 +2702,12 @@ async fn handle_get_group_info_event(
         Ok(group_option) => match group_option {
             Some(g) => g,
             None => {
-                error!("Group with given master key does not exist");
+                error!("Group ont found for given master key.");
                 return;
             }
         },
         Err(error) => {
-            error!(%error, "Feild to retrieve group from the store");
+            error!(%error, "Feild to retrieve group from the store.");
             return;
         }
     };
@@ -2735,15 +2752,17 @@ async fn handle_get_group_info_event(
         has_avatar: !group.avatar.is_empty(),
         members,
     };
-    if let Err(error) = tx_status.send(EventApp::GroupInfoReceived(group_info)) {
-        error!(%error, "Unable to send `GroupInfo` via chanel.");
-    }
 
     if !group.avatar.is_empty() {
         let avatar_bytes = group.avatar.as_bytes().to_vec();
-        if let Err(error) = tx_status.send(EventApp::GroupAvatarReceived(avatar_bytes)) {
-            error!(%error, "Failed to send GroupAvatarReceived event.");
+        match tx_status.send(EventApp::GroupAvatarReceived(avatar_bytes)) {
+            Ok(_) => info!("Group avatar received"),
+            Err(error) => error!(%error, "Failed to send GroupAvatarReceived event."),
         }
+    }
+
+    if let Err(error) = tx_status.send(EventApp::GroupInfoReceived(group_info)) {
+        error!(%error, "Unable to send `GroupInfo` via chanel.");
     }
 }
 

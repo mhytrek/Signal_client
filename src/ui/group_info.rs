@@ -43,19 +43,19 @@ pub fn render_group_info(frame: &mut Frame, app: &mut App, area: Rect) {
         .split(centered_layout[1]);
 
     if app.config.show_images {
-        if let Some(contact_avatar) = app.contact_avatar_image.as_mut() {
+        if let Some(group_avatar) = app.group_avatar_image.as_mut() {
             frame.render_stateful_widget(
                 StatefulImage::new().resize(Resize::Fit(None)),
                 centered_area[1],
-                contact_avatar,
+                group_avatar,
             );
         } else {
-            let placeholder_text = if app.contact_avatar_cache.is_some() {
+            let placeholder_text = if app.group_avatar_cache.is_some() {
                 "Loading..."
             } else if app
-                .selected_contact_info
+                .selected_group_info
                 .as_ref()
-                .is_some_and(|c| c.has_avatar)
+                .is_some_and(|g| g.has_avatar)
             {
                 "Avatar available but not loaded"
             } else {
