@@ -1,0 +1,14 @@
+{
+  "accounts": {
+    "alice": {
+      "account_name": "real_alice_account",
+      "uuid": "00000000-0000-0000-0000-000000000001",
+      "contact_name_in_bob": "Misia"
+    },
+    "bob": {
+      "account_name": "real_bob_account",
+      "uuid": "00000000-0000-0000-0000-000000000002",
+      "contact_name_in_alice": "Michaś"
+    }
+  }
+}
