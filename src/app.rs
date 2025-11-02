@@ -2709,12 +2709,12 @@ async fn handle_get_group_info_event(
         Ok(group_option) => match group_option {
             Some(g) => g,
             None => {
-                error!("Group ont found for given master key.");
+                error!("No group found for given master key.");
                 return;
             }
         },
         Err(error) => {
-            error!(%error, "Feild to retrieve group from the store.");
+            error!(%error, "Failed to retrieve group from the store.");
             return;
         }
     };
