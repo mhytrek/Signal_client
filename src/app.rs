@@ -1435,7 +1435,7 @@ impl App {
 
         if let Ok(entries) = fs::read_dir(dir_to_read) {
             let mut matches: Vec<_> = entries
-                .filter_map(|e| e.ok())
+                .flatten()
                 .filter(|e| {
                     e.file_name()
                         .to_str()
