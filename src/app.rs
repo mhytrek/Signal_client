@@ -17,7 +17,7 @@ use presage::libsignal_service::prelude::Uuid;
 use presage::libsignal_service::zkgroup::GroupMasterKeyBytes;
 use presage::manager::Registered;
 use presage::model::messages::Received;
-use presage::proto::AttachmentPointer;
+use presage::proto::{AttachmentPointer, GroupContextV2};
 use presage_store_sqlite::SqliteStore;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
@@ -2021,7 +2021,7 @@ async fn handle_notification(
 
 pub async fn handle_background_events(
     rx: Receiver<EventSend>,
-    manager: Manager<SqliteStore, Registered>,
+    mut manager: Manager<SqliteStore, Registered>,
     current_contacts_mutex: AsyncContactsMap,
     tx_status: mpsc::Sender<EventApp>,
     retry_manager: Arc<Mutex<RetryManager>>,
@@ -2051,7 +2051,7 @@ pub async fn handle_background_events(
                 if let Some(event) = event {
                     handle_incoming_event(
                         event,
-                        &manager,
+                        &mut manager,
                         &current_contacts_mutex,
                         &tx_status,
                         &retry_manager,
@@ -2176,7 +2176,7 @@ async fn handle_cleanup_tick(retry_manager: &Arc<Mutex<RetryManager>>) {
 
 async fn handle_incoming_event(
     event: EventSend,
-    manager: &Manager<SqliteStore, Registered>,
+    manager: &mut Manager<SqliteStore, Registered>,
     current_contacts_mutex: &AsyncContactsMap,
     tx_status: &mpsc::Sender<EventApp>,
     retry_manager: &Arc<Mutex<RetryManager>>,
@@ -2230,8 +2230,14 @@ async fn handle_incoming_event(
             handle_get_contact_info_event(uuid_str, current_contacts_mutex, tx_status).await;
         }
         EventSend::GetGroupInfo(master_key) => {
-            handle_get_group_info_event(master_key, manager, current_contacts_mutex, tx_status)
-                .await;
+            handle_get_group_info_event(
+                master_key,
+                manager,
+                current_contacts_mutex,
+                tx_status,
+                local_pool,
+            )
+            .await;
         }
         EventSend::SaveAttachment(attachment_pointer, attachment_save_dir) => {
             handle_save_attachment_event(
@@ -2693,9 +2699,10 @@ async fn handle_get_contact_info_event(
 
 async fn handle_get_group_info_event(
     master_key: GroupMasterKeyBytes,
-    manager: &Manager<SqliteStore, Registered>,
+    manager: &mut Manager<SqliteStore, Registered>,
     current_contacts_mutex: &AsyncContactsMap,
     tx_status: &mpsc::Sender<EventApp>,
+    local_pool: &LocalPoolHandle,
 ) {
     let group_result = manager.store().group(master_key).await;
     let group = match group_result {
@@ -2754,11 +2761,29 @@ async fn handle_get_group_info_event(
     };
 
     if !group.avatar.is_empty() {
-        let avatar_bytes = group.avatar.as_bytes().to_vec();
-        match tx_status.send(EventApp::GroupAvatarReceived(avatar_bytes)) {
-            Ok(_) => info!("Group avatar received"),
-            Err(error) => error!(%error, "Failed to send GroupAvatarReceived event."),
-        }
+        let master_key_inner = master_key.to_vec();
+        let mut manager_inner = manager.clone();
+        let tx_status_inner = tx_status.clone();
+        local_pool.spawn_pinned(move || async move {
+            let group_ctx = GroupContextV2 {
+                master_key: Some(master_key_inner),
+                ..Default::default()
+            };
+            match manager_inner.retrieve_group_avatar(group_ctx).await {
+                Ok(avatar_option) => match avatar_option {
+                    Some(avatar_bytes) => {
+                        match tx_status_inner.send(EventApp::GroupAvatarReceived(avatar_bytes)) {
+                            Ok(_) => info!("Group avatar received"),
+                            Err(error) => {
+                                error!(%error, "Failed to send GroupAvatarReceived event.")
+                            }
+                        }
+                    }
+                    None => warn!("Group avatar not found"),
+                },
+                Err(error) => error!(%error, "Couldn't fetch group avatar"),
+            }
+        });
     }
 
     if let Err(error) = tx_status.send(EventApp::GroupInfoReceived(group_info)) {

@@ -50,14 +50,13 @@ pub fn render_group_info(frame: &mut Frame, app: &mut App, area: Rect) {
                 group_avatar,
             );
         } else {
-            let placeholder_text = if app.group_avatar_cache.is_some() {
-                "Loading..."
-            } else if app
-                .selected_group_info
-                .as_ref()
-                .is_some_and(|g| g.has_avatar)
+            let placeholder_text = if app.group_avatar_cache.is_some()
+                || app
+                    .selected_group_info
+                    .as_ref()
+                    .is_some_and(|g| g.has_avatar)
             {
-                "Avatar available but not loaded"
+                "Loading..."
             } else {
                 "No avatar"
             };
