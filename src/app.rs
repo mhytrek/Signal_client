@@ -1,7 +1,7 @@
 use crate::contacts::get_contacts_tui;
 use crate::messages::attachments::save_attachment;
 use crate::messages::receive::{self, MessageDto, check_contacts, contact, format_message};
-use crate::messages::send::{self};
+use crate::messages::send;
 use crate::paths::{ACCOUNTS_DIR, QRCODE};
 use crate::profile::get_profile_tui;
 use crate::ui::render_ui;
@@ -17,7 +17,7 @@ use presage::libsignal_service::prelude::Uuid;
 use presage::libsignal_service::zkgroup::GroupMasterKeyBytes;
 use presage::manager::Registered;
 use presage::model::messages::Received;
-use presage::proto::AttachmentPointer;
+use presage::proto::{AttachmentPointer, GroupContextV2};
 use presage_store_sqlite::SqliteStore;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
@@ -129,6 +129,7 @@ pub enum CurrentScreen {
     Options,
     Exiting,
     ContactInfo,
+    GroupInfo,
     AccountSelector,
     CreatingAccount,
     ConfirmDelete,
@@ -158,6 +159,22 @@ pub struct ContactInfo {
     pub has_avatar: bool,
 }
 
+#[derive(Clone)]
+pub struct GroupInfo {
+    pub master_key: GroupMasterKeyBytes,
+    pub name: String,
+    pub description: String,
+    pub has_avatar: bool,
+    pub members: Vec<DisplayMember>,
+}
+
+#[derive(Clone)]
+pub struct DisplayMember {
+    pub uuid: Uuid,
+    pub phone_number: Option<String>,
+    pub name: Option<String>,
+}
+
 #[derive(PartialEq, Clone)]
 pub enum AccountLinkingField {
     AccountName,
@@ -182,6 +199,11 @@ pub struct App {
     pub selected_contact_info: Option<ContactInfo>,
     pub contact_avatar_cache: Option<Vec<u8>>,
     pub contact_avatar_image: Option<StatefulProtocol>,
+
+    pub selected_group_info: Option<GroupInfo>,
+    pub group_avatar_cache: Option<Vec<u8>>,
+    pub group_avatar_image: Option<StatefulProtocol>,
+    pub selected_group_member: usize,
 
     pub current_screen: CurrentScreen,
     pub linking_status: LinkingStatus,
@@ -253,6 +275,9 @@ pub enum EventApp {
     ContactInfoReceived(ContactInfo),
     ContactAvatarReceived(Vec<u8>),
 
+    GroupInfoReceived(GroupInfo),
+    GroupAvatarReceived(Vec<u8>),
+
     GetContactMessageHistory(String, Vec<MessageDto>),
     GetGroupMessageHistory(GroupMasterKeyBytes, Vec<MessageDto>),
     ReceiveMessage,
@@ -268,6 +293,7 @@ pub enum EventSend {
     GetMessagesForContact(String),
     GetMessagesForGroup(GroupMasterKeyBytes),
     GetContactInfo(String),
+    GetGroupInfo(GroupMasterKeyBytes),
     SaveAttachment(Box<AttachmentPointer>, PathBuf),
 }
 
@@ -324,6 +350,11 @@ impl App {
             selected_contact_info: None,
             contact_avatar_cache: None,
             contact_avatar_image: None,
+
+            selected_group_info: None,
+            selected_group_member: 0,
+            group_avatar_cache: None,
+            group_avatar_image: None,
 
             config: Config::load(),
             config_selected: 0,
@@ -535,6 +566,41 @@ impl App {
         }
     }
 
+    pub fn load_group_avatar(&mut self) {
+        if let (Some(avatar_data), Some(picker)) = (&self.group_avatar_cache, &mut self.picker) {
+            match image::load_from_memory(avatar_data) {
+                Ok(dynamic_image) => {
+                    self.group_avatar_image = Some(picker.new_resize_protocol(dynamic_image));
+                }
+                Err(error) => {
+                    warn!(%error, "Unable to load image, trying specific formats.");
+                    let load_result =
+                        image::load_from_memory_with_format(avatar_data, ImageFormat::Png);
+                    match load_result {
+                        Ok(dynamic_image) => {
+                            self.group_avatar_image =
+                                Some(picker.new_resize_protocol(dynamic_image));
+                            return;
+                        }
+                        Err(error) => warn!(%error, "Failed to load avatar in PNG format."),
+                    }
+
+                    let load_result =
+                        image::load_from_memory_with_format(avatar_data, ImageFormat::Jpeg);
+                    match load_result {
+                        Ok(dynamic_image) => {
+                            self.group_avatar_image =
+                                Some(picker.new_resize_protocol(dynamic_image));
+                            return;
+                        }
+                        Err(error) => warn!(%error, "Failed to load avatar in JPEG format."),
+                    }
+                    error!("Failed to load group avatar.");
+                }
+            }
+        }
+    }
+
     async fn handle_event(&mut self, event: EventApp, tx: &Sender<EventSend>) -> io::Result<bool> {
         match event {
             EventApp::KeyInput(key) => {
@@ -588,6 +654,18 @@ impl App {
                 self.contact_avatar_cache = Some(avatar_data);
                 if self.config.show_images {
                     self.load_contact_avatar();
+                }
+                Ok(false)
+            }
+            EventApp::GroupInfoReceived(group_info) => {
+                self.selected_group_info = Some(group_info);
+                self.selected_group_member = 0;
+                Ok(false)
+            }
+            EventApp::GroupAvatarReceived(avatar_bytes) => {
+                self.group_avatar_cache = Some(avatar_bytes);
+                if self.config.show_images {
+                    self.load_group_avatar();
                 }
                 Ok(false)
             }
@@ -843,18 +921,25 @@ impl App {
                 }
                 KeyCode::Char('i') => {
                     let selected_recipient_id = self.recipients[self.selected_recipient].0.id();
-                    let contact_uuid = match selected_recipient_id {
-                        RecipientId::Contact(uuid) => uuid.to_string(),
-                        // TODO: (@jbrs) Get group info
-                        RecipientId::Group(_) => return Ok(false),
+                    match selected_recipient_id {
+                        RecipientId::Contact(uuid) => {
+                            self.tx_tui
+                                .send(EventSend::GetContactInfo(uuid.into()))
+                                .unwrap();
+                            self.current_screen = ContactInfo;
+                        }
+                        RecipientId::Group(master_key) => {
+                            self.tx_tui
+                                .send(EventSend::GetGroupInfo(master_key))
+                                .unwrap();
+                            self.current_screen = GroupInfo;
+                        }
                     };
-                    self.tx_tui
-                        .send(EventSend::GetContactInfo(contact_uuid))
-                        .unwrap();
-                    self.current_screen = ContactInfo;
 
                     self.contact_avatar_cache = None;
                     self.contact_avatar_image = None;
+                    self.group_avatar_cache = None;
+                    self.group_avatar_image = None;
                 }
                 _ => {}
             },
@@ -1253,6 +1338,25 @@ impl App {
                     self.selected_contact_info = None;
                     self.contact_avatar_cache = None;
                     self.contact_avatar_image = None;
+                }
+                _ => {}
+            },
+            GroupInfo => match key.code {
+                KeyCode::Esc | KeyCode::Left | KeyCode::Char('q') => {
+                    self.current_screen = Main;
+                    self.selected_group_info = None;
+                }
+                KeyCode::Down | KeyCode::Char('s') => {
+                    if let Some(group_info) = &self.selected_group_info
+                        && self.selected_group_member < (group_info.members.len() - 1)
+                    {
+                        self.selected_group_member += 1;
+                    }
+                }
+                KeyCode::Up | KeyCode::Char('w') => {
+                    if self.selected_group_member > 0 {
+                        self.selected_group_member -= 1;
+                    }
                 }
                 _ => {}
             },
@@ -1917,7 +2021,7 @@ async fn handle_notification(
 
 pub async fn handle_background_events(
     rx: Receiver<EventSend>,
-    manager: Manager<SqliteStore, Registered>,
+    mut manager: Manager<SqliteStore, Registered>,
     current_contacts_mutex: AsyncContactsMap,
     tx_status: mpsc::Sender<EventApp>,
     retry_manager: Arc<Mutex<RetryManager>>,
@@ -1947,7 +2051,7 @@ pub async fn handle_background_events(
                 if let Some(event) = event {
                     handle_incoming_event(
                         event,
-                        &manager,
+                        &mut manager,
                         &current_contacts_mutex,
                         &tx_status,
                         &retry_manager,
@@ -2072,7 +2176,7 @@ async fn handle_cleanup_tick(retry_manager: &Arc<Mutex<RetryManager>>) {
 
 async fn handle_incoming_event(
     event: EventSend,
-    manager: &Manager<SqliteStore, Registered>,
+    manager: &mut Manager<SqliteStore, Registered>,
     current_contacts_mutex: &AsyncContactsMap,
     tx_status: &mpsc::Sender<EventApp>,
     retry_manager: &Arc<Mutex<RetryManager>>,
@@ -2124,6 +2228,16 @@ async fn handle_incoming_event(
         }
         EventSend::GetContactInfo(uuid_str) => {
             handle_get_contact_info_event(uuid_str, current_contacts_mutex, tx_status).await;
+        }
+        EventSend::GetGroupInfo(master_key) => {
+            handle_get_group_info_event(
+                master_key,
+                manager,
+                current_contacts_mutex,
+                tx_status,
+                local_pool,
+            )
+            .await;
         }
         EventSend::SaveAttachment(attachment_pointer, attachment_save_dir) => {
             handle_save_attachment_event(
@@ -2575,10 +2689,105 @@ async fn handle_get_contact_info_event(
 
         if let Some(ref avatar_attachment) = contact.avatar {
             let avatar_bytes: Vec<u8> = avatar_attachment.reader.to_vec();
-            if let Err(e) = tx_status.send(EventApp::ContactAvatarReceived(avatar_bytes)) {
-                error!("Failed to send ContactAvatarReceived event: {}", e);
+            match tx_status.send(EventApp::ContactAvatarReceived(avatar_bytes)) {
+                Ok(_) => info!("Contact avatar received"),
+                Err(error) => error!(%error, "Failed to send ContactAvatarReceived event."),
             }
         }
+    }
+}
+
+async fn handle_get_group_info_event(
+    master_key: GroupMasterKeyBytes,
+    manager: &mut Manager<SqliteStore, Registered>,
+    current_contacts_mutex: &AsyncContactsMap,
+    tx_status: &mpsc::Sender<EventApp>,
+    local_pool: &LocalPoolHandle,
+) {
+    let group_result = manager.store().group(master_key).await;
+    let group = match group_result {
+        Ok(group_option) => match group_option {
+            Some(g) => g,
+            None => {
+                error!("No group found for given master key.");
+                return;
+            }
+        },
+        Err(error) => {
+            error!(%error, "Failed to retrieve group from the store.");
+            return;
+        }
+    };
+
+    let contacts = current_contacts_mutex.lock().await;
+    let members: Vec<DisplayMember> = group
+        .members
+        .iter()
+        .map(|member| {
+            let member_uuid = member.uuid;
+            let contact_option = contacts.get(&member_uuid);
+            match contact_option {
+                Some(contact) => {
+                    let name = match contact.name.is_empty() {
+                        true => None,
+                        false => Some(contact.name.clone()),
+                    };
+                    let phone_number = contact.phone_number.as_ref().map(|pn| pn.to_string());
+                    let uuid = contact.uuid;
+
+                    DisplayMember {
+                        uuid,
+                        phone_number,
+                        name,
+                    }
+                }
+                None => DisplayMember {
+                    uuid: member_uuid,
+                    phone_number: None,
+                    name: None,
+                },
+            }
+        })
+        .collect();
+    drop(contacts);
+
+    let description = group.description.unwrap_or_default();
+    let group_info = GroupInfo {
+        master_key,
+        name: group.title,
+        description,
+        has_avatar: !group.avatar.is_empty(),
+        members,
+    };
+
+    if !group.avatar.is_empty() {
+        let master_key_inner = master_key.to_vec();
+        let mut manager_inner = manager.clone();
+        let tx_status_inner = tx_status.clone();
+        local_pool.spawn_pinned(move || async move {
+            let group_ctx = GroupContextV2 {
+                master_key: Some(master_key_inner),
+                ..Default::default()
+            };
+            match manager_inner.retrieve_group_avatar(group_ctx).await {
+                Ok(avatar_option) => match avatar_option {
+                    Some(avatar_bytes) => {
+                        match tx_status_inner.send(EventApp::GroupAvatarReceived(avatar_bytes)) {
+                            Ok(_) => info!("Group avatar received"),
+                            Err(error) => {
+                                error!(%error, "Failed to send GroupAvatarReceived event.")
+                            }
+                        }
+                    }
+                    None => warn!("Group avatar not found"),
+                },
+                Err(error) => error!(%error, "Couldn't fetch group avatar"),
+            }
+        });
+    }
+
+    if let Err(error) = tx_status.send(EventApp::GroupInfoReceived(group_info)) {
+        error!(%error, "Unable to send `GroupInfo` via chanel.");
     }
 }
 

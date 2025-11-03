@@ -8,7 +8,10 @@ use ratatui::{
 
 use crate::{
     app::UiStatusMessage,
-    ui::{captcha::render_captcha, render_account_creation, render_account_selector},
+    ui::{
+        captcha::render_captcha, group_info::render_group_info, render_account_creation,
+        render_account_selector,
+    },
 };
 use crate::{
     app::{App, CurrentScreen, LinkingStatus, NetworkStatus, RecipientId},
@@ -89,6 +92,20 @@ pub fn render_ui(frame: &mut Frame, app: &mut App) {
 
             render_contact_list(frame, app, horizontal_chunks[0]);
             render_contact_info_compact(frame, app, horizontal_chunks[1]);
+            render_footer(frame, app, chunks[1]);
+        }
+        CurrentScreen::GroupInfo => {
+            let horizontal_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Ratio(1, 4),
+                    Constraint::Ratio(2, 4),
+                    Constraint::Ratio(1, 4),
+                ])
+                .split(chunks[0]);
+
+            render_contact_list(frame, app, horizontal_chunks[0]);
+            render_group_info(frame, app, horizontal_chunks[1]);
             render_footer(frame, app, chunks[1]);
         }
         CurrentScreen::AccountSelector => {
@@ -176,6 +193,10 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(app.config.get_primary_color()),
         ),
         CurrentScreen::ContactInfo => Span::styled(
+            "(q) to exit | (← or ESC) to go back",
+            Style::default().fg(app.config.get_primary_color()),
+        ),
+        CurrentScreen::GroupInfo => Span::styled(
             "(q) to exit | (← or ESC) to go back",
             Style::default().fg(app.config.get_primary_color()),
         ),
