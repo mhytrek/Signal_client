@@ -61,9 +61,25 @@ impl Default for RecipientId {
     }
 }
 
-pub trait DisplayRecipient: Send {
-    fn display_name(&self) -> &str;
-    fn id(&self) -> RecipientId;
+pub enum DisplayRecipient {
+    Contact(DisplayContact),
+    Group(DisplayGroup),
+}
+
+impl DisplayRecipient {
+    pub fn display_name(&self) -> &str {
+        match self {
+            Self::Contact(c) => c.display_name(),
+            Self::Group(g) => g.display_name(),
+        }
+    }
+
+    pub fn id(&self) -> RecipientId {
+        match self {
+            Self::Contact(c) => c.id(),
+            Self::Group(g) => g.id(),
+        }
+    }
 }
 
 #[derive(Clone, PartialEq)]
@@ -76,14 +92,12 @@ impl DisplayContact {
     fn new(display_name: String, uuid: Uuid) -> Self {
         Self { display_name, uuid }
     }
-}
 
-impl DisplayRecipient for DisplayContact {
-    fn display_name(&self) -> &str {
+    pub fn display_name(&self) -> &str {
         &self.display_name
     }
 
-    fn id(&self) -> RecipientId {
+    pub fn id(&self) -> RecipientId {
         RecipientId::Contact(self.uuid)
     }
 }
@@ -93,11 +107,6 @@ pub struct DisplayGroup {
     display_name: String,
     master_key: GroupMasterKeyBytes,
 }
-#[derive(Clone)]
-pub struct UiStatusInfo {
-    pub status_message: UiStatusMessage,
-    last_screen: CurrentScreen,
-}
 
 impl DisplayGroup {
     fn new(display_name: String, master_key: GroupMasterKeyBytes) -> Self {
@@ -106,16 +115,20 @@ impl DisplayGroup {
             master_key,
         }
     }
-}
 
-impl DisplayRecipient for DisplayGroup {
-    fn display_name(&self) -> &str {
+    pub fn display_name(&self) -> &str {
         &self.display_name
     }
 
-    fn id(&self) -> RecipientId {
+    pub fn id(&self) -> RecipientId {
         RecipientId::Group(self.master_key)
     }
+}
+
+#[derive(Clone)]
+pub struct UiStatusInfo {
+    pub status_message: UiStatusMessage,
+    last_screen: CurrentScreen,
 }
 
 #[derive(Clone, PartialEq)]
@@ -183,7 +196,7 @@ pub enum AccountLinkingField {
 
 pub struct App {
     pub uuid: Option<Uuid>,
-    pub recipients: Vec<(Box<dyn DisplayRecipient>, String)>, // contact_uuid, contact_name, input for this contact
+    pub recipients: Vec<(DisplayRecipient, String)>, // contact_uuid, contact_name, input for this contact
 
     pub current_account: Option<String>,
     pub deleting_account: Option<String>,
@@ -264,7 +277,7 @@ pub enum UiStatusMessage {
 
 pub enum EventApp {
     KeyInput(event::KeyEvent),
-    ContactsList(Vec<Box<dyn DisplayRecipient>>),
+    ContactsList(Vec<DisplayRecipient>),
     LinkingFinished((bool, Option<Manager<SqliteStore, Registered>>)),
     LinkingError(String),
     NetworkStatusChanged(NetworkStatus),
@@ -1800,8 +1813,8 @@ pub async fn handle_synchronization(
     current_contacts_mutex: AsyncContactsMap,
 ) {
     let _receiving_span = span!(Level::TRACE, "Receiving loop").entered();
-    let mut previous_contacts: Vec<Box<DisplayContact>> = Vec::new();
-    let mut previous_groups: Vec<Box<DisplayGroup>> = Vec::new();
+    let mut previous_contacts: Vec<DisplayContact> = Vec::new();
+    let mut previous_groups: Vec<DisplayGroup> = Vec::new();
     let mut initialized = false;
     info!("Start initial synchronization");
     loop {
@@ -1879,7 +1892,7 @@ pub async fn handle_synchronization(
                         }
                     };
 
-                    let contact_displays: Vec<Box<DisplayContact>> = contacts
+                    let contact_displays: Vec<DisplayContact> = contacts
                         .into_iter()
                         .filter_map(|contact_res| {
                             let contact = contact_res.ok()?;
@@ -1894,21 +1907,19 @@ pub async fn handle_synchronization(
                                 uuid_str.clone()
                             };
 
-                            let display_contact =
-                                Box::new(DisplayContact::new(display_name, contact.uuid));
+                            let display_contact = DisplayContact::new(display_name, contact.uuid);
 
                             Some(display_contact)
                         })
                         .collect();
 
-                    let group_displays: Vec<Box<DisplayGroup>> = groups
+                    let group_displays: Vec<DisplayGroup> = groups
                         .into_iter()
                         .filter_map(|groups_res| {
                             let (group_master_key, group) = groups_res.ok()?;
 
                             let display_name = group.title;
-                            let display_group =
-                                Box::new(DisplayGroup::new(display_name, group_master_key));
+                            let display_group = DisplayGroup::new(display_name, group_master_key);
 
                             Some(display_group)
                         })
@@ -1917,16 +1928,11 @@ pub async fn handle_synchronization(
                     let contacts_differ = contact_displays != previous_contacts;
                     let groups_differ = group_displays != previous_groups;
 
-                    let display_recipients: Vec<Box<dyn DisplayRecipient>> = contact_displays
+                    let display_recipients: Vec<DisplayRecipient> = contact_displays
                         .iter()
                         .cloned()
-                        .map(|c| c as Box<dyn DisplayRecipient>)
-                        .chain(
-                            group_displays
-                                .iter()
-                                .cloned()
-                                .map(|g| g as Box<dyn DisplayRecipient>),
-                        )
+                        .map(DisplayRecipient::Contact)
+                        .chain(group_displays.iter().cloned().map(DisplayRecipient::Group))
                         .collect();
 
                     if contacts_differ || groups_differ {
