@@ -2,7 +2,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::account_management::create_registered_manager;
 use crate::groups::find_master_key;
-use crate::messages::receive::MessageDto;
+use crate::messages::receive::{MessageDto, receive_messages_cli};
 use anyhow::{Result, bail};
 use presage::proto::data_message::{Delete, Quote};
 use presage::proto::{DataMessage, GroupContextV2};
@@ -20,6 +20,18 @@ pub async fn send_message_tui(
     quoted_message: Option<MessageDto>,
 ) -> Result<()> {
     send_message(&mut manager, master_key, text_message, quoted_message).await
+}
+
+pub async fn send_message_cli(group_name: String, text_message: String) -> Result<()> {
+    receive_messages_cli().await?;
+    let mut manager = create_registered_manager().await?;
+
+    let master_key = match find_master_key(group_name.clone(), &mut manager).await? {
+        Some(key) => key,
+        None => bail!("Dind't find key for group \"{group_name}\""),
+    };
+
+    send_message(&mut manager, master_key, text_message, None).await
 }
 
 pub async fn send_delete_message_tui(
