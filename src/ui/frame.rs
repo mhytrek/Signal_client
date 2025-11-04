@@ -134,7 +134,7 @@ pub fn render_ui(frame: &mut Frame, app: &mut App) {
 fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     let current_keys_hint = match app.current_screen {
         CurrentScreen::Main => Span::styled(
-            "(q) to quit | (↑ ↓) to navigate | (→) to select chat | (i) for contact info | (e) for options",
+            "(q) to quit | (↑ ↓) to navigate | (→) to select chat | (i) for contact info | (a) for accounts panel | (e) for options",
             Style::default().fg(app.config.get_primary_color()),
         ),
         CurrentScreen::Writing => {
