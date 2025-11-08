@@ -4,8 +4,7 @@ use std::path::Path;
 
 use crate::account_management::{ensure_accounts_dir, get_account_store_path};
 use crate::open_store;
-use crate::paths::ACCOUNTS_DIR;
-use crate::paths::{self, ASSETS, QRCODE};
+use crate::paths;
 use anyhow::Result;
 use futures::{channel::oneshot, future};
 use presage::manager::Registered;
@@ -50,7 +49,7 @@ use tracing::error;
 
 /// return true if the device is registered and false otherwise
 pub async fn is_registered() -> Result<bool> {
-    let store = open_store(paths::STORE).await?;
+    let store = open_store(&paths::store()).await?;
 
     match Manager::load_registered(store).await {
         Ok(_) => Ok(true),
@@ -64,7 +63,7 @@ pub async fn link_new_device_for_account(
 ) -> Result<Manager<SqliteStore, Registered>> {
     ensure_accounts_dir()?;
 
-    let account_dir = format!("{ACCOUNTS_DIR}/{account_name}");
+    let account_dir = format!("{}/{account_name}", paths::accounts_dir());
     let store_path = get_account_store_path(&account_name);
 
     fs::create_dir_all(&account_dir).await?;
@@ -75,8 +74,8 @@ pub async fn link_new_device_for_account(
     }
     let store = open_store(&store_path).await?;
 
-    if !Path::new(ASSETS).exists() {
-        fs::create_dir(ASSETS).await?;
+    if !Path::new(&paths::assets()).exists() {
+        fs::create_dir(paths::assets()).await?;
     }
 
     let (tx, rx) = oneshot::channel();
@@ -86,7 +85,7 @@ pub async fn link_new_device_for_account(
     let url_handler_task = async move {
         match rx.await {
             Ok(url) => {
-                let mut file = File::create(QRCODE)
+                let mut file = File::create(paths::qrcode())
                     .map_err(|e| anyhow::anyhow!("Failed to create QRcode file: {}", e))?;
 
                 file.write_all(url.as_ref().as_bytes())
@@ -99,14 +98,14 @@ pub async fn link_new_device_for_account(
 
     let (manager_result, url_handler_result) = future::join(manager_task, url_handler_task).await;
 
-    if Path::new(QRCODE).exists()
-        && let Err(e) = std::fs::remove_file(QRCODE)
+    if Path::new(&paths::qrcode()).exists()
+        && let Err(e) = std::fs::remove_file(paths::qrcode())
     {
         error!(error = %e, "Failed to remove QR code file");
     }
 
-    if Path::new(ASSETS).exists() {
-        fs::remove_dir_all(ASSETS).await?;
+    if Path::new(&paths::assets()).exists() {
+        fs::remove_dir_all(paths::assets()).await?;
     }
 
     url_handler_result?;
