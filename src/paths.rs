@@ -19,21 +19,21 @@ pub fn store() -> String {
     static PATH: OnceLock<String> = OnceLock::new();
     PATH.get_or_init(|| {
         if cfg!(debug_assertions) {
-            "sqlite://store.db".to_string()
+            "sqlite://signal_store.db".to_string()
         } else {
             match home_dir() {
                 Some(home_dir) => match ensure_local_share_dir(&home_dir) {
                     Ok(_) => home_dir
                         .join(".local/share/signal_client/store.db")
                         .to_str()
-                        .unwrap_or("sqlite://store.db")
+                        .unwrap_or("sqlite://signal_store.db")
                         .to_string(),
                     Err(error) => {
                         error!(%error, "Unable to ensure if ~/.local/share directory exists.");
-                        "sqlite://store.db".to_string()
+                        "sqlite://signal_store.db".to_string()
                     }
                 },
-                None => "sqlite://store.db".to_string(),
+                None => "sqlite://signal_store.db".to_string(),
             }
         }
     })
@@ -44,21 +44,21 @@ pub fn qrcode() -> String {
     static PATH: OnceLock<String> = OnceLock::new();
     PATH.get_or_init(|| {
         if cfg!(debug_assertions) {
-            "./assets/qrcode".to_string()
+            "./assets/signal_client/qrcode".to_string()
         } else {
             match home_dir() {
                 Some(home_dir) => match ensure_local_share_dir(&home_dir) {
                     Ok(_) => home_dir
                         .join(".local/share/signal_client/assets/qrcode")
                         .to_str()
-                        .unwrap_or("./assets/qrcode")
+                        .unwrap_or("./assets/signal_client/qrcode")
                         .to_string(),
                     Err(error) => {
                         error!(%error, "Unable to ensure if ~/.local/share directory exists.");
-                        "./assets/qrcode".to_string()
+                        "./assets/signal_client/qrcode".to_string()
                     }
                 },
-                None => "./assets/qrcode".to_string(),
+                None => "./assets/signal_client/qrcode".to_string(),
             }
         }
     })
@@ -69,21 +69,21 @@ pub fn assets() -> String {
     static PATH: OnceLock<String> = OnceLock::new();
     PATH.get_or_init(|| {
         if cfg!(debug_assertions) {
-            "./assets".to_string()
+            "./signal_client/assets".to_string()
         } else {
             match home_dir() {
                 Some(home_dir) => match ensure_local_share_dir(&home_dir) {
                     Ok(_) => home_dir
                         .join(".local/share/signal_client/assets")
                         .to_str()
-                        .unwrap_or("./assets")
+                        .unwrap_or("./signal_client/assets")
                         .to_string(),
                     Err(error) => {
                         error!(%error, "Unable to ensure if ~/.local/share directory exists.");
-                        "./assets".to_string()
+                        "./signal_client/assets".to_string()
                     }
                 },
-                None => "./assets".to_string(),
+                None => "./signal_client/assets".to_string(),
             }
         }
     })
@@ -94,21 +94,21 @@ pub fn accounts_dir() -> String {
     static PATH: OnceLock<String> = OnceLock::new();
     PATH.get_or_init(|| {
         if cfg!(debug_assertions) {
-            "./accounts".to_string()
+            "./signal_client/accounts".to_string()
         } else {
             match home_dir() {
                 Some(home_dir) => match ensure_local_share_dir(&home_dir) {
                     Ok(_) => home_dir
                         .join(".local/share/signal_client/accounts")
                         .to_str()
-                        .unwrap_or("./accounts")
+                        .unwrap_or("./signal_client/accounts")
                         .to_string(),
                     Err(error) => {
                         error!(%error, "Unable to ensure if ~/.local/share directory exists.");
-                        "./accounts".to_string()
+                        "./signal_client/accounts".to_string()
                     }
                 },
-                None => "./accounts".to_string(),
+                None => "./signal_client/accounts".to_string(),
             }
         }
     })
