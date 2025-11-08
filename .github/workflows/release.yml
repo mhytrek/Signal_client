@@ -58,12 +58,12 @@ jobs:
         run: cargo build -r --all-targets --all-features
 
       - name: Package binaries
-        run: tar -czvf signal_client_linux_arm64.tar.gz ./target/release/signal_client
+        run: tar -czvf signal_client_darwin_arm64.tar.gz ./target/release/signal_client
 
       - uses: actions/upload-artifact@v4
         with:
           name: signal_client_darwin_x86_64.tar.gz
-          path: signal_client_darwin_x86_64.tar.gz
+          path: ./signal_client_darwin_x86_64.tar.gz
 
   macos-arm64:
     runs-on: macos-15
@@ -83,12 +83,12 @@ jobs:
         run: cargo build -r --all-targets --all-features
 
       - name: Package binaries
-        run: tar -czvf signal_client_linux_arm64.tar.gz ./target/release/signal_client
+        run: tar -czvf signal_client_darwin_arm64.tar.gz ./target/release/signal_client
 
       - uses: actions/upload-artifact@v4
         with:
           name: signal_client_darwin_arm64.tar.gz
-          path: signal_client_darwin_arm64.tar.gz
+          path: ./signal_client_darwin_arm64.tar.gz
 
   release:
     runs-on: ubuntu-24.04
