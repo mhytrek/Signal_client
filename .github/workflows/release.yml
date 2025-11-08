@@ -40,34 +40,6 @@ jobs:
           name: signal_client_linux_x86_64.tar.gz
           path: ./signal_client_linux_x86_64.tar.gz
 
-  linux-arm64:
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -y -qq
-          sudo apt-get install -y protobuf-compiler
-          sudo apt-get clean
-
-      - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.91.0
-
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Build
-        run: cargo build -r --all-targets --all-features
-
-      - name: Package binaries
-        run: tar -czvf signal_client_linux_arm64.tar.gz ./target/release/signal_client
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: signal_client_linux_arm64.tar.gz
-          path: signal_client_linux_arm64.tar.gz
-
   macos-x86_64:
     runs-on: macos-15-intel
     steps:
@@ -120,7 +92,7 @@ jobs:
 
   release:
     runs-on: ubuntu-24.04
-    needs: [linux-x86_64, linux-arm64, macos-x86_64, macos-arm64]
+    needs: [linux-x86_64, macos-x86_64, macos-arm64]
     permissions: 
       contents: write
     steps:
