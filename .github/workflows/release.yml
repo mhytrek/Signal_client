@@ -29,11 +29,14 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Display Rust version
+        run: rustc -Vv
+
       - name: Build
-        run: cargo build -r --all-targets --all-features
+        run: cargo build -r --all-features
 
       - name: Package binaries
-        run: tar -czvf signal_client_linux_x86_64.tar.gz ./target/release/signal_client
+        run: tar -czvf signal_client_linux_x86_64.tar.gz --strip-components=3 ./target/release/signal_client
 
       - uses: actions/upload-artifact@v4
         with:
@@ -54,11 +57,14 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Display Rust version
+        run: rustc -Vv
+
       - name: Build
-        run: cargo build -r --all-targets --all-features
+        run: cargo build -r --all-features
 
       - name: Package binaries
-        run: tar -czvf signal_client_darwin_x86_64.tar.gz ./target/release/signal_client
+        run: tar -czvf signal_client_darwin_x86_64.tar.gz --strip-components=3 ./target/release/signal_client
 
       - uses: actions/upload-artifact@v4
         with:
@@ -79,11 +85,14 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Display Rust version
+        run: rustc -Vv
+
       - name: Build
-        run: cargo build -r --all-targets --all-features
+        run: cargo build -r --all-features
 
       - name: Package binaries
-        run: tar -czvf signal_client_darwin_arm64.tar.gz ./target/release/signal_client
+        run: tar -czvf signal_client_darwin_arm64.tar.gz --strip-components=3 ./target/release/signal_client
 
       - uses: actions/upload-artifact@v4
         with:
