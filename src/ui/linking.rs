@@ -13,15 +13,15 @@ use tui_qrcode::{Colors, QrCodeWidget};
 
 use crate::{
     app::{App, UiStatusMessage},
-    paths::QRCODE,
+    paths::{self},
     ui::utils::{centered_rect_fixed_size, render_popup},
 };
 
 /// Renders 50x50 QRCode if it exists in the QRCODE path
 pub fn render_qrcode(frame: &mut Frame, area: Rect) {
-    if Path::new(QRCODE).exists() {
+    if Path::new(&paths::qrcode()).exists() {
         if area.width >= 50 && area.height >= 25 {
-            let url = fs::read_to_string(QRCODE).expect("failed to read from file");
+            let url = fs::read_to_string(paths::qrcode()).expect("failed to read from file");
             let qr_code = QrCode::new(url).expect("Failed to generate QRcode");
             let widget = QrCodeWidget::new(qr_code).colors(Colors::Inverted);
             let qr_area = centered_rect_fixed_size(50, 25, area);

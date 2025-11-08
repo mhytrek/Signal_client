@@ -1,7 +1,116 @@
-pub const STORE: &str = "sqlite://store.db";
+use std::env::home_dir;
+use std::fs;
+use std::path::Path;
+use std::sync::OnceLock;
 
-pub const QRCODE: &str = "./assets/qrcode";
-
-pub const ASSETS: &str = "./assets";
+use anyhow::Result;
+use tracing::error;
 
 pub const ACCOUNTS_DIR: &str = "accounts";
+
+fn ensure_local_share_dir(home_dir: &Path) -> Result<()> {
+    if !fs::exists(home_dir.join(".local/share"))? {
+        fs::create_dir_all(home_dir.join(".local/share"))?;
+    }
+    Ok(())
+}
+
+pub fn store() -> String {
+    static PATH: OnceLock<String> = OnceLock::new();
+    PATH.get_or_init(|| {
+        if cfg!(debug_assertions) {
+            "sqlite://store.db".to_string()
+        } else {
+            match home_dir() {
+                Some(home_dir) => match ensure_local_share_dir(&home_dir) {
+                    Ok(_) => home_dir
+                        .join(".local/share/signal_client/store.db")
+                        .to_str()
+                        .unwrap_or("sqlite://store.db")
+                        .to_string(),
+                    Err(error) => {
+                        error!(%error, "Unable to ensure if ~/.local/share directory exists.");
+                        "sqlite://store.db".to_string()
+                    }
+                },
+                None => "sqlite://store.db".to_string(),
+            }
+        }
+    })
+    .into()
+}
+
+pub fn qrcode() -> String {
+    static PATH: OnceLock<String> = OnceLock::new();
+    PATH.get_or_init(|| {
+        if cfg!(debug_assertions) {
+            "./assets/qrcode".to_string()
+        } else {
+            match home_dir() {
+                Some(home_dir) => match ensure_local_share_dir(&home_dir) {
+                    Ok(_) => home_dir
+                        .join(".local/share/signal_client/assets/qrcode")
+                        .to_str()
+                        .unwrap_or("./assets/qrcode")
+                        .to_string(),
+                    Err(error) => {
+                        error!(%error, "Unable to ensure if ~/.local/share directory exists.");
+                        "./assets/qrcode".to_string()
+                    }
+                },
+                None => "./assets/qrcode".to_string(),
+            }
+        }
+    })
+    .into()
+}
+
+pub fn assets() -> String {
+    static PATH: OnceLock<String> = OnceLock::new();
+    PATH.get_or_init(|| {
+        if cfg!(debug_assertions) {
+            "./assets".to_string()
+        } else {
+            match home_dir() {
+                Some(home_dir) => match ensure_local_share_dir(&home_dir) {
+                    Ok(_) => home_dir
+                        .join(".local/share/signal_client/assets")
+                        .to_str()
+                        .unwrap_or("./assets")
+                        .to_string(),
+                    Err(error) => {
+                        error!(%error, "Unable to ensure if ~/.local/share directory exists.");
+                        "./assets".to_string()
+                    }
+                },
+                None => "./assets".to_string(),
+            }
+        }
+    })
+    .into()
+}
+
+pub fn accounts_dir() -> String {
+    static PATH: OnceLock<String> = OnceLock::new();
+    PATH.get_or_init(|| {
+        if cfg!(debug_assertions) {
+            "./accounts".to_string()
+        } else {
+            match home_dir() {
+                Some(home_dir) => match ensure_local_share_dir(&home_dir) {
+                    Ok(_) => home_dir
+                        .join(".local/share/signal_client/accounts")
+                        .to_str()
+                        .unwrap_or("./accounts")
+                        .to_string(),
+                    Err(error) => {
+                        error!(%error, "Unable to ensure if ~/.local/share directory exists.");
+                        "./accounts".to_string()
+                    }
+                },
+                None => "./accounts".to_string(),
+            }
+        }
+    })
+    .into()
+}

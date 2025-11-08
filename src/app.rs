@@ -2,7 +2,7 @@ use crate::contacts::get_contacts_tui;
 use crate::messages::attachments::save_attachment;
 use crate::messages::receive::{self, MessageDto, check_contacts, contact, format_message};
 use crate::messages::send;
-use crate::paths::{ACCOUNTS_DIR, QRCODE};
+use crate::paths;
 use crate::profile::get_profile_tui;
 use crate::ui::render_ui;
 use crate::{AsyncContactsMap, config::Config, contacts, groups};
@@ -489,7 +489,7 @@ impl App {
     pub async fn delete_account(&mut self, account_name: String) -> Result<()> {
         use std::path::Path;
         let is_current = self.current_account.as_ref() == Some(&account_name);
-        let account_dir = format!("{ACCOUNTS_DIR}/{account_name}");
+        let account_dir = format!("{}/{account_name}", paths::accounts_dir());
         if Path::new(&account_dir).exists() {
             std::fs::remove_dir_all(&account_dir)?;
         }
@@ -1180,8 +1180,8 @@ impl App {
 
                     self.creating_account_name = Some(account_name.clone());
 
-                    if Path::new(QRCODE).exists() {
-                        let _ = fs::remove_file(QRCODE);
+                    if Path::new(&paths::qrcode()).exists() {
+                        let _ = fs::remove_file(paths::qrcode());
                     }
 
                     let tx_qr = self.tx_thread.clone();
@@ -1373,8 +1373,8 @@ impl App {
                                     self.textarea.trim().to_string()
                                 };
 
-                                if Path::new(QRCODE).exists() {
-                                    fs::remove_file(QRCODE)?;
+                                if Path::new(&paths::qrcode()).exists() {
+                                    fs::remove_file(paths::qrcode())?;
                                 }
 
                                 let tx_key_events = self.tx_thread.clone();
@@ -1736,8 +1736,8 @@ pub async fn handle_linking_device_for_account(
                 warn!("Failed to save config: {e:?}");
             }
 
-            if Path::new(QRCODE).exists() {
-                match fs::remove_file(QRCODE) {
+            if Path::new(&paths::qrcode()).exists() {
+                match fs::remove_file(paths::qrcode()) {
                     Ok(_) => {}
                     Err(e) => error!("Failed to remove file with QR code: {e}"),
                 }
@@ -1751,8 +1751,8 @@ pub async fn handle_linking_device_for_account(
             }
         }
         Err(e) => {
-            if Path::new(QRCODE).exists() {
-                match fs::remove_file(QRCODE) {
+            if Path::new(&paths::qrcode()).exists() {
+                match fs::remove_file(paths::qrcode()) {
                     Ok(_) => {}
                     Err(e) => error!("Failed to remove file with QR code: {e}"),
                 }
@@ -2793,7 +2793,7 @@ async fn handle_get_group_info_event(
 
 pub fn handle_checking_qr_code(tx: mpsc::Sender<EventApp>) {
     loop {
-        if Path::new(QRCODE).exists() {
+        if Path::new(&paths::qrcode()).exists() {
             if tx.send(EventApp::QrCodeGenerated).is_err() {
                 error!("Failed to send QrCodeGenerated event");
             }

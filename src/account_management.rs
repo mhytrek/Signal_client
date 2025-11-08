@@ -1,6 +1,6 @@
 use crate::contacts::initial_sync_cli;
-use crate::paths::ACCOUNTS_DIR;
-use crate::{Config, open_store, paths};
+use crate::paths;
+use crate::{Config, open_store};
 use anyhow::{Error, Result, anyhow, bail};
 use presage::Manager;
 use presage::manager::Registered;
@@ -23,7 +23,7 @@ pub async fn link_account_cli(account_name: String, device_name: String) -> Resu
     }
     ensure_accounts_dir()?;
 
-    let account_dir = format!("{ACCOUNTS_DIR}/{account_name}");
+    let account_dir = format!("{}/{account_name}", paths::accounts_dir());
     let store_path = get_account_store_path(&account_name);
 
     match std::fs::create_dir_all(&account_dir) {
@@ -147,7 +147,7 @@ pub async fn unlink_account_cli(account_name: String) -> Result<()> {
         }
     }
 
-    let account_dir = format!("{ACCOUNTS_DIR}/{account_name}");
+    let account_dir = format!("{}/{account_name}", paths::accounts_dir());
     if Path::new(&account_dir).exists() {
         std::fs::remove_dir_all(&account_dir)?;
     }
@@ -181,7 +181,7 @@ pub async fn create_registered_manager() -> Result<Manager<SqliteStore, Register
     match config.get_current_account() {
         Some(account_name) => create_registered_manager_for_account(account_name).await,
         None => {
-            let store = open_store(paths::STORE).await?;
+            let store = open_store(&paths::store()).await?;
             match Manager::load_registered(store).await {
                 Ok(manager) => Ok(manager),
                 Err(err) => Err(Error::new(err)),
@@ -191,12 +191,12 @@ pub async fn create_registered_manager() -> Result<Manager<SqliteStore, Register
 }
 
 pub fn get_account_store_path(account_name: &str) -> String {
-    format!("{ACCOUNTS_DIR}/{account_name}/store.db")
+    format!("{}/{account_name}/store.db", paths::accounts_dir())
 }
 
 pub fn ensure_accounts_dir() -> Result<()> {
-    if !Path::new(ACCOUNTS_DIR).exists() {
-        fs::create_dir_all(ACCOUNTS_DIR)?;
+    if !Path::new(&paths::accounts_dir()).exists() {
+        fs::create_dir_all(paths::accounts_dir())?;
     }
     Ok(())
 }
@@ -205,7 +205,7 @@ pub fn list_accounts() -> Result<Vec<String>> {
     ensure_accounts_dir()?;
     let mut accounts = Vec::new();
 
-    if let Ok(entries) = fs::read_dir(ACCOUNTS_DIR) {
+    if let Ok(entries) = fs::read_dir(paths::accounts_dir()) {
         for entry in entries {
             if let Ok(entry) = entry
                 && entry.path().is_dir()
@@ -246,7 +246,7 @@ pub async fn cleanup_invalid_accounts() -> Result<Vec<String>> {
                 Ok(_) => {}
                 Err(_) => {
                     invalid_accounts.push(account_name.clone());
-                    let account_dir = format!("{ACCOUNTS_DIR}/{account_name}");
+                    let account_dir = format!("{}/{account_name}", paths::accounts_dir());
                     if Path::new(&account_dir).exists() {
                         match fs::remove_dir_all(&account_dir) {
                             Ok(_) => {}
@@ -257,7 +257,7 @@ pub async fn cleanup_invalid_accounts() -> Result<Vec<String>> {
             },
             Err(_) => {
                 invalid_accounts.push(account_name.clone());
-                let account_dir = format!("{ACCOUNTS_DIR}/{account_name}");
+                let account_dir = format!("{}/{account_name}", paths::accounts_dir());
                 if Path::new(&account_dir).exists() {
                     match fs::remove_dir_all(&account_dir) {
                         Ok(_) => {}
