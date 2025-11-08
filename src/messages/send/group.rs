@@ -83,8 +83,7 @@ async fn send_message(
 
     let data_message = create_data_message(text_message, &master_key, timestamp, quoted_message);
 
-    let send_result = send(manager, &master_key, data_message, timestamp).await;
-    send_result
+    send(manager, &master_key, data_message, timestamp).await
 }
 
 async fn send_delete_message(
