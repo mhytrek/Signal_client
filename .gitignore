@@ -3,6 +3,7 @@ store/
 .vscode/
 assets/
 logs/
+signal_client/
 
 # Tags for vim
 tags
