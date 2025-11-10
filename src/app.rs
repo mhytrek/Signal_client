@@ -1,19 +1,20 @@
-use crate::contacts::get_contacts_tui;
 use crate::messages::attachments::save_attachment;
-use crate::messages::receive::{self, MessageDto, check_contacts, contact, format_message};
+use crate::messages::receive::{self, MessageDto, contact, format_message};
 use crate::messages::send;
 use crate::paths;
 use crate::profile::get_profile_tui;
 use crate::ui::render_ui;
-use crate::{AsyncContactsMap, config::Config, contacts, groups};
+use crate::{config::Config, contacts, groups};
 use anyhow::{Error, Result, anyhow, bail};
 use arboard::Clipboard;
 use crossterm::event::{self, Event, KeyModifiers};
 use crossterm::event::{KeyCode, KeyEventKind};
+use futures::future::join_all;
 use futures::{StreamExt, pin_mut};
 use presage::Manager;
 use presage::libsignal_service::Profile;
-use presage::libsignal_service::prelude::Uuid;
+use presage::libsignal_service::groups_v2::Member;
+use presage::libsignal_service::prelude::{ProfileKey, Uuid};
 use presage::libsignal_service::zkgroup::GroupMasterKeyBytes;
 use presage::manager::Registered;
 use presage::model::messages::Received;
@@ -1648,18 +1649,14 @@ fn is_delivery_confirmation_timeout(e: &Error) -> bool {
 pub async fn init_background_threads(
     tx_thread: mpsc::Sender<EventApp>,
     rx_thread: mpsc::Receiver<EventSend>,
-    mut manager: Manager<SqliteStore, Registered>,
+    manager: Manager<SqliteStore, Registered>,
     retry_manager: Arc<Mutex<RetryManager>>,
 ) -> Result<()> {
-    let current_contacts_mutex: AsyncContactsMap =
-        Arc::new(Mutex::new(get_contacts_tui(&mut manager).await?));
-
     // let local_pool = LocalPoolHandle::new(4);
 
     //spawn thread to sync contacts and new messages
     let tx_synchronization_events = tx_thread.clone();
     let new_manager = manager.clone();
-    let new_contacts = Arc::clone(&current_contacts_mutex);
     thread::Builder::new()
         .name(String::from("synchronization_thread"))
         .stack_size(1024 * 1024 * 8)
@@ -1670,7 +1667,7 @@ pub async fn init_background_threads(
                 .build()
                 .unwrap();
             runtime.block_on(async move {
-                handle_synchronization(tx_synchronization_events, new_manager, new_contacts).await;
+                handle_synchronization(tx_synchronization_events, new_manager).await;
             })
         })
         .unwrap();
@@ -1678,7 +1675,6 @@ pub async fn init_background_threads(
     //spawn thread to receive background events
     let new_manager = manager.clone();
     let rx_sending_thread = rx_thread;
-    let new_contacts = Arc::clone(&current_contacts_mutex);
     let tx_status_clone = tx_thread.clone();
     let retry_manager_clone = retry_manager.clone();
     thread::Builder::new()
@@ -1694,7 +1690,6 @@ pub async fn init_background_threads(
                 handle_background_events(
                     rx_sending_thread,
                     new_manager,
-                    new_contacts,
                     tx_status_clone,
                     retry_manager_clone,
                 )
@@ -1810,7 +1805,6 @@ pub fn handle_input_events(tx: mpsc::Sender<EventApp>) {
 pub async fn handle_synchronization(
     tx: mpsc::Sender<EventApp>,
     mut manager: Manager<SqliteStore, Registered>,
-    current_contacts_mutex: AsyncContactsMap,
 ) {
     let _receiving_span = span!(Level::TRACE, "Receiving loop").entered();
     let mut previous_contacts: Vec<DisplayContact> = Vec::new();
@@ -1857,12 +1851,7 @@ pub async fn handle_synchronization(
                                 if let Some(formatted_msg) = format_message(&content)
                                     && !formatted_msg.sender
                                 {
-                                    handle_notification(
-                                        &formatted_msg,
-                                        &current_contacts_mutex,
-                                        &manager,
-                                    )
-                                    .await;
+                                    handle_notification(&formatted_msg, &manager).await;
                                 }
 
                                 if let Err(e) = tx.send(EventApp::ReceiveMessage) {
@@ -1871,7 +1860,6 @@ pub async fn handle_synchronization(
                             }
                         }
                     }
-                    _ = check_contacts(&mut manager, current_contacts_mutex.clone()).await;
 
                     let contacts_result = contacts::list_contacts_tui(&mut manager).await;
                     let groups_result = groups::list_groups_tui(&mut manager).await;
@@ -1961,7 +1949,6 @@ pub async fn handle_synchronization(
 
 async fn handle_notification(
     formatted_msg: &MessageDto,
-    current_contacts_mutex: &AsyncContactsMap,
     manager: &Manager<SqliteStore, Registered>,
 ) {
     let config = Config::load();
@@ -1970,19 +1957,23 @@ async fn handle_notification(
     }
 
     let (sender_name, group_name) = {
-        let contacts = current_contacts_mutex.lock().await;
-        let sender = contacts
-            .get(&formatted_msg.uuid)
-            .map(|c| {
-                if !c.name.is_empty() {
-                    c.name.clone()
-                } else if let Some(phone) = &c.phone_number {
-                    phone.to_string()
-                } else {
-                    formatted_msg.uuid.to_string()
-                }
-            })
-            .unwrap_or_else(|| formatted_msg.uuid.to_string());
+        let sender = match manager.store().contact_by_id(&formatted_msg.uuid).await {
+            Ok(contact_option) => contact_option
+                .map(|c| {
+                    if !c.name.is_empty() {
+                        c.name.clone()
+                    } else if let Some(phone) = &c.phone_number {
+                        phone.to_string()
+                    } else {
+                        formatted_msg.uuid.to_string()
+                    }
+                })
+                .unwrap_or(formatted_msg.uuid.to_string()),
+            Err(error) => {
+                error!(%error, "Failed to retrieve contact from store.");
+                return;
+            }
+        };
 
         debug!(
             "Sender UUID: {}, Resolved name: {}",
@@ -2028,7 +2019,6 @@ async fn handle_notification(
 pub async fn handle_background_events(
     rx: Receiver<EventSend>,
     mut manager: Manager<SqliteStore, Registered>,
-    current_contacts_mutex: AsyncContactsMap,
     tx_status: mpsc::Sender<EventApp>,
     retry_manager: Arc<Mutex<RetryManager>>,
 ) {
@@ -2058,7 +2048,6 @@ pub async fn handle_background_events(
                     handle_incoming_event(
                         event,
                         &mut manager,
-                        &current_contacts_mutex,
                         &tx_status,
                         &retry_manager,
                         &local_pool
@@ -2183,7 +2172,6 @@ async fn handle_cleanup_tick(retry_manager: &Arc<Mutex<RetryManager>>) {
 async fn handle_incoming_event(
     event: EventSend,
     manager: &mut Manager<SqliteStore, Registered>,
-    current_contacts_mutex: &AsyncContactsMap,
     tx_status: &mpsc::Sender<EventApp>,
     retry_manager: &Arc<Mutex<RetryManager>>,
     local_pool: &LocalPoolHandle,
@@ -2233,17 +2221,10 @@ async fn handle_incoming_event(
             handle_get_group_messages_event(master_key, manager, tx_status, local_pool).await;
         }
         EventSend::GetContactInfo(uuid_str) => {
-            handle_get_contact_info_event(uuid_str, current_contacts_mutex, tx_status).await;
+            handle_get_contact_info_event(manager, uuid_str, tx_status).await;
         }
         EventSend::GetGroupInfo(master_key) => {
-            handle_get_group_info_event(
-                master_key,
-                manager,
-                current_contacts_mutex,
-                tx_status,
-                local_pool,
-            )
-            .await;
+            handle_get_group_info_event(master_key, manager, tx_status, local_pool).await;
         }
         EventSend::SaveAttachment(attachment_pointer, attachment_save_dir) => {
             handle_save_attachment_event(
@@ -2671,34 +2652,37 @@ async fn handle_get_group_messages_event(
 }
 
 async fn handle_get_contact_info_event(
+    manager: &Manager<SqliteStore, Registered>,
     uuid_str: String,
-    current_contacts_mutex: &AsyncContactsMap,
     tx_status: &mpsc::Sender<EventApp>,
 ) {
-    let contacts_mutex = Arc::clone(current_contacts_mutex);
-    let contacts = contacts_mutex.lock().await;
+    if let Ok(uuid) = uuid_str.parse() {
+        match manager.store().contact_by_id(&uuid).await {
+            Ok(Some(contact)) => {
+                let contact_info = ContactInfo {
+                    uuid: contact.uuid.to_string(),
+                    name: contact.name.clone(),
+                    phone_number: contact.phone_number.as_ref().map(|p| p.to_string()),
+                    verified_state: contact.verified.state,
+                    expire_timer: contact.expire_timer,
+                    has_avatar: contact.avatar.is_some(),
+                };
+                if let Err(e) = tx_status.send(EventApp::ContactInfoReceived(contact_info)) {
+                    error!("Failed to send ContactInfoReceived event: {}", e);
+                }
 
-    if let Ok(uuid) = uuid_str.parse()
-        && let Some(contact) = contacts.get(&uuid)
-    {
-        let contact_info = ContactInfo {
-            uuid: contact.uuid.to_string(),
-            name: contact.name.clone(),
-            phone_number: contact.phone_number.as_ref().map(|p| p.to_string()),
-            verified_state: contact.verified.state,
-            expire_timer: contact.expire_timer,
-            has_avatar: contact.avatar.is_some(),
-        };
-        if let Err(e) = tx_status.send(EventApp::ContactInfoReceived(contact_info)) {
-            error!("Failed to send ContactInfoReceived event: {}", e);
-        }
-
-        if let Some(ref avatar_attachment) = contact.avatar {
-            let avatar_bytes: Vec<u8> = avatar_attachment.reader.to_vec();
-            match tx_status.send(EventApp::ContactAvatarReceived(avatar_bytes)) {
-                Ok(_) => info!("Contact avatar received"),
-                Err(error) => error!(%error, "Failed to send ContactAvatarReceived event."),
+                if let Some(ref avatar_attachment) = contact.avatar {
+                    let avatar_bytes: Vec<u8> = avatar_attachment.reader.to_vec();
+                    match tx_status.send(EventApp::ContactAvatarReceived(avatar_bytes)) {
+                        Ok(_) => info!("Contact avatar received"),
+                        Err(error) => error!(%error, "Failed to send ContactAvatarReceived event."),
+                    }
+                }
             }
+            Ok(None) => {
+                error!("Contact not found");
+            }
+            Err(error) => error!(%error, "Unable to fetch contact info."),
         }
     }
 }
@@ -2706,7 +2690,6 @@ async fn handle_get_contact_info_event(
 async fn handle_get_group_info_event(
     master_key: GroupMasterKeyBytes,
     manager: &mut Manager<SqliteStore, Registered>,
-    current_contacts_mutex: &AsyncContactsMap,
     tx_status: &mpsc::Sender<EventApp>,
     local_pool: &LocalPoolHandle,
 ) {
@@ -2725,37 +2708,58 @@ async fn handle_get_group_info_event(
         }
     };
 
-    let contacts = current_contacts_mutex.lock().await;
-    let members: Vec<DisplayMember> = group
+    let members_futures = group
         .members
         .iter()
-        .map(|member| {
+        .map(|member: &Member| {
             let member_uuid = member.uuid;
-            let contact_option = contacts.get(&member_uuid);
-            match contact_option {
-                Some(contact) => {
-                    let name = match contact.name.is_empty() {
-                        true => None,
-                        false => Some(contact.name.clone()),
-                    };
-                    let phone_number = contact.phone_number.as_ref().map(|pn| pn.to_string());
-                    let uuid = contact.uuid;
+            let mut inner_manager = manager.clone();
+            async move {
+                let contact_result = inner_manager.store().contact_by_id(&member_uuid).await;
+                let contact_option = match contact_result {
+                    Ok(co) => co,
+                    Err(error) => {
+                        error!(%error, "Unable to fetch contact.");
+                        return None;
+                    }
+                };
+                match contact_option {
+                    Some(contact) => {
+                        let name = match contact.name.is_empty() {
+                            true => {
+                                let profile_key = member.profile_key;
+                                retrieve_profile_name(&mut inner_manager, member_uuid, profile_key)
+                                    .await
+                            }
+                            false => Some(contact.name.clone()),
+                        };
+                        let phone_number = contact.phone_number.as_ref().map(|pn| pn.to_string());
+                        let uuid = contact.uuid;
 
-                    DisplayMember {
-                        uuid,
-                        phone_number,
-                        name,
+                        Some(DisplayMember {
+                            uuid,
+                            phone_number,
+                            name,
+                        })
+                    }
+                    None => {
+                        let member_uuid = member.uuid;
+                        let profile_key = member.profile_key;
+                        let name =
+                            retrieve_profile_name(&mut inner_manager, member_uuid, profile_key)
+                                .await;
+                        Some(DisplayMember {
+                            uuid: member_uuid,
+                            phone_number: None,
+                            name,
+                        })
                     }
                 }
-                None => DisplayMember {
-                    uuid: member_uuid,
-                    phone_number: None,
-                    name: None,
-                },
             }
         })
-        .collect();
-    drop(contacts);
+        .collect::<Vec<_>>();
+    let results = join_all(members_futures).await;
+    let members = results.into_iter().flatten().collect();
 
     let description = group.description.unwrap_or_default();
     let group_info = GroupInfo {
@@ -2804,6 +2808,23 @@ pub fn handle_checking_qr_code(tx: mpsc::Sender<EventApp>) {
                 error!("Failed to send QrCodeGenerated event");
             }
             break;
+        }
+    }
+}
+
+async fn retrieve_profile_name(
+    manager: &mut Manager<SqliteStore, Registered>,
+    uuid: Uuid,
+    profile_key: ProfileKey,
+) -> Option<String> {
+    match manager.retrieve_profile_by_uuid(uuid, profile_key).await {
+        Ok(profile) => profile.name.map(|name| match name.family_name {
+            Some(family_name) => format!("{} {}", name.given_name, family_name),
+            None => name.given_name,
+        }),
+        Err(error) => {
+            error!(%error, "Failed to fetch profile.");
+            None
         }
     }
 }

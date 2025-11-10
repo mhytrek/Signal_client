@@ -1,4 +1,3 @@
-use crate::AsyncContactsMap;
 use crate::account_management::create_registered_manager;
 use crate::messages::receive::receiving_loop;
 use anyhow::Result;
@@ -9,29 +8,21 @@ use presage::model::contacts::Contact;
 use presage::store::ContentsStore;
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
 use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
-async fn sync_contacts(
-    manager: &mut Manager<SqliteStore, Registered>,
-    current_contacts_mutex: AsyncContactsMap,
-) -> Result<()> {
+async fn sync_contacts(manager: &mut Manager<SqliteStore, Registered>) -> Result<()> {
     let messages = manager.receive_messages().await?;
 
-    let new_contacts_mutex = Arc::clone(&current_contacts_mutex);
-    receiving_loop(messages, manager, None, new_contacts_mutex).await?;
+    receiving_loop(messages, None).await;
     manager.request_contacts().await?;
     let messages = manager.receive_messages().await?;
-    receiving_loop(messages, manager, None, current_contacts_mutex).await?;
+    receiving_loop(messages, None).await;
     Ok(())
 }
 
 /// Function to sync contacts when CLI is used
 pub async fn sync_contacts_cli() -> Result<()> {
     let mut manager = create_registered_manager().await?;
-    let current_contacts_mutex: AsyncContactsMap =
-        Arc::new(Mutex::new(get_contacts(&manager).await?));
-    sync_contacts(&mut manager, current_contacts_mutex).await
+    sync_contacts(&mut manager).await
 }
 
 async fn get_contacts(
@@ -81,7 +72,5 @@ pub async fn list_contacts_tui(
 }
 
 pub async fn initial_sync_cli(manager: &mut Manager<SqliteStore, Registered>) -> Result<()> {
-    let current_contacts_mutex: AsyncContactsMap =
-        Arc::new(Mutex::new(get_contacts(manager).await?));
-    sync_contacts(manager, current_contacts_mutex).await
+    sync_contacts(manager).await
 }
