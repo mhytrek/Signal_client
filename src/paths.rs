@@ -44,21 +44,21 @@ pub fn qrcode() -> String {
     static PATH: OnceLock<String> = OnceLock::new();
     PATH.get_or_init(|| {
         if cfg!(debug_assertions) {
-            "./assets/signal_client/qrcode".to_string()
+            "./signal_client/assets/qrcode".to_string()
         } else {
             match home_dir() {
                 Some(home_dir) => match ensure_local_share_dir(&home_dir) {
                     Ok(_) => home_dir
                         .join(".local/share/signal_client/assets/qrcode")
                         .to_str()
-                        .unwrap_or("./assets/signal_client/qrcode")
+                        .unwrap_or("./signal_client/assets/qrcode")
                         .to_string(),
                     Err(error) => {
                         error!(%error, "Unable to ensure if ~/.local/share directory exists.");
-                        "./assets/signal_client/qrcode".to_string()
+                        "./signal_client/assets/qrcode".to_string()
                     }
                 },
-                None => "./assets/signal_client/qrcode".to_string(),
+                None => "./signal_client/assets/qrcode".to_string(),
             }
         }
     })
