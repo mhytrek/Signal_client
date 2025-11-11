@@ -108,7 +108,7 @@ fn calculate_message_dimensions(
             total_lines += (len / max_width + 1) as u16;
         }
 
-        let message_height = total_lines + 2;
+        let message_height = total_lines + 3;
 
         let actual_width = longest_line_len
             .min(max_width)
@@ -234,7 +234,8 @@ fn render_messages(
                 .block(
                     block
                         .clone()
-                        .title(datetime_local.format("%Y-%m-%d %H:%M:%S").to_string()),
+                        .title_top(datetime_local.format("%Y-%m-%d %H:%M:%S").to_string())
+                        .title_bottom(get_display_name(app, msg.uuid.to_string().as_str())),
                 )
                 .wrap(Wrap { trim: false }),
 
