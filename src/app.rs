@@ -144,6 +144,7 @@ pub enum CurrentScreen {
     Exiting,
     ContactInfo,
     GroupInfo,
+    MemberInfo,
     AccountSelector,
     CreatingAccount,
     ConfirmDelete,
@@ -220,6 +221,7 @@ pub struct App {
     pub group_avatar_cache: Option<Vec<u8>>,
     pub group_avatar_image: Option<StatefulProtocol>,
     pub selected_group_member: usize,
+    pub selected_member_info: Option<MemberInfo>,
 
     pub current_screen: CurrentScreen,
     pub linking_status: LinkingStatus,
@@ -293,6 +295,7 @@ pub enum EventApp {
 
     GroupInfoReceived(GroupInfo),
     GroupAvatarReceived(Vec<u8>),
+    MemberAvaterReceived(Vec<u8>),
 
     GetContactMessageHistory(String, Vec<MessageDto>),
     GetGroupMessageHistory(GroupMasterKeyBytes, Vec<MessageDto>),
@@ -310,6 +313,7 @@ pub enum EventSend {
     GetMessagesForGroup(GroupMasterKeyBytes),
     GetContactInfo(String),
     GetGroupInfo(GroupMasterKeyBytes),
+    GetMemberAvatar(MemberInfo),
     SaveAttachment(Box<AttachmentPointer>, PathBuf),
 }
 
@@ -371,6 +375,7 @@ impl App {
             selected_group_member: 0,
             group_avatar_cache: None,
             group_avatar_image: None,
+            selected_member_info: None,
 
             config: Config::load(),
             config_selected: 0,
@@ -682,6 +687,13 @@ impl App {
                 self.group_avatar_cache = Some(avatar_bytes);
                 if self.config.show_images {
                     self.load_group_avatar();
+                }
+                Ok(false)
+            }
+            EventApp::MemberAvaterReceived(avatar_bytes) => {
+                self.contact_avatar_cache = Some(avatar_bytes);
+                if self.config.show_images {
+                    self.load_contact_avatar();
                 }
                 Ok(false)
             }
@@ -1373,6 +1385,23 @@ impl App {
                     if self.selected_group_member > 0 {
                         self.selected_group_member -= 1;
                     }
+                }
+                KeyCode::Char('i') => {
+                    let group_info = self.selected_group_info.as_ref().unwrap();
+                    let member_info = group_info.members[self.selected_group_member].clone();
+                    self.selected_member_info = Some(member_info.clone());
+                    self.tx_tui
+                        .send(EventSend::GetMemberAvatar(member_info))
+                        .unwrap();
+                    self.current_screen = MemberInfo;
+                }
+                _ => {}
+            },
+            MemberInfo => match key.code {
+                KeyCode::Esc | KeyCode::Left | KeyCode::Char('q') => {
+                    self.current_screen = GroupInfo;
+                    self.contact_avatar_cache = None;
+                    self.contact_avatar_image = None;
                 }
                 _ => {}
             },
@@ -2228,6 +2257,9 @@ async fn handle_incoming_event(
         EventSend::GetGroupInfo(master_key) => {
             handle_get_group_info_event(master_key, manager, tx_status, local_pool).await;
         }
+        EventSend::GetMemberAvatar(member_info) => {
+            handle_get_member_avatar_event(member_info, manager, tx_status, local_pool).await;
+        }
         EventSend::SaveAttachment(attachment_pointer, attachment_save_dir) => {
             handle_save_attachment_event(
                 *attachment_pointer,
@@ -2844,7 +2876,7 @@ async fn handle_get_group_info_event(
                             }
                         }
                     }
-                    None => warn!("Group avatar not found"),
+                    None => {}
                 },
                 Err(error) => error!(%error, "Couldn't fetch group avatar"),
             }
@@ -2853,6 +2885,42 @@ async fn handle_get_group_info_event(
 
     if let Err(error) = tx_status.send(EventApp::GroupInfoReceived(group_info)) {
         error!(%error, "Unable to send `GroupInfo` via chanel.");
+    }
+}
+
+async fn handle_get_member_avatar_event(
+    member_info: MemberInfo,
+    manager: &mut Manager<SqliteStore, Registered>,
+    tx_status: &mpsc::Sender<EventApp>,
+    local_pool: &LocalPoolHandle,
+) {
+    if member_info.has_avatar {
+        let uuid = member_info.uuid;
+        let profile_key = member_info.profile_key;
+        let mut manager_inner = manager.clone();
+        let tx_status_inner = tx_status.clone();
+        local_pool.spawn_pinned(move || async move {
+            let avatar_result = manager_inner
+                .retrieve_profile_avatar_by_uuid(uuid, profile_key)
+                .await;
+
+            match avatar_result {
+                Ok(avatar_option) => match avatar_option {
+                    Some(avatar_bytes) => {
+                        match tx_status_inner.send(EventApp::MemberAvaterReceived(avatar_bytes)) {
+                            Ok(_) => info!("Member avatar received"),
+                            Err(error) => {
+                                error!(%error, "Failed to send MemberAvatarReceived event.");
+                            }
+                        }
+                    }
+                    None => {}
+                },
+                Err(error) => {
+                    error!(%error, "Failed to fetch group member avatar.");
+                }
+            }
+        });
     }
 }
 
