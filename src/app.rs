@@ -167,7 +167,6 @@ pub enum InputFocus {
 #[derive(Clone)]
 pub struct ContactInfo {
     pub uuid: String,
-    pub(crate) profile_key: Option<ProfileKey>,
     pub name: String,
     pub description: Option<String>,
     pub phone_number: Option<String>,
@@ -2281,7 +2280,7 @@ async fn handle_incoming_event(
             handle_get_group_messages_event(master_key, manager, tx_status, local_pool).await;
         }
         EventSend::GetContactInfo(uuid_str) => {
-            handle_get_contact_info_event(manager, uuid_str, tx_status).await;
+            handle_get_contact_info_event(manager, uuid_str, tx_status, local_pool).await;
         }
         EventSend::GetGroupInfo(master_key) => {
             handle_get_group_info_event(master_key, manager, tx_status, local_pool).await;
@@ -2718,6 +2717,7 @@ async fn handle_get_contact_info_event(
     manager: &mut Manager<SqliteStore, Registered>,
     uuid_str: String,
     tx_status: &mpsc::Sender<EventApp>,
+    local_pool: &LocalPoolHandle,
 ) {
     if let Ok(uuid) = uuid_str.parse() {
         match manager.store().contact_by_id(&uuid).await {
@@ -2765,26 +2765,45 @@ async fn handle_get_contact_info_event(
                     None => None,
                 };
 
+                let has_avatar = match &profile {
+                    Some(p) => p.avatar.is_some(),
+                    None => false,
+                };
+
                 let contact_info = ContactInfo {
                     uuid: contact.uuid.to_string(),
                     name: contact_name,
                     description,
-                    profile_key,
                     phone_number: contact.phone_number.as_ref().map(|p| p.to_string()),
                     verified_state: contact.verified.state,
                     expire_timer: contact.expire_timer,
-                    has_avatar: contact.avatar.is_some(),
+                    has_avatar,
                 };
                 if let Err(e) = tx_status.send(EventApp::ContactInfoReceived(contact_info)) {
                     error!("Failed to send ContactInfoReceived event: {}", e);
                 }
 
-                if let Some(ref avatar_attachment) = contact.avatar {
-                    let avatar_bytes: Vec<u8> = avatar_attachment.reader.to_vec();
-                    match tx_status.send(EventApp::ContactAvatarReceived(avatar_bytes)) {
-                        Ok(_) => info!("Contact avatar received"),
-                        Err(error) => error!(%error, "Failed to send ContactAvatarReceived event."),
-                    }
+                if has_avatar && let Some(profile_key) = profile_key {
+                    let mut manager_inner = manager.clone();
+                    let tx_status_inner = tx_status.clone();
+                    local_pool.spawn_pinned(move || async move {
+                        match manager_inner
+                            .retrieve_profile_avatar_by_uuid(contact.uuid, profile_key)
+                            .await
+                        {
+                            Ok(avatar_option) => {
+                                if let Some(avatar_bytes) = avatar_option
+                                    && let Err(error) = tx_status_inner
+                                        .send(EventApp::ContactAvatarReceived(avatar_bytes))
+                                {
+                                    error!(%error, "Failed to send `ContactAvatarReceived` event.");
+                                }
+                            }
+                            Err(error) => {
+                                error!(%error, "Failed to fetch contact avatar.");
+                            }
+                        }
+                    });
                 }
             }
             Ok(None) => {
