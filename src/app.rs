@@ -188,6 +188,7 @@ pub struct MemberInfo {
     pub uuid: Uuid,
     pub phone_number: Option<String>,
     pub name: Option<String>,
+    pub description: Option<String>,
     pub has_avatar: bool,
     pub(crate) profile_key: ProfileKey,
 }
@@ -2788,16 +2789,21 @@ async fn handle_get_group_info_event(
                         };
                         let phone_number = contact.phone_number.as_ref().map(|pn| pn.to_string());
                         let uuid = member_uuid;
-                        let has_avatar = match profile_option {
+                        let has_avatar = match &profile_option {
                             Some(p) => p.avatar.is_some(),
                             None => false,
                         };
                         let profile_key = member.profile_key;
+                        let description = match &profile_option {
+                            Some(p) => p.about.clone(),
+                            None => None,
+                        };
 
                         Some(MemberInfo {
                             uuid,
                             phone_number,
                             name,
+                            description,
                             has_avatar,
                             profile_key,
                         })
@@ -2832,11 +2838,16 @@ async fn handle_get_group_info_event(
                             None => false,
                         };
                         let profile_key = member.profile_key;
+                        let description = match &profile_option {
+                            Some(p) => p.about.clone(),
+                            None => None,
+                        };
 
                         Some(MemberInfo {
                             uuid: member_uuid,
                             phone_number: None,
                             name,
+                            description,
                             has_avatar,
                             profile_key,
                         })

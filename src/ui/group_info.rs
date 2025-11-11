@@ -176,19 +176,19 @@ pub fn render_member_info(frame: &mut Frame, app: &mut App, area: Rect) {
         .split(centered_layout[1]);
 
     if app.config.show_images {
-        if let Some(contact_avatar) = app.contact_avatar_image.as_mut() {
+        if let Some(member_avatar) = app.contact_avatar_image.as_mut() {
             frame.render_stateful_widget(
                 StatefulImage::new().resize(Resize::Fit(None)),
                 centered_area[1],
-                contact_avatar,
+                member_avatar,
             );
         } else {
             let placeholder_text = if app.contact_avatar_cache.is_some() {
                 "Loading..."
             } else if app
-                .selected_contact_info
+                .selected_member_info
                 .as_ref()
-                .is_some_and(|c| c.has_avatar)
+                .is_some_and(|m| m.has_avatar)
             {
                 "Avatar available but not loaded"
             } else {
@@ -214,9 +214,10 @@ pub fn render_member_info(frame: &mut Frame, app: &mut App, area: Rect) {
 
     if let Some(member) = &app.selected_member_info {
         info_text.push_str(&format!(
-            "\nNAME:\n{}\n\nPHONE:\n{}\n\nAVATAR:\n{}\n",
+            "\nNAME:\n{}\n\nPHONE:\n{}\n\nABOUT:\n{}\n\nAVATAR:\n{}\n",
             member.name.as_deref().unwrap_or(""),
             member.phone_number.as_deref().unwrap_or("Not set"),
+            member.description.as_deref().unwrap_or(""),
             if member.has_avatar { "Set" } else { "Not set" },
         ));
     } else {

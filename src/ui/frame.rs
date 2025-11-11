@@ -213,6 +213,10 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(app.config.get_primary_color()),
         ),
         CurrentScreen::GroupInfo => Span::styled(
+            "(q) to exit | (← or ESC) to go back | (i) for additional member information",
+            Style::default().fg(app.config.get_primary_color()),
+        ),
+        CurrentScreen::MemberInfo => Span::styled(
             "(q) to exit | (← or ESC) to go back",
             Style::default().fg(app.config.get_primary_color()),
         ),
