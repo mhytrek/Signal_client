@@ -113,9 +113,10 @@ pub fn render_contact_info_compact(frame: &mut Frame, app: &mut App, area: Rect)
 
     if let Some(contact) = &app.selected_contact_info {
         info_text.push_str(&format!(
-            "\nNAME:\n{}\n\nPHONE:\n{}\n\nVERIFIED:\n{}\n\nAVATAR:\n{}\n",
+            "\nNAME:\n{}\n\nPHONE:\n{}\n\nABOUT:\n{}\n\nVERIFIED:\n{}\n\nAVATAR:\n{}\n",
             contact.name,
             contact.phone_number.as_deref().unwrap_or("Not set"),
+            contact.description.as_deref().unwrap_or(""),
             match contact.verified_state {
                 Some(state) if state > 0 => "Yes",
                 _ => "No",

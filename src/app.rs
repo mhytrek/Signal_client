@@ -167,7 +167,9 @@ pub enum InputFocus {
 #[derive(Clone)]
 pub struct ContactInfo {
     pub uuid: String,
+    pub(crate) profile_key: Option<ProfileKey>,
     pub name: String,
+    pub description: Option<String>,
     pub phone_number: Option<String>,
     pub verified_state: Option<i32>,
     pub expire_timer: u32,
@@ -2713,16 +2715,61 @@ async fn handle_get_group_messages_event(
 }
 
 async fn handle_get_contact_info_event(
-    manager: &Manager<SqliteStore, Registered>,
+    manager: &mut Manager<SqliteStore, Registered>,
     uuid_str: String,
     tx_status: &mpsc::Sender<EventApp>,
 ) {
     if let Ok(uuid) = uuid_str.parse() {
         match manager.store().contact_by_id(&uuid).await {
             Ok(Some(contact)) => {
+                let profile_key = match manager.store().profile_key(&contact.uuid).await {
+                    Ok(pk) => pk,
+                    Err(error) => {
+                        error!(%error, "Failed to retrieve profile key from the store.");
+                        None
+                    }
+                };
+                let profile = match profile_key {
+                    Some(profile_key) => match manager
+                        .retrieve_profile_by_uuid(contact.uuid, profile_key)
+                        .await
+                    {
+                        Ok(profile) => Some(profile),
+                        Err(error) => {
+                            error!(%error, "Failed to retrieve profile.");
+                            None
+                        }
+                    },
+                    None => None,
+                };
+
+                let contact_name = if !contact.name.is_empty() {
+                    contact.name
+                } else {
+                    match &profile {
+                        Some(p) if p.name.is_some() => {
+                            let profile_name = p.name.as_ref().unwrap();
+                            match &profile_name.family_name {
+                                Some(family_name) => {
+                                    format!("{} {family_name}", profile_name.given_name)
+                                }
+                                None => profile_name.given_name.clone(),
+                            }
+                        }
+                        Some(_) | None => String::new(),
+                    }
+                };
+
+                let description = match &profile {
+                    Some(p) => p.about.clone(),
+                    None => None,
+                };
+
                 let contact_info = ContactInfo {
                     uuid: contact.uuid.to_string(),
-                    name: contact.name.clone(),
+                    name: contact_name,
+                    description,
+                    profile_key,
                     phone_number: contact.phone_number.as_ref().map(|p| p.to_string()),
                     verified_state: contact.verified.state,
                     expire_timer: contact.expire_timer,
