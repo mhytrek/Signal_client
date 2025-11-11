@@ -179,14 +179,16 @@ pub struct GroupInfo {
     pub name: String,
     pub description: String,
     pub has_avatar: bool,
-    pub members: Vec<DisplayMember>,
+    pub members: Vec<MemberInfo>,
 }
 
 #[derive(Clone)]
-pub struct DisplayMember {
+pub struct MemberInfo {
     pub uuid: Uuid,
     pub phone_number: Option<String>,
     pub name: Option<String>,
+    pub has_avatar: bool,
+    pub(crate) profile_key: ProfileKey,
 }
 
 #[derive(PartialEq, Clone)]
@@ -2723,35 +2725,88 @@ async fn handle_get_group_info_event(
                         return None;
                     }
                 };
+                let profile_result = inner_manager
+                    .retrieve_profile_by_uuid(member_uuid, member.profile_key)
+                    .await;
+                let profile_option = match profile_result {
+                    Ok(profile) => Some(profile),
+                    Err(error) => {
+                        error!(%error, "Failed to fetch profile.");
+                        None
+                    }
+                };
+
                 match contact_option {
                     Some(contact) => {
                         let name = match contact.name.is_empty() {
-                            true => {
-                                let profile_key = member.profile_key;
-                                retrieve_profile_name(&mut inner_manager, member_uuid, profile_key)
-                                    .await
-                            }
+                            true => match &profile_option {
+                                Some(p) if p.name.is_some() => {
+                                    let profile_name = p.name.as_ref().unwrap();
+                                    match &profile_name.family_name {
+                                        Some(family_name) => Some(format!(
+                                            "{} {family_name}",
+                                            profile_name.given_name
+                                        )),
+                                        None => Some(profile_name.given_name.clone()),
+                                    }
+                                }
+                                Some(_) | None => None,
+                            },
                             false => Some(contact.name.clone()),
                         };
                         let phone_number = contact.phone_number.as_ref().map(|pn| pn.to_string());
-                        let uuid = contact.uuid;
+                        let uuid = member_uuid;
+                        let has_avatar = match profile_option {
+                            Some(p) => p.avatar.is_some(),
+                            None => false,
+                        };
+                        let profile_key = member.profile_key;
 
-                        Some(DisplayMember {
+                        Some(MemberInfo {
                             uuid,
                             phone_number,
                             name,
+                            has_avatar,
+                            profile_key,
                         })
                     }
                     None => {
                         let member_uuid = member.uuid;
+                        let profile_result = inner_manager
+                            .retrieve_profile_by_uuid(member_uuid, member.profile_key)
+                            .await;
+                        let profile_option = match profile_result {
+                            Ok(profile) => Some(profile),
+                            Err(error) => {
+                                error!(%error, "Failed to fetch profile.");
+                                None
+                            }
+                        };
+
+                        let name = match &profile_option {
+                            Some(p) if p.name.is_some() => {
+                                let profile_name = p.name.as_ref().unwrap();
+                                match &profile_name.family_name {
+                                    Some(family_name) => {
+                                        Some(format!("{} {family_name}", profile_name.given_name))
+                                    }
+                                    None => Some(profile_name.given_name.clone()),
+                                }
+                            }
+                            Some(_) | None => None,
+                        };
+                        let has_avatar = match &profile_option {
+                            Some(p) => p.avatar.is_some(),
+                            None => false,
+                        };
                         let profile_key = member.profile_key;
-                        let name =
-                            retrieve_profile_name(&mut inner_manager, member_uuid, profile_key)
-                                .await;
-                        Some(DisplayMember {
+
+                        Some(MemberInfo {
                             uuid: member_uuid,
                             phone_number: None,
                             name,
+                            has_avatar,
+                            profile_key,
                         })
                     }
                 }
@@ -2808,23 +2863,6 @@ pub fn handle_checking_qr_code(tx: mpsc::Sender<EventApp>) {
                 error!("Failed to send QrCodeGenerated event");
             }
             break;
-        }
-    }
-}
-
-async fn retrieve_profile_name(
-    manager: &mut Manager<SqliteStore, Registered>,
-    uuid: Uuid,
-    profile_key: ProfileKey,
-) -> Option<String> {
-    match manager.retrieve_profile_by_uuid(uuid, profile_key).await {
-        Ok(profile) => profile.name.map(|name| match name.family_name {
-            Some(family_name) => format!("{} {}", name.given_name, family_name),
-            None => name.given_name,
-        }),
-        Err(error) => {
-            error!(%error, "Failed to fetch profile.");
-            None
         }
     }
 }
