@@ -1912,26 +1912,52 @@ pub async fn handle_synchronization(
                         }
                     };
 
-                    let contact_displays: Vec<DisplayContact> = contacts
+                    let contact_displays_futures = contacts
                         .into_iter()
-                        .filter_map(|contact_res| {
-                            let contact = contact_res.ok()?;
+                        .map(|contact_res| {
+                            let mut inner_manager = manager.clone();
+                            async move {
+                                let contact = contact_res.ok()?;
 
-                            let uuid_str = contact.uuid.to_string();
+                                let uuid_str = contact.uuid.to_string();
+                                let profile_key =
+                                    match inner_manager.store().profile_key(&contact.uuid).await {
+                                        Ok(profile_key_option) => profile_key_option,
+                                        Err(error) => {
+                                            error!(%error, "Failed to retreive profile key from the store.");
+                                            None
+                                        }
+                                    };
 
-                            let display_name = if !contact.name.is_empty() {
-                                contact.name
-                            } else if let Some(phone) = contact.phone_number {
-                                phone.to_string()
-                            } else {
-                                uuid_str.clone()
-                            };
+                                let display_name = if !contact.name.is_empty() {
+                                    contact.name
+                                } else if let Some(profile_key) = profile_key
+                                    && let Ok(profile) = inner_manager
+                                        .retrieve_profile_by_uuid(contact.uuid, profile_key)
+                                        .await
+                                    && let Some(profile_name) = &profile.name
+                                {
+                                    match &profile_name.family_name {
+                                        Some(family_mame) => {
+                                            format!("{} {family_mame}", profile_name.given_name)
+                                        }
+                                        None => profile_name.given_name.clone(),
+                                    }
+                                } else if let Some(phone) = contact.phone_number {
+                                    phone.to_string()
+                                } else {
+                                    uuid_str.clone()
+                                };
 
-                            let display_contact = DisplayContact::new(display_name, contact.uuid);
+                                let display_contact =
+                                    DisplayContact::new(display_name, contact.uuid);
 
-                            Some(display_contact)
+                                Some(display_contact)
+                            }
                         })
-                        .collect();
+                        .collect::<Vec<_>>();
+                    let results = join_all(contact_displays_futures).await;
+                    let contact_displays = results.into_iter().flatten().collect::<Vec<_>>();
 
                     let group_displays: Vec<DisplayGroup> = groups
                         .into_iter()
