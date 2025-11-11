@@ -2878,8 +2878,8 @@ async fn handle_get_group_info_event(
                 ..Default::default()
             };
             match manager_inner.retrieve_group_avatar(group_ctx).await {
-                Ok(avatar_option) => match avatar_option {
-                    Some(avatar_bytes) => {
+                Ok(avatar_option) => {
+                    if let Some(avatar_bytes) = avatar_option {
                         match tx_status_inner.send(EventApp::GroupAvatarReceived(avatar_bytes)) {
                             Ok(_) => info!("Group avatar received"),
                             Err(error) => {
@@ -2887,8 +2887,7 @@ async fn handle_get_group_info_event(
                             }
                         }
                     }
-                    None => {}
-                },
+                }
                 Err(error) => error!(%error, "Couldn't fetch group avatar"),
             }
         });
@@ -2916,8 +2915,8 @@ async fn handle_get_member_avatar_event(
                 .await;
 
             match avatar_result {
-                Ok(avatar_option) => match avatar_option {
-                    Some(avatar_bytes) => {
+                Ok(avatar_option) => {
+                    if let Some(avatar_bytes) = avatar_option {
                         match tx_status_inner.send(EventApp::MemberAvaterReceived(avatar_bytes)) {
                             Ok(_) => info!("Member avatar received"),
                             Err(error) => {
@@ -2925,8 +2924,7 @@ async fn handle_get_member_avatar_event(
                             }
                         }
                     }
-                    None => {}
-                },
+                }
                 Err(error) => {
                     error!(%error, "Failed to fetch group member avatar.");
                 }
