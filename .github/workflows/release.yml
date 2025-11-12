@@ -36,7 +36,7 @@ jobs:
         run: cargo build -r --all-features
 
       - name: Package binaries
-        run: tar -czvf signal_client_linux_x86_64.tar.gz --strip-components=3 ./target/release/signal_client
+        run: tar -czvf signal_client_linux_x86_64.tar.gz -C target/release signal_client
 
       - uses: actions/upload-artifact@v4
         with:
@@ -64,7 +64,7 @@ jobs:
         run: cargo build -r --all-features
 
       - name: Package binaries
-        run: tar -czvf signal_client_darwin_x86_64.tar.gz --strip-components=3 ./target/release/signal_client
+        run: tar -czvf signal_client_darwin_x86_64.tar.gz -C target/release signal_client
 
       - uses: actions/upload-artifact@v4
         with:
@@ -92,7 +92,7 @@ jobs:
         run: cargo build -r --all-features
 
       - name: Package binaries
-        run: tar -czvf signal_client_darwin_arm64.tar.gz --strip-components=3 ./target/release/signal_client
+        run: tar -czvf signal_client_darwin_arm64.tar.gz -C target/release signal_client
 
       - uses: actions/upload-artifact@v4
         with:
