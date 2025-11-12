@@ -33,7 +33,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 
 use std::{fs, io};
 use tokio::runtime::Builder;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tokio_util::task::LocalPoolHandle;
 use tracing::{Level, debug, error, info, span, trace, warn};
 
@@ -204,6 +204,8 @@ pub struct App {
     pub uuid: Option<Uuid>,
     pub recipients: Vec<(DisplayRecipient, String)>, // contact_uuid, contact_name, input for this contact
 
+    pub names_map: Arc<RwLock<HashMap<Uuid, String>>>, // Profile UUID, Display name
+
     pub current_account: Option<String>,
     pub deleting_account: Option<String>,
     pub available_accounts: Vec<String>,
@@ -346,6 +348,7 @@ impl App {
             account_linking_field: AccountLinkingField::AccountName,
             account_selected: 0,
             recipients: vec![],
+            names_map: Arc::new(RwLock::new(HashMap::new())),
             selected_recipient: 0,
             message_selected: 0,
             character_index: 0,
@@ -428,6 +431,7 @@ impl App {
                             rx,
                             manager,
                             self.retry_manager.clone(),
+                            self.names_map.clone(),
                         )
                         .await
                         {
@@ -500,6 +504,7 @@ impl App {
                 rx,
                 new_manager,
                 self.retry_manager.clone(),
+                self.names_map.clone(),
             )
             .await
         {
@@ -742,6 +747,7 @@ impl App {
                                 rx,
                                 new_manager,
                                 Arc::clone(&self.retry_manager),
+                                self.names_map.clone(),
                             )
                             .await
                             {
@@ -1684,6 +1690,7 @@ pub async fn init_background_threads(
     rx_thread: mpsc::Receiver<EventSend>,
     manager: Manager<SqliteStore, Registered>,
     retry_manager: Arc<Mutex<RetryManager>>,
+    names_map: Arc<RwLock<HashMap<Uuid, String>>>,
 ) -> Result<()> {
     // let local_pool = LocalPoolHandle::new(4);
 
@@ -1700,7 +1707,7 @@ pub async fn init_background_threads(
                 .build()
                 .unwrap();
             runtime.block_on(async move {
-                handle_synchronization(tx_synchronization_events, new_manager).await;
+                handle_synchronization(tx_synchronization_events, new_manager, names_map).await;
             })
         })
         .unwrap();
@@ -1838,6 +1845,7 @@ pub fn handle_input_events(tx: mpsc::Sender<EventApp>) {
 pub async fn handle_synchronization(
     tx: mpsc::Sender<EventApp>,
     mut manager: Manager<SqliteStore, Registered>,
+    names_map: Arc<RwLock<HashMap<Uuid, String>>>,
 ) {
     let _receiving_span = span!(Level::TRACE, "Receiving loop").entered();
     let mut previous_contacts: Vec<DisplayContact> = Vec::new();
@@ -1960,6 +1968,51 @@ pub async fn handle_synchronization(
                     let results = join_all(contact_displays_futures).await;
                     let contact_displays = results.into_iter().flatten().collect::<Vec<_>>();
 
+                    let mut new_names: HashMap<Uuid, String> = HashMap::new();
+
+                    let read_names_map = names_map.read().await;
+                    for contact in &contact_displays {
+                        match read_names_map.get(&contact.uuid) {
+                            Some(name) if name != contact.display_name() => {
+                                new_names.insert(contact.uuid, contact.display_name().to_string());
+                            }
+                            Some(_) => {}
+                            None => {
+                                new_names.insert(contact.uuid, contact.display_name().to_string());
+                            }
+                        }
+                    }
+
+                    for (_, group) in groups.iter().flatten() {
+                        let members = &group.members;
+                        for member in members {
+                            let profile = manager
+                                .retrieve_profile_by_uuid(member.uuid, member.profile_key)
+                                .await;
+                            if let Ok(profile) = &profile
+                                && let Some(profile_name) = &profile.name
+                            {
+                                let member_name = match &profile_name.family_name {
+                                    Some(family_name) => {
+                                        format!("{} {family_name}", profile_name.given_name)
+                                    }
+                                    None => profile_name.given_name.clone(),
+                                };
+
+                                match read_names_map.get(&member.uuid) {
+                                    Some(name) if *name != member_name => {
+                                        new_names.insert(member.uuid, member_name.clone());
+                                    }
+                                    Some(_) => {}
+                                    None => {
+                                        new_names.insert(member.uuid, member_name.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    drop(read_names_map);
+
                     let group_displays: Vec<DisplayGroup> = groups
                         .into_iter()
                         .filter_map(|groups_res| {
@@ -1981,6 +2034,14 @@ pub async fn handle_synchronization(
                         .map(DisplayRecipient::Contact)
                         .chain(group_displays.iter().cloned().map(DisplayRecipient::Group))
                         .collect();
+
+                    if !new_names.is_empty() {
+                        let mut write_names_map = names_map.write().await;
+                        for (uuid, name) in new_names.into_iter() {
+                            write_names_map.insert(uuid, name);
+                        }
+                        drop(write_names_map);
+                    }
 
                     if contacts_differ || groups_differ {
                         if tx.send(EventApp::ContactsList(display_recipients)).is_err() {
