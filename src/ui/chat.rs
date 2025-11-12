@@ -5,6 +5,7 @@ use ratatui::{
     style::{Modifier, Style},
     widgets::{Block, BorderType, Borders, Paragraph, Wrap},
 };
+use uuid::Uuid;
 
 use crate::{
     app::{App, CurrentScreen, RecipientId},
@@ -317,12 +318,24 @@ fn render_quote_block(app: &App, quote: &Quote) -> String {
 }
 
 fn get_display_name(app: &App, author_aci: &str) -> String {
-    for (recipient, _) in &app.recipients {
-        if let RecipientId::Contact(uuid) = recipient.id()
-            && uuid.to_string() == author_aci
-        {
-            return recipient.display_name().to_string();
+    // for (recipient, _) in &app.recipients {
+    //     if let RecipientId::Contact(uuid) = recipient.id()
+    //         && uuid.to_string() == author_aci
+    //     {
+    //         return recipient.display_name().to_string();
+    //     }
+    // }
+    let uuid = match Uuid::parse_str(author_aci) {
+        Ok(id) => id,
+        Err(error) => {
+            tracing::error!(%error, "Error parsing Uuid from string.");
+            return "Unknown".to_string();
         }
+    };
+
+    let read_names_map = app.names_map.blocking_read();
+    match read_names_map.get(&uuid) {
+        Some(name) => name.clone(),
+        None => "Unknown".to_string(),
     }
-    "Unknown".to_string()
 }
