@@ -68,22 +68,6 @@ pub async fn receiving_loop(
     }
 }
 
-// async fn list_messages(
-//     manager: &Manager<SqliteStore, Registered>,
-//     recipient: String,
-//     from: String,
-// ) -> Result<Vec<Result<Content, SqliteStoreError>>> {
-//     let recipient_uuid = Uuid::from_str(&recipient)?;
-//     let thread = Thread::Contact(recipient_uuid);
-//     let from_u64 = u64::from_str(&from)?;
-//
-//     Ok(manager
-//         .store()
-//         .messages(&thread, from_u64..)
-//         .await?
-//         .collect())
-// }
-
 fn format_data_message(data_message: &DataMessage) -> (Option<String>, Option<Quote>) {
     match data_message {
         DataMessage {
