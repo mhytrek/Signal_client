@@ -929,7 +929,7 @@ impl App {
         use CurrentScreen::*;
         match self.current_screen {
             Main => match key.code {
-                KeyCode::Right | KeyCode::Char('d') => {
+                KeyCode::Right | KeyCode::Char('d') | KeyCode::Enter => {
                     self.synchronize_messages_for_selected_recipient();
                     self.current_screen = Writing;
                 }
