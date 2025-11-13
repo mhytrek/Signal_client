@@ -9,10 +9,6 @@ use ratatui_image::{Resize, StatefulImage};
 use crate::app::App;
 
 pub fn render_group_info(frame: &mut Frame, app: &mut App, area: Rect) {
-    // let layout = Layout::default()
-    //     .direction(Direction::Vertical)
-    //     .constraints([Constraint::Length(15), Constraint::Min(1)])
-    //     .split(area);
     let layout = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
@@ -22,7 +18,7 @@ pub fn render_group_info(frame: &mut Frame, app: &mut App, area: Rect) {
     let info_layout = if app.config.show_images {
         Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
+            .constraints([Constraint::Length(15), Constraint::Min(1)])
             .split(info_rect)
     } else {
         Layout::default()
