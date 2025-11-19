@@ -6,18 +6,18 @@ Feature: CLI Group Management
   Background:
     Given two registered accounts "alice" and "bob" exist
     And account "alice" is active
-    And a group "Test Group" exists with members "alice" and "bob"
+    And a group "Test" exists with members "alice" and "bob"
 
   Scenario: List groups
     When I run "list-groups"
-    Then I should see group "Test Group" in the output
+    Then I should see group "Test" in the output
 
   Scenario: Send message to group
-    When I run "send-message --recipient 'Test Group' 'Hello group'"
+    When I run "send-message-to-group --recipient 'Test' --text-message 'Hello group'"
     Then the message should be sent successfully
-    And group "Test Group" should receive "Hello group"
+    And group "Test" should receive "Hello group"
 
   Scenario: List group messages
-    Given group "Test Group" has message "Group chat" from "bob"
-    When I run "list-messages --group 'Test Group'"
+    Given group "Test" has message "Group chat" from "bob"
+    When I run "list-messages --group 'Test'"
     Then I should see "Group chat" in the output

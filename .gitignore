@@ -12,3 +12,5 @@ store.db
 store.db-journal
 
 signal_client.log*
+
+*config.json

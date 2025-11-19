@@ -1,6 +1,5 @@
 use crate::contacts::initial_sync_cli;
-use crate::paths;
-use crate::{Config, open_store};
+use crate::{Config, open_store, paths};
 use anyhow::{Error, Result, anyhow, bail};
 use presage::Manager;
 use presage::manager::Registered;

@@ -1,13 +1,13 @@
 {
   "accounts": {
     "alice": {
-      "account_name": "real_alice_account",
-      "uuid": "00000000-0000-0000-0000-000000000001",
+      "account_name": "Michalina1",
+      "uuid": "164ad41e-d47b-4d2e-8367-589629f861f7",
       "contact_name_in_bob": "Misia"
     },
     "bob": {
-      "account_name": "real_bob_account",
-      "uuid": "00000000-0000-0000-0000-000000000002",
+      "account_name": "Michal",
+      "uuid": "27d1344b-668b-416a-bc96-99a5dc318f8d",
       "contact_name_in_alice": "Michaś"
     }
   }

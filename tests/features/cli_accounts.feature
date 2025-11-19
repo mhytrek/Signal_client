@@ -24,7 +24,8 @@ Feature: CLI Account Management
     Then I should see "bob" in the output
 
   Scenario: Create new account
-    When I run "link-account --account-name charlie --device-name 'Charlie Device'"
+    Given account 'charlie' doesn't exist
+    When I link-account --account-name 'charlie' --device-name 'Charlie Device'
     Then I should see QR code linking prompt
     And account "charlie" should be created after linking
 

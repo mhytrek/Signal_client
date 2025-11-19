@@ -1,6 +1,6 @@
 use crate::messages::attachments::save_attachment;
 use crate::messages::receive::{self, MessageDto, contact, format_message};
-use crate::messages::send;
+use crate::messages::send::{self};
 use crate::paths;
 use crate::profile::get_profile_tui;
 use crate::ui::render_ui;
