@@ -34,10 +34,14 @@ impl Default for Config {
 
 impl Config {
     fn get_config_path() -> PathBuf {
-        dirs::config_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("signal-tui")
-            .join("config.json")
+        if let Ok(config_dir) = std::env::var("SIGNAL_CONFIG_DIR") {
+            PathBuf::from(config_dir).join("config.json")
+        } else {
+            dirs::config_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join("signal-tui")
+                .join("config.json")
+        }
     }
 
     pub fn set_current_account(&mut self, account_name: String) {

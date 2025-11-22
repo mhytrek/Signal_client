@@ -6,7 +6,7 @@ use std::sync::OnceLock;
 use anyhow::Result;
 use tracing::error;
 
-pub const ACCOUNTS_DIR: &str = "accounts";
+pub const STORE: &str = "sqlite://store.db";
 
 fn ensure_local_share_dir(home_dir: &Path) -> Result<()> {
     if !fs::exists(home_dir.join(".local/share"))? {
@@ -91,8 +91,7 @@ pub fn assets() -> String {
 }
 
 pub fn accounts_dir() -> String {
-    static PATH: OnceLock<String> = OnceLock::new();
-    PATH.get_or_init(|| {
+    std::env::var("ACCOUNTS_DIR").unwrap_or_else(|_| {
         if cfg!(debug_assertions) {
             "./signal_client/accounts".to_string()
         } else {
@@ -112,5 +111,4 @@ pub fn accounts_dir() -> String {
             }
         }
     })
-    .into()
 }
