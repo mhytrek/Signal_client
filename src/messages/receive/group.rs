@@ -43,17 +43,7 @@ pub async fn list_messages_cli(recipient: String, from: Option<String>) -> Resul
     };
 
     let messages = list_messages(&manager, master_key, from).await?;
-
-    let mut result = Vec::new();
-
-    for message in messages.into_iter().flatten() {
-        if let Some(formatted_message) = format_message(&message) {
-            result.push(formatted_message);
-        }
-        let attachment_msgs = format_attachments(&message);
-        result.extend(attachment_msgs);
-    }
-    Ok(result)
+    get_messages_as_message_dto(messages)
 }
 
 pub async fn list_messages_tui(
