@@ -6,7 +6,7 @@ use crate::messages::format_message;
 use crate::messages::receive::{MessageDto, receive_messages_cli};
 use crate::messages::send::create_reaction_data_message;
 use anyhow::{Result, bail};
-use presage::proto::data_message::{Delete, Quote, Reaction};
+use presage::proto::data_message::{Delete, Quote};
 use presage::proto::{DataMessage, GroupContextV2};
 use presage::store::{ContentsStore, Thread};
 use presage::{Manager, libsignal_service::zkgroup::GroupMasterKeyBytes, manager::Registered};
@@ -222,18 +222,22 @@ pub fn create_delete_data_message(
     }
 }
 
-
-
 async fn send_reaction_message(
     manager: &mut Manager<SqliteStore, Registered>,
     master_key: &GroupMasterKeyBytes,
     target_send_timestamp: u64,
     target_author_aci: String,
-    remove:bool,
-    emoji: String
+    remove: bool,
+    emoji: String,
 ) -> Result<()> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
-    let data_message = create_reaction_data_message(timestamp, target_send_timestamp,target_author_aci,remove,emoji)?;
+    let data_message = create_reaction_data_message(
+        timestamp,
+        target_send_timestamp,
+        target_author_aci,
+        remove,
+        emoji,
+    )?;
 
     send(manager, master_key, data_message, timestamp).await?;
 
@@ -245,12 +249,19 @@ pub async fn send_reaction_message_tui(
     master_key: &GroupMasterKeyBytes,
     target_send_timestamp: u64,
     target_author_aci: String,
-    remove:bool,
-    emoji: String
+    remove: bool,
+    emoji: String,
 ) -> Result<()> {
-    send_reaction_message(&mut manager, master_key, target_send_timestamp, target_author_aci, remove,emoji).await
+    send_reaction_message(
+        &mut manager,
+        master_key,
+        target_send_timestamp,
+        target_author_aci,
+        remove,
+        emoji,
+    )
+    .await
 }
-
 
 pub async fn send_reaction_message_cli(
     recipient: String,
@@ -266,7 +277,11 @@ pub async fn send_reaction_message_cli(
 
     let thread = Thread::Group(master_key);
 
-    let raw_message = match manager.store().message(&thread, target_send_timestamp).await? {
+    let raw_message = match manager
+        .store()
+        .message(&thread, target_send_timestamp)
+        .await?
+    {
         Some(msg) => msg,
         None => bail!("Message with given timestamp not found."),
     };
