@@ -58,7 +58,6 @@ pub enum Command {
 
     /// Delete an account
     UnlinkAccount(DeleteAccountArgs),
-
 }
 
 #[derive(Args)]
@@ -186,4 +185,3 @@ pub struct ReactToMessageArgs {
     #[arg(short, long)]
     pub timestamp: u64,
 }
-

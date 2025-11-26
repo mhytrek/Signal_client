@@ -58,7 +58,6 @@ fn print_message(message: &MessageDto) {
     println!();
 }
 
-
 fn print_quote(message: &MessageDto) {
     if let Some(qu) = &message.quote {
         let datetime_quote_local = get_local_timestamp(qu.id());
@@ -94,14 +93,14 @@ fn print_reactions(message: &MessageDto) {
         return;
     }
 
-    for (_, reaction) in &message.reactions {
+    for reaction in message.reactions.values() {
         let removed = reaction.remove.unwrap_or(false);
         if removed {
             continue;
         }
 
         let emoji = reaction.emoji.clone().unwrap_or("?".to_string());
-        println!("┆ Reaction: {}",emoji);
+        println!("┆ Reaction: {emoji}");
     }
 }
 pub async fn print_messages_from_contact(recipient: String, from: Option<String>) -> Result<()> {

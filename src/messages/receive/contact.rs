@@ -1,14 +1,16 @@
-use std::{cmp::Reverse, collections::HashMap, str::FromStr};
+use std::str::FromStr;
 
 use anyhow::Result;
 use presage::{
-    Manager, libsignal_service::prelude::{Content, Uuid}, manager::Registered, proto::data_message::Reaction, store::{ContentsStore, Thread}
+    Manager,
+    libsignal_service::prelude::{Content, Uuid},
+    manager::Registered,
+    store::{ContentsStore, Thread},
 };
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
-use tracing::info;
 
-use crate::messages::receive::{MessageDto, extract_reaction, format_message, get_messages_as_message_dto};
-use crate::{account_management::create_registered_manager, messages::receive::format_attachments};
+use crate::account_management::create_registered_manager;
+use crate::messages::receive::{MessageDto, get_messages_as_message_dto};
 
 pub async fn list_messages(
     manager: &Manager<SqliteStore, Registered>,

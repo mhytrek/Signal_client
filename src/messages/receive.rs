@@ -31,7 +31,7 @@ pub struct MessageDto {
     pub group_context: Option<GroupContextV2>,
     pub attachment: Option<AttachmentPointer>,
     pub quote: Option<Quote>,
-    pub reactions: HashMap<Uuid,Reaction>,
+    pub reactions: HashMap<Uuid, Reaction>,
 }
 
 async fn loop_no_contents(messages: impl Stream<Item = Received>) {
@@ -178,7 +178,7 @@ fn map_attachment_to_message(
         group_context,
         attachment: Some(att.clone()),
         quote: None,
-        reactions:HashMap::new(),
+        reactions: HashMap::new(),
     }
 }
 
@@ -210,13 +210,16 @@ pub fn format_attachments(content: &Content) -> Vec<MessageDto> {
 
 pub fn extract_reaction(content: &Content) -> Option<(Uuid, Reaction)> {
     match &content.body {
-        ContentBody::DataMessage(DataMessage { reaction: Some(r), .. }) => {
-            Some((content.metadata.sender.raw_uuid(), r.clone()))
-        }
+        ContentBody::DataMessage(DataMessage {
+            reaction: Some(r), ..
+        }) => Some((content.metadata.sender.raw_uuid(), r.clone())),
         ContentBody::SynchronizeMessage(SyncMessage {
             sent:
                 Some(Sent {
-                    message: Some(DataMessage { reaction: Some(r), .. }),
+                    message:
+                        Some(DataMessage {
+                            reaction: Some(r), ..
+                        }),
                     ..
                 }),
             ..
@@ -224,7 +227,6 @@ pub fn extract_reaction(content: &Content) -> Option<(Uuid, Reaction)> {
         _ => None,
     }
 }
-
 
 /// Function to receive messages for CLI interface
 pub async fn receive_messages_cli() -> Result<Vec<MessageDto>> {
@@ -247,26 +249,28 @@ pub async fn receive_messages_cli() -> Result<Vec<MessageDto>> {
     Ok(result)
 }
 
-pub fn get_messages_as_message_dto(messages: Vec<std::result::Result<Content, SqliteStoreError>>) -> Result<Vec<MessageDto>> {
+pub fn get_messages_as_message_dto(
+    messages: Vec<std::result::Result<Content, SqliteStoreError>>,
+) -> Result<Vec<MessageDto>> {
     let mut message_map: HashMap<u64, MessageDto> = HashMap::new();
-    let mut reactions: Vec<(Uuid,Reaction)> = Vec::new();
-    
+    let mut reactions: Vec<(Uuid, Reaction)> = Vec::new();
+
     for message in messages.into_iter().flatten() {
         if let Some(reaction) = extract_reaction(&message) {
             reactions.push(reaction);
         }
-    
+
         if let Some(formatted_message) = format_message(&message) {
             message_map.insert(formatted_message.timestamp, formatted_message);
         }
-    
+
         for attachment_msg in format_attachments(&message) {
             message_map.insert(attachment_msg.timestamp, attachment_msg);
         }
     }
-    
+
     reactions.reverse();
-    
+
     for (uuid, r) in reactions {
         if let Some(msg) = message_map.get_mut(&r.target_sent_timestamp()) {
             if r.remove() {

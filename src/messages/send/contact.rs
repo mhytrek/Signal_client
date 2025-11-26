@@ -10,7 +10,7 @@ use crate::messages::send::create_reaction_data_message;
 use anyhow::{Result, bail};
 use presage::libsignal_service::protocol::ServiceId;
 use presage::proto::DataMessage;
-use presage::proto::data_message::{Delete, Quote, Reaction};
+use presage::proto::data_message::{Delete, Quote};
 use presage::store::{ContentsStore, Thread};
 use presage::{
     Manager, libsignal_service::prelude::Uuid, manager::Registered, model::contacts::Contact,
@@ -139,12 +139,18 @@ async fn send_reaction_message(
     recipient: String,
     target_send_timestamp: u64,
     target_author_aci: String,
-    remove:bool,
-    emoji: String
+    remove: bool,
+    emoji: String,
 ) -> Result<()> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
     let recipient_address = get_address(recipient, manager).await?;
-    let data_message = create_reaction_data_message(timestamp, target_send_timestamp,target_author_aci,remove,emoji)?;
+    let data_message = create_reaction_data_message(
+        timestamp,
+        target_send_timestamp,
+        target_author_aci,
+        remove,
+        emoji,
+    )?;
 
     send(manager, recipient_address, data_message, timestamp).await?;
 
@@ -156,10 +162,18 @@ pub async fn send_reaction_message_tui(
     recipient: String,
     target_send_timestamp: u64,
     target_author_aci: String,
-    remove:bool,
-    emoji: String
+    remove: bool,
+    emoji: String,
 ) -> Result<()> {
-    send_reaction_message(&mut manager, recipient, target_send_timestamp, target_author_aci, remove,emoji).await
+    send_reaction_message(
+        &mut manager,
+        recipient,
+        target_send_timestamp,
+        target_author_aci,
+        remove,
+        emoji,
+    )
+    .await
 }
 
 /// sends text message to recipient ( phone number or name ), for usage with TUI
@@ -320,7 +334,11 @@ pub async fn send_reaction_message_cli(
     let uuid = Uuid::from_str(&recipient)?;
     let thread = Thread::Contact(uuid);
 
-    let raw_message = match manager.store().message(&thread, target_send_timestamp).await? {
+    let raw_message = match manager
+        .store()
+        .message(&thread, target_send_timestamp)
+        .await?
+    {
         Some(msg) => msg,
         None => bail!("Message with given timestamp not found."),
     };

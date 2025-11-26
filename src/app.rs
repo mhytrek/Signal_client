@@ -311,8 +311,8 @@ pub enum EventApp {
 pub enum EventSend {
     SendText(RecipientId, String, Option<MessageDto>),
     SendAttachment(RecipientId, String, String, Option<MessageDto>),
-    DeleteMessage(RecipientId, u64),    
-    ReactToMessage(RecipientId,bool,MessageDto),
+    DeleteMessage(RecipientId, u64),
+    ReactToMessage(RecipientId, bool, MessageDto),
     GetMessagesForContact(String),
     GetMessagesForGroup(GroupMasterKeyBytes),
     GetContactInfo(String),
@@ -1109,18 +1109,20 @@ impl App {
                         }
                     };
 
-                    
-                    if let Some(target_send) = target_send_option{
+                    if let Some(target_send) = target_send_option {
                         let remove = target_send
                             .reactions
                             .get(&self.uuid.unwrap_or(Uuid::nil()))
-                            .map(|r| r.emoji() == "👍".to_string())
-                            .unwrap_or(false);                  
+                            .map(|r| r.emoji() == "👍")
+                            .unwrap_or(false);
                         self.tx_tui
-                        .send(EventSend::ReactToMessage(selected_recipient_id,remove,target_send.clone())).unwrap();
+                            .send(EventSend::ReactToMessage(
+                                selected_recipient_id,
+                                remove,
+                                target_send.clone(),
+                            ))
+                            .unwrap();
                     }
-
-
                 }
 
                 _ => {}
@@ -2331,7 +2333,14 @@ async fn handle_incoming_event(
             )
             .await;
         }
-        EventSend::ReactToMessage(recipient,remove,message_dto) => handle_react_to_message(recipient,message_dto, remove,manager, tx_status, local_pool),
+        EventSend::ReactToMessage(recipient, remove, message_dto) => handle_react_to_message(
+            recipient,
+            message_dto,
+            remove,
+            manager,
+            tx_status,
+            local_pool,
+        ),
     }
 }
 
@@ -3074,11 +3083,11 @@ pub fn handle_checking_qr_code(tx: mpsc::Sender<EventApp>) {
 pub fn handle_react_to_message(
     recipient: RecipientId,
     message_dto: MessageDto,
-    remove:bool,
+    remove: bool,
     manager: &Manager<SqliteStore, Registered>,
     tx_status: &mpsc::Sender<EventApp>,
     local_pool: &LocalPoolHandle,
-){
+) {
     let emoji = "👍".to_string();
 
     let target_send_timestamp = message_dto.timestamp;
