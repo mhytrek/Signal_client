@@ -311,3 +311,39 @@ pub async fn send_delete_message_cli(recipient: String, target_send_timestamp: u
         }
     }
 }
+
+pub async fn send_reaction_message_cli(
+    recipient: String,
+    target_send_timestamp: u64,
+) -> Result<()> {
+    let mut manager: Manager<SqliteStore, Registered> = create_registered_manager().await?;
+    let uuid = Uuid::from_str(&recipient)?;
+    let thread = Thread::Contact(uuid);
+
+    let raw_message = match manager.store().message(&thread, target_send_timestamp).await? {
+        Some(msg) => msg,
+        None => bail!("Message with given timestamp not found."),
+    };
+
+    let dto = match format_message(&raw_message) {
+        Some(dto) => dto,
+        None => bail!("Could not format message."),
+    };
+
+    let target_author_aci = dto.uuid.to_string();
+
+    let emoji = "👍".to_string();
+    let remove = false;
+
+    send_reaction_message(
+        &mut manager,
+        recipient,
+        target_send_timestamp,
+        target_author_aci,
+        remove,
+        emoji,
+    )
+    .await?;
+
+    Ok(())
+}

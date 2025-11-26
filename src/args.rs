@@ -32,6 +32,9 @@ pub enum Command {
     /// Delete message
     DeleteMessage(DeleteMessageArgs),
 
+    // React to message
+    ReactToMessage(ReactToMessageArgs),
+
     /// Prints messages from given point in time
     ListMessages(ListMessagesArgs),
 
@@ -55,6 +58,7 @@ pub enum Command {
 
     /// Delete an account
     UnlinkAccount(DeleteAccountArgs),
+
 }
 
 #[derive(Args)]
@@ -163,3 +167,23 @@ pub struct DeleteMessageArgs {
     #[arg(short, long)]
     pub timestamp: u64,
 }
+
+#[derive(Args)]
+#[command(group(
+    ArgGroup::new("recipient")
+        .required(true)
+))]
+pub struct ReactToMessageArgs {
+    /// Uuid of the contact conversation from which the message would be reacted to
+    #[arg(short, long, group = "recipient")]
+    pub contact: Option<String>,
+
+    /// Name of the group from which the message would be reacted to
+    #[arg(short, long, group = "recipient")]
+    pub group: Option<String>,
+
+    /// timestamp of the message that would be reacted to
+    #[arg(short, long)]
+    pub timestamp: u64,
+}
+

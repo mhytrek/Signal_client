@@ -1,9 +1,6 @@
 use presage::proto::data_message::Quote;
 use ratatui::{
-    Frame,
-    layout::{Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
-    widgets::{Block, BorderType, Borders, Paragraph, Wrap},
+    Frame, layout::{Constraint, Direction, Layout, Rect}, style::{Modifier, Style}, text::Line, widgets::{Block, BorderType, Borders, Paragraph, Wrap}
 };
 
 use crate::{
@@ -249,7 +246,7 @@ fn render_messages(
                     block
                         .clone()
                         .title_top(datetime_local.format("%Y-%m-%d %H:%M:%S").to_string())
-                        .title_bottom(get_display_name(app, msg.uuid.to_string().as_str())),
+                        .title_bottom(Line::from(get_display_name(app, msg.uuid.to_string().as_str())).right_aligned()),
                 )
                 .wrap(Wrap { trim: false }),
 
