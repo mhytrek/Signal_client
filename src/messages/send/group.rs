@@ -3,8 +3,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::account_management::create_registered_manager;
 use crate::groups::find_master_key;
 use crate::messages::receive::{MessageDto, receive_messages_cli};
+use crate::messages::send::create_reaction_data_message;
 use anyhow::{Result, bail};
-use presage::proto::data_message::{Delete, Quote};
+use presage::proto::data_message::{Delete, Quote, Reaction};
 use presage::proto::{DataMessage, GroupContextV2};
 use presage::store::{ContentsStore, Thread};
 use presage::{Manager, libsignal_service::zkgroup::GroupMasterKeyBytes, manager::Registered};
@@ -218,4 +219,33 @@ pub fn create_delete_data_message(
         delete: Some(del_mes),
         ..Default::default()
     }
+}
+
+
+
+async fn send_reaction_message(
+    manager: &mut Manager<SqliteStore, Registered>,
+    master_key: &GroupMasterKeyBytes,
+    target_send_timestamp: u64,
+    target_author_aci: String,
+    remove:bool,
+    emoji: String
+) -> Result<()> {
+    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
+    let data_message = create_reaction_data_message(timestamp, target_send_timestamp,target_author_aci,remove,emoji)?;
+
+    send(manager, master_key, data_message, timestamp).await?;
+
+    Ok(())
+}
+
+pub async fn send_reaction_message_tui(
+    mut manager: Manager<SqliteStore, Registered>,
+    master_key: &GroupMasterKeyBytes,
+    target_send_timestamp: u64,
+    target_author_aci: String,
+    remove:bool,
+    emoji: String
+) -> Result<()> {
+    send_reaction_message(&mut manager, master_key, target_send_timestamp, target_author_aci, remove,emoji).await
 }

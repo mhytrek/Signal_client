@@ -238,7 +238,7 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
 
             Span::styled(
                 format!(
-                    "(q) to exit inspection mode | (← or ESC) to go back | (r) to reply | (d) to delete{save_attachment_info}"
+                    "(q) to exit inspection mode | (← or ESC) to go back | (r) to reply | (d) to delete | (c) to like{save_attachment_info}"
                 ),
                 Style::default().fg(app.config.get_primary_color()),
             )

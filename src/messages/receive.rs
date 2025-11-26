@@ -1,3 +1,5 @@
+use std::cmp::Reverse;
+use std::collections::HashMap;
 use std::env;
 
 use crate::account_management::create_registered_manager;
@@ -9,11 +11,12 @@ use presage::libsignal_service::content::ContentBody;
 use presage::libsignal_service::prelude::Content;
 use presage::libsignal_service::prelude::Uuid;
 use presage::model::messages::Received;
-use presage::proto::data_message::Quote;
+use presage::proto::data_message::{Quote, Reaction};
 use presage::proto::{
     AttachmentPointer, DataMessage, GroupContextV2, SyncMessage, sync_message::Sent,
 };
 use presage::store::ContentExt;
+use presage_store_sqlite::SqliteStoreError;
 use tracing::trace;
 
 pub mod contact;
@@ -28,6 +31,7 @@ pub struct MessageDto {
     pub group_context: Option<GroupContextV2>,
     pub attachment: Option<AttachmentPointer>,
     pub quote: Option<Quote>,
+    pub reactions: HashMap<Uuid,Reaction>,
 }
 
 async fn loop_no_contents(messages: impl Stream<Item = Received>) {
@@ -104,6 +108,7 @@ pub fn format_message(content: &Content) -> Option<MessageDto> {
         group_context,
         attachment: None,
         quote,
+        reactions: HashMap::new(),
     })
 }
 
@@ -173,6 +178,7 @@ fn map_attachment_to_message(
         group_context,
         attachment: Some(att.clone()),
         quote: None,
+        reactions:HashMap::new(),
     }
 }
 
@@ -202,6 +208,24 @@ pub fn format_attachments(content: &Content) -> Vec<MessageDto> {
     }
 }
 
+pub fn extract_reaction(content: &Content) -> Option<(Uuid, Reaction)> {
+    match &content.body {
+        ContentBody::DataMessage(DataMessage { reaction: Some(r), .. }) => {
+            Some((content.metadata.sender.raw_uuid(), r.clone()))
+        }
+        ContentBody::SynchronizeMessage(SyncMessage {
+            sent:
+                Some(Sent {
+                    message: Some(DataMessage { reaction: Some(r), .. }),
+                    ..
+                }),
+            ..
+        }) => Some((content.metadata.sender.raw_uuid(), r.clone())),
+        _ => None,
+    }
+}
+
+
 /// Function to receive messages for CLI interface
 pub async fn receive_messages_cli() -> Result<Vec<MessageDto>> {
     let mut manager = create_registered_manager().await?;
@@ -220,5 +244,39 @@ pub async fn receive_messages_cli() -> Result<Vec<MessageDto>> {
         result.extend(attachment_msgs);
     }
 
+    Ok(result)
+}
+
+pub fn get_messages_as_message_dto(messages: Vec<std::result::Result<Content, SqliteStoreError>>) -> Result<Vec<MessageDto>> {
+    let mut message_map: HashMap<u64, MessageDto> = HashMap::new();
+    let mut reactions: Vec<(Uuid,Reaction)> = Vec::new();
+    
+    for message in messages.into_iter().flatten() {
+        if let Some(reaction) = extract_reaction(&message) {
+            reactions.push(reaction);
+        }
+    
+        if let Some(formatted_message) = format_message(&message) {
+            message_map.insert(formatted_message.timestamp, formatted_message);
+        }
+    
+        for attachment_msg in format_attachments(&message) {
+            message_map.insert(attachment_msg.timestamp, attachment_msg);
+        }
+    }
+    
+    reactions.reverse();
+    
+    for (uuid, r) in reactions {
+        if let Some(msg) = message_map.get_mut(&r.target_sent_timestamp()) {
+            if r.remove() {
+                msg.reactions.remove(&uuid);
+            } else {
+                msg.reactions.insert(uuid, r);
+            }
+        }
+    }
+    let mut result: Vec<MessageDto> = message_map.into_values().collect();
+    result.sort_by_key(|m| Reverse(m.timestamp));
     Ok(result)
 }

@@ -1,15 +1,13 @@
-use std::str::FromStr;
+use std::{cmp::Reverse, collections::HashMap, str::FromStr};
 
 use anyhow::{Ok, Result, bail};
 use presage::{
-    Manager,
-    libsignal_service::{prelude::Content, zkgroup::GroupMasterKeyBytes},
-    manager::Registered,
-    store::{ContentsStore, Thread},
+    Manager, libsignal_service::{prelude::Content, zkgroup::GroupMasterKeyBytes}, manager::Registered, proto::data_message::Reaction, store::{ContentsStore, Thread}
 };
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
+use uuid::Uuid;
 
-use crate::account_management::create_registered_manager;
+use crate::{account_management::create_registered_manager, messages::receive::{extract_reaction, get_messages_as_message_dto}};
 use crate::{
     groups::find_master_key,
     messages::receive::{MessageDto, format_attachments, format_message},
@@ -64,14 +62,5 @@ pub async fn list_messages_tui(
     from: Option<String>,
 ) -> Result<Vec<MessageDto>> {
     let messages = list_messages(&manager, master_key, from).await?;
-
-    let mut formatted_messages = vec![];
-    for message in messages.into_iter().flatten() {
-        if let Some(formatted_message) = format_message(&message) {
-            formatted_messages.push(formatted_message);
-        }
-        let attachment_msgs = format_attachments(&message);
-        formatted_messages.extend(attachment_msgs);
-    }
-    Ok(formatted_messages)
+    get_messages_as_message_dto(messages)
 }

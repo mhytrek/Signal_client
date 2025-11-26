@@ -311,7 +311,8 @@ pub enum EventApp {
 pub enum EventSend {
     SendText(RecipientId, String, Option<MessageDto>),
     SendAttachment(RecipientId, String, String, Option<MessageDto>),
-    DeleteMessage(RecipientId, u64),
+    DeleteMessage(RecipientId, u64),    
+    ReactToMessage(RecipientId,bool,MessageDto),
     GetMessagesForContact(String),
     GetMessagesForGroup(GroupMasterKeyBytes),
     GetContactInfo(String),
@@ -1089,6 +1090,37 @@ impl App {
                             ))
                             .unwrap()
                     };
+                }
+
+                KeyCode::Char('c') => {
+                    let selected_recipient_id = self.recipients[self.selected_recipient].0.id();
+                    let target_send_option = match selected_recipient_id {
+                        RecipientId::Contact(uuid) => {
+                            match self.contact_messages.get(&uuid.to_string()) {
+                                Some(messeges) => messeges.get(self.message_selected),
+                                None => None,
+                            }
+                        }
+                        RecipientId::Group(group_key) => {
+                            match self.group_messages.get(&group_key) {
+                                Some(messeges) => messeges.get(self.message_selected),
+                                None => None,
+                            }
+                        }
+                    };
+
+                    
+                    if let Some(target_send) = target_send_option{
+                        let remove = target_send
+                            .reactions
+                            .get(&self.uuid.unwrap_or(Uuid::nil()))
+                            .map(|r| r.emoji() == "👍".to_string())
+                            .unwrap_or(false);                  
+                        self.tx_tui
+                        .send(EventSend::ReactToMessage(selected_recipient_id,remove,target_send.clone())).unwrap();
+                    }
+
+
                 }
 
                 _ => {}
@@ -2299,6 +2331,7 @@ async fn handle_incoming_event(
             )
             .await;
         }
+        EventSend::ReactToMessage(recipient,remove,message_dto) => handle_react_to_message(recipient,message_dto, remove,manager, tx_status, local_pool),
     }
 }
 
@@ -3036,4 +3069,59 @@ pub fn handle_checking_qr_code(tx: mpsc::Sender<EventApp>) {
             break;
         }
     }
+}
+
+pub fn handle_react_to_message(
+    recipient: RecipientId,
+    message_dto: MessageDto,
+    remove:bool,
+    manager: &Manager<SqliteStore, Registered>,
+    tx_status: &mpsc::Sender<EventApp>,
+    local_pool: &LocalPoolHandle,
+){
+    let emoji = "👍".to_string();
+
+    let target_send_timestamp = message_dto.timestamp;
+    let target_author_aci = message_dto.uuid.to_string();
+
+    let recipient_clone = recipient.clone();
+    let tx_status_clone = tx_status.clone();
+    let manager_clone = manager.clone();
+
+    local_pool.spawn_pinned(move || async move {
+        let send_result = match recipient_clone {
+            RecipientId::Contact(uuid) => {
+                send::contact::send_reaction_message_tui(
+                    manager_clone,
+                    uuid.to_string(),
+                    target_send_timestamp,
+                    target_author_aci.clone(),
+                    remove,
+                    emoji.clone(),
+                )
+                .await
+            }
+            RecipientId::Group(master_key) => {
+                send::group::send_reaction_message_tui(
+                    manager_clone,
+                    &master_key,
+                    target_send_timestamp,
+                    target_author_aci.clone(),
+                    remove,
+                    emoji.clone(),
+                )
+                .await
+            }
+        };
+
+        match send_result {
+            Ok(_) => {
+                debug!("Reaction sent successfully");
+                let _ = tx_status_clone.send(EventApp::ReceiveMessage);
+            }
+            Err(e) => {
+                error!("Error sending reaction: {}", e);
+            }
+        }
+    });
 }
