@@ -10,14 +10,16 @@ use crate::app::App;
 
 pub fn render_group_info(frame: &mut Frame, app: &mut App, area: Rect) {
     let layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(15), Constraint::Min(1)])
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
         .split(area);
+    let members_rect = layout[1];
+    let info_rect = layout[0];
     let info_layout = if app.config.show_images {
         Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
-            .split(layout[1])
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(15), Constraint::Min(1)])
+            .split(info_rect)
     } else {
         Layout::default()
             .direction(Direction::Vertical)
@@ -30,7 +32,7 @@ pub fn render_group_info(frame: &mut Frame, app: &mut App, area: Rect) {
         .borders(Borders::ALL)
         .border_type(BorderType::Double);
 
-    let avatar_area = avatar_block.inner(layout[0]);
+    let avatar_area = avatar_block.inner(info_layout[0]);
 
     let centered_layout = Layout::default()
         .direction(Direction::Vertical)
@@ -74,7 +76,7 @@ pub fn render_group_info(frame: &mut Frame, app: &mut App, area: Rect) {
 
             frame.render_widget(placeholder, avatar_area);
         }
-        frame.render_widget(avatar_block, layout[0]);
+        frame.render_widget(avatar_block, info_layout[0]);
     }
 
     let info_block = Block::default()
@@ -141,8 +143,8 @@ pub fn render_group_info(frame: &mut Frame, app: &mut App, area: Rect) {
     let mut members_state = ListState::default();
     members_state.select(Some(app.selected_group_member));
 
-    frame.render_widget(info_paragraph, info_layout[0]);
-    frame.render_stateful_widget(members_widget, info_layout[1], &mut members_state);
+    frame.render_widget(info_paragraph, info_layout[1]);
+    frame.render_stateful_widget(members_widget, members_rect, &mut members_state);
 }
 
 pub fn render_member_info(frame: &mut Frame, app: &mut App, area: Rect) {
