@@ -9,8 +9,8 @@ use presage::{
 };
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
 
-use crate::messages::receive::{MessageDto, format_message};
-use crate::{account_management::create_registered_manager, messages::receive::format_attachments};
+use crate::account_management::create_registered_manager;
+use crate::messages::receive::{MessageDto, get_messages_as_message_dto};
 
 pub async fn list_messages(
     manager: &Manager<SqliteStore, Registered>,
@@ -31,39 +31,18 @@ pub async fn list_messages(
         .collect())
 }
 
-/// Returns iterator over stored messeges from certain time for given contact uuid, for use in TUI
 pub async fn list_messages_tui(
     recipient: String,
     from: String,
     manager: Manager<SqliteStore, Registered>,
 ) -> Result<Vec<MessageDto>> {
     let messages = list_messages(&manager, recipient, Some(from)).await?;
-
-    let mut formatted_messages = Vec::new();
-
-    for message in messages.into_iter().flatten() {
-        if let Some(formatted_message) = format_message(&message) {
-            formatted_messages.push(formatted_message);
-        }
-        let attachment_msgs = format_attachments(&message);
-        formatted_messages.extend(attachment_msgs);
-    }
-    Ok(formatted_messages)
+    get_messages_as_message_dto(messages)
 }
 
 /// Returns iterator over stored messeges from certain time for given contact uuid, for use in CLI
 pub async fn list_messages_cli(recipient: String, from: Option<String>) -> Result<Vec<MessageDto>> {
     let manager = create_registered_manager().await?;
     let messages = list_messages(&manager, recipient, from).await?;
-
-    let mut result = Vec::new();
-
-    for message in messages.into_iter().flatten() {
-        if let Some(formatted_message) = format_message(&message) {
-            result.push(formatted_message);
-        }
-        let attachment_msgs = format_attachments(&message);
-        result.extend(attachment_msgs);
-    }
-    Ok(result)
+    get_messages_as_message_dto(messages)
 }

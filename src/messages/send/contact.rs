@@ -6,6 +6,7 @@ use crate::messages::attachments::create_attachment;
 use crate::messages::format_message;
 use crate::messages::receive::MessageDto;
 use crate::messages::receive::receive_messages_cli;
+use crate::messages::send::create_reaction_data_message;
 use anyhow::{Result, bail};
 use presage::libsignal_service::protocol::ServiceId;
 use presage::proto::DataMessage;
@@ -131,6 +132,48 @@ async fn send_delete_message(
     send(manager, recipient_address, data_message, timestamp).await?;
 
     Ok(())
+}
+
+async fn send_reaction_message(
+    manager: &mut Manager<SqliteStore, Registered>,
+    recipient: String,
+    target_send_timestamp: u64,
+    target_author_aci: String,
+    remove: bool,
+    emoji: String,
+) -> Result<()> {
+    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
+    let recipient_address = get_address(recipient, manager).await?;
+    let data_message = create_reaction_data_message(
+        timestamp,
+        target_send_timestamp,
+        target_author_aci,
+        remove,
+        emoji,
+    )?;
+
+    send(manager, recipient_address, data_message, timestamp).await?;
+
+    Ok(())
+}
+
+pub async fn send_reaction_message_tui(
+    mut manager: Manager<SqliteStore, Registered>,
+    recipient: String,
+    target_send_timestamp: u64,
+    target_author_aci: String,
+    remove: bool,
+    emoji: String,
+) -> Result<()> {
+    send_reaction_message(
+        &mut manager,
+        recipient,
+        target_send_timestamp,
+        target_author_aci,
+        remove,
+        emoji,
+    )
+    .await
 }
 
 /// sends text message to recipient ( phone number or name ), for usage with TUI
@@ -281,4 +324,44 @@ pub async fn send_delete_message_cli(recipient: String, target_send_timestamp: u
             Ok(())
         }
     }
+}
+
+pub async fn send_reaction_message_cli(
+    recipient: String,
+    target_send_timestamp: u64,
+) -> Result<()> {
+    let mut manager: Manager<SqliteStore, Registered> = create_registered_manager().await?;
+    let uuid = Uuid::from_str(&recipient)?;
+    let thread = Thread::Contact(uuid);
+
+    let raw_message = match manager
+        .store()
+        .message(&thread, target_send_timestamp)
+        .await?
+    {
+        Some(msg) => msg,
+        None => bail!("Message with given timestamp not found."),
+    };
+
+    let dto = match format_message(&raw_message) {
+        Some(dto) => dto,
+        None => bail!("Could not format message."),
+    };
+
+    let target_author_aci = dto.uuid.to_string();
+
+    let emoji = "👍".to_string();
+    let remove = false;
+
+    send_reaction_message(
+        &mut manager,
+        recipient,
+        target_send_timestamp,
+        target_author_aci,
+        remove,
+        emoji,
+    )
+    .await?;
+
+    Ok(())
 }
