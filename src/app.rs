@@ -51,6 +51,8 @@ use std::thread;
 use std::time::Duration;
 use tokio::time::interval;
 
+mod utils;
+
 #[derive(PartialEq, Clone)]
 pub enum RecipientId {
     Contact(Uuid),
@@ -63,23 +65,28 @@ impl Default for RecipientId {
     }
 }
 
-pub enum DisplayRecipient {
+pub enum DisplayRecipientType {
     Contact(DisplayContact),
     Group(DisplayGroup),
 }
 
+pub struct DisplayRecipient {
+    recipient_type: DisplayRecipientType,
+    latest_message_timestamp: u64,
+}
+
 impl DisplayRecipient {
     pub fn display_name(&self) -> &str {
-        match self {
-            Self::Contact(c) => c.display_name(),
-            Self::Group(g) => g.display_name(),
+        match &self.recipient_type {
+            DisplayRecipientType::Contact(c) => c.display_name(),
+            DisplayRecipientType::Group(g) => g.display_name(),
         }
     }
 
     pub fn id(&self) -> RecipientId {
-        match self {
-            Self::Contact(c) => c.id(),
-            Self::Group(g) => g.id(),
+        match &self.recipient_type {
+            DisplayRecipientType::Contact(c) => c.id(),
+            DisplayRecipientType::Group(g) => g.id(),
         }
     }
 }
@@ -1937,6 +1944,9 @@ pub async fn handle_synchronization(
     let mut previous_contacts: Vec<DisplayContact> = Vec::new();
     let mut previous_groups: Vec<DisplayGroup> = Vec::new();
     let mut initialized = false;
+
+    // TODO: Initial contact sort
+
     info!("Start initial synchronization");
     loop {
         let messages_stream_result = manager.receive_messages().await;
@@ -2033,11 +2043,16 @@ pub async fn handle_synchronization(
                     let contacts_differ = contact_displays != previous_contacts;
                     let groups_differ = group_displays != previous_groups;
 
-                    let display_recipients: Vec<DisplayRecipient> = contact_displays
+                    let display_recipients: Vec<DisplayRecipientType> = contact_displays
                         .iter()
                         .cloned()
-                        .map(DisplayRecipient::Contact)
-                        .chain(group_displays.iter().cloned().map(DisplayRecipient::Group))
+                        .map(DisplayRecipientType::Contact)
+                        .chain(
+                            group_displays
+                                .iter()
+                                .cloned()
+                                .map(DisplayRecipientType::Group),
+                        )
                         .collect();
 
                     if contacts_differ || groups_differ {
