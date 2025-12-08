@@ -463,7 +463,7 @@ impl App {
 
     pub async fn switch_account(&mut self, account_name: String) -> Result<()> {
         if !self.available_accounts.contains(&account_name) {
-            bail!("Account '{}' does not exist", account_name);
+            bail!("Account '{account_name}' does not exist");
         }
 
         let mut config = Config::load();
@@ -505,7 +505,7 @@ impl App {
             )
             .await
         {
-            bail!("Failed to initialize background threads: {}", e);
+            bail!("Failed to initialize background threads: {e}");
         }
 
         Ok(())
