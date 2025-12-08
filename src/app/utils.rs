@@ -1,17 +1,80 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use futures::future::join_all;
 use presage::libsignal_service::content::ContentBody;
 use presage::store::ContentsStore;
 use presage::{Manager, manager::Registered, store::Thread};
 use presage_store_sqlite::SqliteStore;
 use tracing::error;
 
-use crate::app::DisplayRecipient;
+use crate::app::{
+    DisplayRecipient, DisplayRecipientType, contact_to_display_contact, group_to_display_group,
+};
+use crate::{contacts, groups};
 
 pub(super) async fn initial_contact_sort(
     manager: &mut Manager<SqliteStore, Registered>,
 ) -> Vec<DisplayRecipient> {
-    todo!()
+    let contacts = contacts::list_contacts_tui(manager)
+        .await
+        .expect("Failed to retrieve contacts.")
+        .into_iter()
+        .flatten();
+    let groups = groups::list_groups_tui(manager)
+        .await
+        .expect("Failed to retrieve groups.")
+        .into_iter()
+        .flatten();
+
+    let display_contacts = contacts.map(|contact| async {
+        let thread = Thread::Contact(contact.uuid);
+        let timestamp = get_messages_backoff(manager, &thread).await;
+        let display_contact = contact_to_display_contact(contact, manager.clone()).await;
+        match display_contact {
+            Some(dc) => Some(DisplayRecipient {
+                recipient_type: DisplayRecipientType::Contact(dc),
+                latest_message_timestamp: timestamp,
+            }),
+            None => None,
+        }
+    });
+    let display_contacts = join_all(display_contacts)
+        .await
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    let display_groups = groups.map(|(master_key, group)| {
+        let inner_manager = manager.clone();
+        async move {
+            let thread = Thread::Group(master_key);
+            let timestamp = get_messages_backoff(&inner_manager, &thread).await;
+            let display_group = group_to_display_group(group, master_key);
+            match display_group {
+                Some(dg) => Some(DisplayRecipient {
+                    recipient_type: DisplayRecipientType::Group(dg),
+                    latest_message_timestamp: timestamp,
+                }),
+                None => None,
+            }
+        }
+    });
+    let display_groups = join_all(display_groups)
+        .await
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+
+    let mut display_recipients = display_contacts
+        .into_iter()
+        .chain(display_groups.into_iter())
+        .collect::<Vec<_>>();
+    display_recipients.sort_by_key(|dr| {
+        let key_timestamp = dr.latest_message_timestamp.unwrap_or(0);
+        key_timestamp
+    });
+    display_recipients.reverse();
+
+    display_recipients
 }
 
 async fn get_messages_backoff(

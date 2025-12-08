@@ -18,6 +18,7 @@ use presage::libsignal_service::prelude::{ProfileKey, Uuid};
 use presage::libsignal_service::zkgroup::GroupMasterKeyBytes;
 use presage::manager::Registered;
 use presage::model::contacts::Contact;
+use presage::model::groups::Group;
 use presage::model::messages::Received;
 use presage::proto::{AttachmentPointer, GroupContextV2};
 use presage_store_sqlite::SqliteStore;
@@ -72,7 +73,7 @@ pub enum DisplayRecipientType {
 
 pub struct DisplayRecipient {
     recipient_type: DisplayRecipientType,
-    latest_message_timestamp: u64,
+    latest_message_timestamp: Option<u64>,
 }
 
 impl DisplayRecipient {
@@ -2032,11 +2033,7 @@ pub async fn handle_synchronization(
                         .into_iter()
                         .filter_map(|groups_res| {
                             let (group_master_key, group) = groups_res.ok()?;
-
-                            let display_name = group.title;
-                            let display_group = DisplayGroup::new(display_name, group_master_key);
-
-                            Some(display_group)
+                            group_to_display_group(group, group_master_key)
                         })
                         .collect();
 
@@ -2115,6 +2112,13 @@ async fn contact_to_display_contact(
     let display_contact = DisplayContact::new(display_name, contact.uuid);
 
     Some(display_contact)
+}
+
+fn group_to_display_group(group: Group, master_key: GroupMasterKeyBytes) -> Option<DisplayGroup> {
+    let display_name = group.title;
+    let display_group = DisplayGroup::new(display_name, master_key);
+
+    Some(display_group)
 }
 
 async fn handle_notification(
