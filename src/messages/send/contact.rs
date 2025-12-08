@@ -38,7 +38,7 @@ pub async fn find_uuid(
         })
         .map(|c| c.uuid);
 
-    uuid.ok_or_else(|| anyhow::anyhow!("Recipient '{}' not found", recipient_info))
+    uuid.ok_or_else(|| anyhow::anyhow!("Recipient '{recipient_info}' not found"))
 }
 
 pub async fn get_address(
@@ -101,7 +101,7 @@ pub async fn send(
     manager
         .send_message(recipient_addr, data_message, timestamp)
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to send message: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to send message: {e}"))?;
     Ok(())
 }
 
