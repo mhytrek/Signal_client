@@ -1,10 +1,11 @@
+use crate::app::utils::timestamp_recipient_sort;
+use crate::config::Config;
 use crate::messages::attachments::save_attachment;
 use crate::messages::receive::{self, MessageDto, contact, format_message};
 use crate::messages::send::{self};
 use crate::paths;
 use crate::profile::get_profile_tui;
 use crate::ui::render_ui;
-use crate::{config::Config, contacts, groups};
 use anyhow::{Error, Result, anyhow, bail};
 use arboard::Clipboard;
 use crossterm::event::{self, Event, KeyModifiers};
@@ -66,11 +67,13 @@ impl Default for RecipientId {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub enum DisplayRecipientType {
     Contact(DisplayContact),
     Group(DisplayGroup),
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct DisplayRecipient {
     recipient_type: DisplayRecipientType,
     latest_message_timestamp: Option<u64>,
@@ -92,7 +95,7 @@ impl DisplayRecipient {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DisplayContact {
     display_name: String,
     uuid: Uuid,
@@ -112,7 +115,7 @@ impl DisplayContact {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DisplayGroup {
     display_name: String,
     master_key: GroupMasterKeyBytes,
@@ -1942,11 +1945,10 @@ pub async fn handle_synchronization(
     account_name: String,
 ) {
     let _receiving_span = span!(Level::TRACE, "Receiving loop").entered();
-    let mut previous_contacts: Vec<DisplayContact> = Vec::new();
-    let mut previous_groups: Vec<DisplayGroup> = Vec::new();
+    // let mut previous_contacts: Vec<DisplayContact> = Vec::new();
+    // let mut previous_groups: Vec<DisplayGroup> = Vec::new();
     let mut initialized = false;
-
-    // TODO: Initial contact sort
+    let mut recipients = Vec::new();
 
     info!("Start initial synchronization");
     loop {
@@ -2000,67 +2002,12 @@ pub async fn handle_synchronization(
                         }
                     }
 
-                    let contacts_result = contacts::list_contacts_tui(&mut manager).await;
-                    let groups_result = groups::list_groups_tui(&mut manager).await;
+                    let new_recipients = timestamp_recipient_sort(&mut manager).await;
 
-                    let contacts = match contacts_result {
-                        Ok(list) => list,
-                        Err(e) => {
-                            error!("{e}");
-                            continue;
-                        }
-                    };
-
-                    let groups = match groups_result {
-                        Ok(list) => list,
-                        Err(e) => {
-                            error!("{e}");
-                            continue;
-                        }
-                    };
-
-                    let contact_displays_futures = contacts
-                        .into_iter()
-                        .map(|contact_res| async {
-                            let contact = contact_res.ok()?;
-                            contact_to_display_contact(contact, manager.clone()).await
-                        })
-                        .collect::<Vec<_>>();
-                    let results = join_all(contact_displays_futures).await;
-                    let contact_displays = results.into_iter().flatten().collect::<Vec<_>>();
-
-                    let group_displays: Vec<DisplayGroup> = groups
-                        .into_iter()
-                        .filter_map(|groups_res| {
-                            let (group_master_key, group) = groups_res.ok()?;
-                            group_to_display_group(group, group_master_key)
-                        })
-                        .collect();
-
-                    let contacts_differ = contact_displays != previous_contacts;
-                    let groups_differ = group_displays != previous_groups;
-
-                    let display_recipients: Vec<DisplayRecipientType> = contact_displays
-                        .iter()
-                        .cloned()
-                        .map(DisplayRecipientType::Contact)
-                        .chain(
-                            group_displays
-                                .iter()
-                                .cloned()
-                                .map(DisplayRecipientType::Group),
-                        )
-                        .collect();
-
-                    if contacts_differ || groups_differ {
-                        if tx.send(EventApp::ContactsList(display_recipients)).is_err() {
-                            break;
-                        }
-                        if contacts_differ {
-                            previous_contacts = contact_displays;
-                        }
-                        if groups_differ {
-                            previous_groups = group_displays;
+                    if new_recipients != recipients {
+                        recipients = new_recipients.clone();
+                        if let Err(error) = tx.send(EventApp::ContactsList(new_recipients)) {
+                            error!(?error, "Failed to send recipient list through channel");
                         }
                     }
                 }

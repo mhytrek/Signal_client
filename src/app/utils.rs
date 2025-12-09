@@ -12,7 +12,7 @@ use crate::app::{
 };
 use crate::{contacts, groups};
 
-pub(super) async fn initial_contact_sort(
+pub(super) async fn timestamp_recipient_sort(
     manager: &mut Manager<SqliteStore, Registered>,
 ) -> Vec<DisplayRecipient> {
     let contacts = contacts::list_contacts_tui(manager)
@@ -30,13 +30,10 @@ pub(super) async fn initial_contact_sort(
         let thread = Thread::Contact(contact.uuid);
         let timestamp = get_messages_backoff(manager, &thread).await;
         let display_contact = contact_to_display_contact(contact, manager.clone()).await;
-        match display_contact {
-            Some(dc) => Some(DisplayRecipient {
-                recipient_type: DisplayRecipientType::Contact(dc),
-                latest_message_timestamp: timestamp,
-            }),
-            None => None,
-        }
+        display_contact.map(|dc| DisplayRecipient {
+            recipient_type: DisplayRecipientType::Contact(dc),
+            latest_message_timestamp: timestamp,
+        })
     });
     let display_contacts = join_all(display_contacts)
         .await
@@ -49,13 +46,10 @@ pub(super) async fn initial_contact_sort(
             let thread = Thread::Group(master_key);
             let timestamp = get_messages_backoff(&inner_manager, &thread).await;
             let display_group = group_to_display_group(group, master_key);
-            match display_group {
-                Some(dg) => Some(DisplayRecipient {
-                    recipient_type: DisplayRecipientType::Group(dg),
-                    latest_message_timestamp: timestamp,
-                }),
-                None => None,
-            }
+            display_group.map(|dg| DisplayRecipient {
+                recipient_type: DisplayRecipientType::Group(dg),
+                latest_message_timestamp: timestamp,
+            })
         }
     });
     let display_groups = join_all(display_groups)
@@ -68,10 +62,7 @@ pub(super) async fn initial_contact_sort(
         .into_iter()
         .chain(display_groups.into_iter())
         .collect::<Vec<_>>();
-    display_recipients.sort_by_key(|dr| {
-        let key_timestamp = dr.latest_message_timestamp.unwrap_or(0);
-        key_timestamp
-    });
+    display_recipients.sort_by_key(|dr| dr.latest_message_timestamp.unwrap_or(0));
     display_recipients.reverse();
 
     display_recipients
@@ -85,6 +76,7 @@ async fn get_messages_backoff(
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Failed to get current system time");
+    error!(?now);
 
     for hours_backoff in HOURS {
         let start = now.saturating_sub(Duration::from_hours(hours_backoff));
@@ -102,7 +94,7 @@ async fn get_messages_backoff(
                     ContentBody::DataMessage(dmsg) => Some(dmsg),
                     _ => None,
                 })
-                .last(),
+                .next(),
             Err(error) => {
                 error!(?error, "Failed to get messages from the store.");
                 return None;
