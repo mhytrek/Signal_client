@@ -27,7 +27,7 @@ jobs:
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.91
+          toolchain: 1.92
           components: rustfmt, clippy
 
       - name: Checkout repo
