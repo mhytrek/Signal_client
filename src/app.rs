@@ -1,4 +1,4 @@
-use crate::app::utils::timestamp_recipient_sort;
+use crate::app::utils::{thread_timestamp_from_content, timestamp_recipient_sort};
 use crate::config::Config;
 use crate::messages::attachments::save_attachment;
 use crate::messages::receive::{self, MessageDto, contact, format_message};
@@ -48,7 +48,7 @@ use crate::devices::link_new_device_for_account;
 use crate::notifications::send_notification;
 use crate::retry_manager::{OutgoingMessage, RetryManager};
 use image::ImageFormat;
-use presage::store::ContentsStore;
+use presage::store::{ContentsStore, Thread};
 use std::thread;
 use std::time::Duration;
 use tokio::time::interval;
@@ -59,6 +59,22 @@ mod utils;
 pub enum RecipientId {
     Contact(Uuid),
     Group(GroupMasterKeyBytes),
+}
+
+impl RecipientId {
+    pub fn contact(&self) -> Option<Uuid> {
+        match self {
+            Self::Contact(uuid) => Some(*uuid),
+            _ => None,
+        }
+    }
+
+    pub fn group(&self) -> Option<GroupMasterKeyBytes> {
+        match self {
+            Self::Group(mk_bytes) => Some(*mk_bytes),
+            _ => None,
+        }
+    }
 }
 
 impl Default for RecipientId {
@@ -1887,7 +1903,7 @@ pub async fn handle_synchronization(
 ) {
     let _receiving_span = span!(Level::TRACE, "Receiving loop").entered();
     let mut initialized = false;
-    let mut recipients = Vec::new();
+    let mut recipients: Vec<DisplayRecipient> = timestamp_recipient_sort(&mut manager).await;
 
     info!("Start initial synchronization");
     loop {
@@ -1917,6 +1933,8 @@ pub async fn handle_synchronization(
                                     }
                                 }
                                 initialized = true;
+                                tx.send(EventApp::ContactsList(recipients.clone()))
+                                    .expect("Failed initial synchronization");
                             }
                         }
                         Received::Contacts => {
@@ -1933,21 +1951,63 @@ pub async fn handle_synchronization(
                                     handle_notification(&formatted_msg, &manager).await;
                                 }
 
-                                if let Err(e) = tx.send(EventApp::ReceiveMessage) {
-                                    error!(channel_error = %e);
+                                if let Some((thread, _)) = thread_timestamp_from_content(&content) {
+                                    let idx_opt = recipients.iter().position(|display_recipient| {
+                                        match &display_recipient.recipient_type {
+                                            DisplayRecipientType::Contact(dc) => {
+                                                let id = dc
+                                                    .id()
+                                                    .contact()
+                                                    .expect("Invalid id for DisplayContact");
+                                                match thread {
+                                                    Thread::Contact(uuid) => id == uuid,
+                                                    _ => false,
+                                                }
+                                            }
+                                            DisplayRecipientType::Group(dg) => {
+                                                let id = dg
+                                                    .id()
+                                                    .group()
+                                                    .expect("Invalid id type for DisplayGroup");
+                                                match thread {
+                                                    Thread::Group(master_key_bytes) => {
+                                                        master_key_bytes == id
+                                                    }
+                                                    _ => false,
+                                                }
+                                            }
+                                        }
+                                    });
+
+                                    if let Some(idx) = idx_opt
+                                        && idx != 0
+                                    {
+                                        let latest_recipient = recipients.remove(idx);
+                                        recipients.insert(0, latest_recipient);
+
+                                        if let Err(channel_error) =
+                                            tx.send(EventApp::ContactsList(recipients.clone()))
+                                        {
+                                            error!(%channel_error)
+                                        }
+                                    }
+                                }
+
+                                if let Err(channel_error) = tx.send(EventApp::ReceiveMessage) {
+                                    error!(%channel_error);
                                 }
                             }
                         }
                     }
 
-                    let new_recipients = timestamp_recipient_sort(&mut manager).await;
-
-                    if new_recipients != recipients {
-                        recipients = new_recipients.clone();
-                        if let Err(error) = tx.send(EventApp::ContactsList(new_recipients)) {
-                            error!(?error, "Failed to send recipient list through channel");
-                        }
-                    }
+                    // let new_recipients = timestamp_recipient_sort(&mut manager).await;
+                    //
+                    // if new_recipients != recipients {
+                    //     recipients = new_recipients.clone();
+                    //     if let Err(error) = tx.send(EventApp::ContactsList(new_recipients)) {
+                    //         error!(?error, "Failed to send recipient list through channel");
+                    //     }
+                    // }
                 }
 
                 error!("Lost connection to stream, reconnecting in 3 seconds");

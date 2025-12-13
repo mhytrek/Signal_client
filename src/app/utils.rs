@@ -6,7 +6,7 @@ use presage::libsignal_service::zkgroup::GroupMasterKeyBytes;
 use presage::store::ContentsStore;
 use presage::{Manager, manager::Registered, store::Thread};
 use presage_store_sqlite::SqliteStore;
-use tracing::{error, trace};
+use tracing::error;
 
 use crate::app::{
     DisplayRecipient, DisplayRecipientType, contact_to_display_contact, group_to_display_group,
@@ -116,12 +116,16 @@ async fn get_messages_backoff(
 pub(super) fn thread_timestamp_from_content(content: &Content) -> Option<(Thread, u64)> {
     let data_msg = match &content.body {
         ContentBody::DataMessage(dmsg) => Some(dmsg),
-        ContentBody::SynchronizeMessage(smsg) => smsg.sent.and_then(|sent| sent.message.as_ref()),
+        ContentBody::SynchronizeMessage(smsg) => {
+            smsg.sent.as_ref().and_then(|sent| sent.message.as_ref())
+        }
         _ => None,
     };
 
     match data_msg {
         Some(dmsg) => {
+            let timestamp = dmsg.timestamp?;
+
             let thread = match &dmsg.group_v2 {
                 Some(group_ctx) => {
                     let master_key = &group_ctx.master_key;
@@ -143,7 +147,7 @@ pub(super) fn thread_timestamp_from_content(content: &Content) -> Option<(Thread
                 None => Thread::Contact(content.metadata.sender.raw_uuid()),
             };
 
-            todo!()
+            Some((thread, timestamp))
         }
         None => None,
     }
