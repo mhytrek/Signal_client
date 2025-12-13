@@ -1787,12 +1787,13 @@ pub async fn init_background_threads(
     retry_manager: Arc<Mutex<RetryManager>>,
     account_name: String,
 ) -> Result<()> {
-    // let local_pool = LocalPoolHandle::new(4);
+    let recipients: Arc<Mutex<Vec<DisplayRecipient>>> = Arc::new(Mutex::new(vec![]));
 
     //spawn thread to sync contacts and new messages
     let tx_synchronization_events = tx_thread.clone();
     let new_manager = manager.clone();
     let sync_account_name = account_name.clone();
+    let sync_recipients = recipients.clone();
     thread::Builder::new()
         .name(String::from("synchronization_thread"))
         .stack_size(1024 * 1024 * 8)
@@ -1803,8 +1804,13 @@ pub async fn init_background_threads(
                 .build()
                 .unwrap();
             runtime.block_on(async move {
-                handle_synchronization(tx_synchronization_events, new_manager, sync_account_name)
-                    .await;
+                handle_synchronization(
+                    tx_synchronization_events,
+                    new_manager,
+                    sync_account_name,
+                    sync_recipients,
+                )
+                .await;
             })
         })
         .unwrap();
@@ -1829,6 +1835,7 @@ pub async fn init_background_threads(
                     new_manager,
                     tx_status_clone,
                     retry_manager_clone,
+                    recipients,
                 )
                 .await;
             })
@@ -1943,10 +1950,10 @@ pub async fn handle_synchronization(
     tx: mpsc::Sender<EventApp>,
     mut manager: Manager<SqliteStore, Registered>,
     account_name: String,
+    recipients: Arc<Mutex<Vec<DisplayRecipient>>>,
 ) {
     let _receiving_span = span!(Level::TRACE, "Receiving loop").entered();
     let mut initialized = false;
-    let mut recipients = Vec::new();
 
     info!("Start initial synchronization");
     loop {
@@ -2002,11 +2009,15 @@ pub async fn handle_synchronization(
 
                     let new_recipients = timestamp_recipient_sort(&mut manager).await;
 
-                    if new_recipients != recipients {
-                        recipients = new_recipients.clone();
+                    let mut recipients_guard = recipients.lock().await;
+                    if recipients_guard.ne(&new_recipients) {
+                        *recipients_guard = new_recipients.clone();
+                        drop(recipients_guard);
                         if let Err(error) = tx.send(EventApp::ContactsList(new_recipients)) {
                             error!(?error, "Failed to send recipient list through channel");
                         }
+                    } else {
+                        drop(recipients_guard);
                     }
                 }
 
@@ -2149,6 +2160,7 @@ pub async fn handle_background_events(
     mut manager: Manager<SqliteStore, Registered>,
     tx_status: mpsc::Sender<EventApp>,
     retry_manager: Arc<Mutex<RetryManager>>,
+    recipients: Arc<Mutex<Vec<DisplayRecipient>>>,
 ) {
     let local_pool = LocalPoolHandle::new(4);
 
@@ -2178,7 +2190,8 @@ pub async fn handle_background_events(
                         &mut manager,
                         &tx_status,
                         &retry_manager,
-                        &local_pool
+                        &local_pool,
+                        &recipients,
                     ).await;
                 } else {
                     break;
@@ -2303,33 +2316,65 @@ async fn handle_incoming_event(
     tx_status: &mpsc::Sender<EventApp>,
     retry_manager: &Arc<Mutex<RetryManager>>,
     local_pool: &LocalPoolHandle,
+    recipients: &Arc<Mutex<Vec<DisplayRecipient>>>,
 ) {
     match event {
         EventSend::SendText(recipient, text, quoted_message) => {
-            handle_send_text_event(
-                recipient,
-                text,
-                quoted_message,
-                manager,
-                tx_status,
-                retry_manager,
-                local_pool,
-            )
-            .await;
+            let mut manager_inner = manager.clone();
+            let tx_status_inner = tx_status.clone();
+            let retry_manager_inner = retry_manager.clone();
+            let recipients_inner = recipients.clone();
+            local_pool.spawn_pinned(move || async move {
+                handle_send_text_event(
+                    recipient,
+                    text,
+                    quoted_message,
+                    manager_inner.clone(),
+                    tx_status_inner.clone(),
+                    retry_manager_inner,
+                )
+                .await;
+                let new_recipients = timestamp_recipient_sort(&mut manager_inner).await;
+                let mut recipients_guard = recipients_inner.lock().await;
+                if recipients_guard.ne(&new_recipients) {
+                    *recipients_guard = new_recipients.clone();
+                    drop(recipients_guard);
+                    if let Err(channel_error) =
+                        tx_status_inner.send(EventApp::ContactsList(new_recipients))
+                    {
+                        error!(%channel_error);
+                    }
+                }
+            });
         }
         EventSend::SendAttachment(recipient, text, attachment_path, quoted_message) => {
-            handle_send_attachment_event(
-                recipient,
-                text,
-                attachment_path,
-                quoted_message,
-                manager,
-                // current_contacts_mutex,
-                tx_status,
-                retry_manager,
-                local_pool,
-            )
-            .await;
+            let mut manager_inner = manager.clone();
+            let tx_status_inner = tx_status.clone();
+            let retry_manager_inner = retry_manager.clone();
+            let recipients_inner = recipients.clone();
+            local_pool.spawn_pinned(move || async move {
+                handle_send_attachment_event(
+                    recipient,
+                    text,
+                    attachment_path,
+                    quoted_message,
+                    manager_inner.clone(),
+                    tx_status_inner.clone(),
+                    retry_manager_inner.clone(),
+                )
+                .await;
+                let new_recipients = timestamp_recipient_sort(&mut manager_inner).await;
+                let mut recipients_guard = recipients_inner.lock().await;
+                if recipients_guard.ne(&new_recipients) {
+                    *recipients_guard = new_recipients.clone();
+                    drop(recipients_guard);
+                    if let Err(channel_error) =
+                        tx_status_inner.send(EventApp::ContactsList(new_recipients))
+                    {
+                        error!(%channel_error);
+                    }
+                }
+            });
         }
         EventSend::DeleteMessage(recipient, target_send_timestamp) => {
             handle_delete_message_event(
@@ -2402,10 +2447,9 @@ async fn handle_send_text_event(
     recipient: RecipientId,
     text: String,
     quoted_message: Option<MessageDto>,
-    manager: &Manager<SqliteStore, Registered>,
-    tx_status: &mpsc::Sender<EventApp>,
-    retry_manager: &Arc<Mutex<RetryManager>>,
-    local_pool: &LocalPoolHandle,
+    manager: Manager<SqliteStore, Registered>,
+    tx_status: mpsc::Sender<EventApp>,
+    retry_manager: Arc<Mutex<RetryManager>>,
 ) {
     let outgoing_msg = OutgoingMessage::new(
         recipient.clone(),
@@ -2423,90 +2467,84 @@ async fn handle_send_text_event(
     let text_clone = text.clone();
     let quoted_message_clone = quoted_message.clone();
     let tx_status_clone = tx_status.clone();
-    let retry_manager_clone = Arc::clone(retry_manager);
+    let retry_manager_clone = Arc::clone(&retry_manager);
     let manager_clone = manager.clone();
 
-    local_pool.spawn_pinned(move || async move {
-        let send_result = match recipient_clone {
-            RecipientId::Contact(uuid) => {
-                send::contact::send_message_tui(
-                    uuid.to_string(),
-                    text_clone,
-                    quoted_message_clone,
-                    manager_clone,
-                )
-                .await
-            }
-            RecipientId::Group(master_key) => {
-                send::group::send_message_tui(
-                    master_key,
-                    text_clone,
-                    manager_clone,
-                    quoted_message_clone,
-                )
-                .await
-            }
-        };
-
-        match send_result {
-            Ok(_) => {
-                // Mark as sent in retry manager
-                let mut retry_mgr = retry_manager_clone.lock().await;
-                retry_mgr.mark_sent(&message_id);
-                drop(retry_mgr);
-
-                let _ =
-                    tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
-                let _ = tx_status_clone.send(EventApp::ReceiveMessage);
-            }
-            Err(e) if is_captcha_error(&e) => {
-                warn!(error = %e);
-                let token_re =
-                    Regex::new(r"^.* token ([a-f0-9-]+)$").expect("Failed to compile RegEx");
-
-                match token_re.captures(e.to_string().as_str()) {
-                    Some(caps) => match caps.get(1) {
-                        Some(token) => {
-                            let token = token.as_str();
-                            if let Err(error) =
-                                tx_status_clone.send(EventApp::CaptchaError(token.to_string()))
-                            {
-                                error!(%error, "Failed to send event");
-                            }
-                        }
-                        None => error!("Failed to extract token from error message."),
-                    },
-                    None => error!("Failed to extract token from error message."),
-                }
-                let mut retry_mgr = retry_manager_clone.lock().await;
-                retry_mgr.mark_sent(&message_id);
-                drop(retry_mgr);
-                _ = tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
-            }
-            Err(e) => {
-                // Mark as failed in retry manager
-                let mut retry_mgr = retry_manager_clone.lock().await;
-
-                if is_delivery_confirmation_timeout(&e) {
-                    retry_mgr.mark_sent(&message_id);
-                    warn!("Message likely delivered despite confirmation timeout");
-                } else {
-                    retry_mgr.mark_failed(&message_id, e.to_string());
-
-                    if is_connection_error(&e) {
-                        let _ = tx_status_clone.send(EventApp::NetworkStatusChanged(
-                            NetworkStatus::Disconnected(
-                                "Cannot send: WiFi disconnected".to_string(),
-                            ),
-                        ));
-                    } else {
-                        error!("Error sending message: {e:?}");
-                    }
-                }
-                drop(retry_mgr);
-            }
+    let send_result = match recipient_clone {
+        RecipientId::Contact(uuid) => {
+            send::contact::send_message_tui(
+                uuid.to_string(),
+                text_clone,
+                quoted_message_clone,
+                manager_clone,
+            )
+            .await
         }
-    });
+        RecipientId::Group(master_key) => {
+            send::group::send_message_tui(
+                master_key,
+                text_clone,
+                manager_clone,
+                quoted_message_clone,
+            )
+            .await
+        }
+    };
+
+    match send_result {
+        Ok(_) => {
+            // Mark as sent in retry manager
+            let mut retry_mgr = retry_manager_clone.lock().await;
+            retry_mgr.mark_sent(&message_id);
+            drop(retry_mgr);
+
+            let _ = tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+            let _ = tx_status_clone.send(EventApp::ReceiveMessage);
+        }
+        Err(e) if is_captcha_error(&e) => {
+            warn!(error = %e);
+            let token_re = Regex::new(r"^.* token ([a-f0-9-]+)$").expect("Failed to compile RegEx");
+
+            match token_re.captures(e.to_string().as_str()) {
+                Some(caps) => match caps.get(1) {
+                    Some(token) => {
+                        let token = token.as_str();
+                        if let Err(error) =
+                            tx_status_clone.send(EventApp::CaptchaError(token.to_string()))
+                        {
+                            error!(%error, "Failed to send event");
+                        }
+                    }
+                    None => error!("Failed to extract token from error message."),
+                },
+                None => error!("Failed to extract token from error message."),
+            }
+            let mut retry_mgr = retry_manager_clone.lock().await;
+            retry_mgr.mark_sent(&message_id);
+            drop(retry_mgr);
+            _ = tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+        }
+        Err(e) => {
+            // Mark as failed in retry manager
+            let mut retry_mgr = retry_manager_clone.lock().await;
+
+            if is_delivery_confirmation_timeout(&e) {
+                retry_mgr.mark_sent(&message_id);
+                warn!("Message likely delivered despite confirmation timeout");
+            } else {
+                retry_mgr.mark_failed(&message_id, e.to_string());
+
+                if is_connection_error(&e) {
+                    let _ = tx_status_clone.send(EventApp::NetworkStatusChanged(
+                        NetworkStatus::Disconnected("Cannot send: WiFi disconnected".to_string()),
+                    ));
+                } else {
+                    error!("Error sending message: {e:?}");
+                }
+            }
+            drop(retry_mgr);
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2515,11 +2553,9 @@ async fn handle_send_attachment_event(
     text: String,
     attachment_path: String,
     quoted_message: Option<MessageDto>,
-    manager: &Manager<SqliteStore, Registered>,
-    // current_contacts_mutex: &AsyncContactsMap,
-    tx_status: &mpsc::Sender<EventApp>,
-    retry_manager: &Arc<Mutex<RetryManager>>,
-    local_pool: &LocalPoolHandle,
+    manager: Manager<SqliteStore, Registered>,
+    tx_status: mpsc::Sender<EventApp>,
+    retry_manager: Arc<Mutex<RetryManager>>,
 ) {
     let outgoing_msg = OutgoingMessage::new(
         recipient.clone(),
@@ -2538,93 +2574,88 @@ async fn handle_send_attachment_event(
     let attachment_path_clone = attachment_path.clone();
     let quoted_message_clone = quoted_message.clone();
     let tx_status_clone = tx_status.clone();
-    let retry_manager_clone = Arc::clone(retry_manager);
+    let retry_manager_clone = Arc::clone(&retry_manager);
     let manager_clone = manager.clone();
 
-    local_pool.spawn_pinned(move || async move {
-        // Handle recipient type - for now, only Contact is implemented
-        let send_result = match recipient_clone {
-            RecipientId::Contact(uuid) => {
-                send::contact::send_attachment_tui(
-                    uuid.to_string(),
-                    text_clone,
-                    attachment_path_clone,
-                    quoted_message_clone,
-                    manager_clone,
-                )
-                .await
-            }
-            RecipientId::Group(master_key) => {
-                send::group::send_attachment_tui(
-                    &master_key,
-                    text_clone,
-                    attachment_path_clone,
-                    quoted_message_clone,
-                    manager_clone,
-                )
-                .await
-            }
-        };
-
-        match send_result {
-            Ok(_) => {
-                // Mark as sent in retry manager
-                let mut retry_mgr = retry_manager_clone.lock().await;
-                retry_mgr.mark_sent(&message_id);
-                drop(retry_mgr);
-
-                _ = tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
-                _ = tx_status_clone.send(EventApp::ReceiveMessage);
-            }
-            Err(e) if is_captcha_error(&e) => {
-                warn!(error = %e);
-                let token_re =
-                    Regex::new(r"^.* token ([a-f0-9-]+)$").expect("Failed to compile RegEx");
-
-                match token_re.captures(e.to_string().as_str()) {
-                    Some(caps) => match caps.get(1) {
-                        Some(token) => {
-                            let token = token.as_str();
-                            if let Err(error) =
-                                tx_status_clone.send(EventApp::CaptchaError(token.to_string()))
-                            {
-                                error!(%error, "Failed to send event");
-                            }
-                        }
-                        None => error!("Failed to extract token from error message."),
-                    },
-                    None => error!("Failed to extract token from error message."),
-                }
-                let mut retry_mgr = retry_manager_clone.lock().await;
-                // Even though not send this message is marked as sent so there is no retry for it.
-                retry_mgr.mark_sent(&message_id);
-                drop(retry_mgr);
-
-                _ = tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
-            }
-            Err(e) => {
-                // Mark as failed in retry manager
-                let mut retry_mgr = retry_manager_clone.lock().await;
-
-                if is_delivery_confirmation_timeout(&e) {
-                    retry_mgr.mark_sent(&message_id);
-                    warn!("Message likely delivered despite confirmation timeout");
-                } else {
-                    retry_mgr.mark_failed(&message_id, e.to_string());
-                    if is_connection_error(&e) {
-                        _ = tx_status_clone.send(EventApp::NetworkStatusChanged(
-                            NetworkStatus::Disconnected(
-                                "Cannot send: WiFi disconnected".to_string(),
-                            ),
-                        ));
-                    } else {
-                        error!("Error sending attachment: {e:?}");
-                    }
-                }
-                drop(retry_mgr);
-            }
+    // Handle recipient type - for now, only Contact is implemented
+    let send_result = match recipient_clone {
+        RecipientId::Contact(uuid) => {
+            send::contact::send_attachment_tui(
+                uuid.to_string(),
+                text_clone,
+                attachment_path_clone,
+                quoted_message_clone,
+                manager_clone,
+            )
+            .await
         }
-    });
+        RecipientId::Group(master_key) => {
+            send::group::send_attachment_tui(
+                &master_key,
+                text_clone,
+                attachment_path_clone,
+                quoted_message_clone,
+                manager_clone,
+            )
+            .await
+        }
+    };
+
+    match send_result {
+        Ok(_) => {
+            // Mark as sent in retry manager
+            let mut retry_mgr = retry_manager_clone.lock().await;
+            retry_mgr.mark_sent(&message_id);
+            drop(retry_mgr);
+
+            _ = tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+            _ = tx_status_clone.send(EventApp::ReceiveMessage);
+        }
+        Err(e) if is_captcha_error(&e) => {
+            warn!(error = %e);
+            let token_re = Regex::new(r"^.* token ([a-f0-9-]+)$").expect("Failed to compile RegEx");
+
+            match token_re.captures(e.to_string().as_str()) {
+                Some(caps) => match caps.get(1) {
+                    Some(token) => {
+                        let token = token.as_str();
+                        if let Err(error) =
+                            tx_status_clone.send(EventApp::CaptchaError(token.to_string()))
+                        {
+                            error!(%error, "Failed to send event");
+                        }
+                    }
+                    None => error!("Failed to extract token from error message."),
+                },
+                None => error!("Failed to extract token from error message."),
+            }
+            let mut retry_mgr = retry_manager_clone.lock().await;
+            // Even though not send this message is marked as sent so there is no retry for it.
+            retry_mgr.mark_sent(&message_id);
+            drop(retry_mgr);
+
+            _ = tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+        }
+        Err(e) => {
+            // Mark as failed in retry manager
+            let mut retry_mgr = retry_manager_clone.lock().await;
+
+            if is_delivery_confirmation_timeout(&e) {
+                retry_mgr.mark_sent(&message_id);
+                warn!("Message likely delivered despite confirmation timeout");
+            } else {
+                retry_mgr.mark_failed(&message_id, e.to_string());
+                if is_connection_error(&e) {
+                    _ = tx_status_clone.send(EventApp::NetworkStatusChanged(
+                        NetworkStatus::Disconnected("Cannot send: WiFi disconnected".to_string()),
+                    ));
+                } else {
+                    error!("Error sending attachment: {e:?}");
+                }
+            }
+            drop(retry_mgr);
+        }
+    }
 }
 
 async fn handle_delete_message_event(
