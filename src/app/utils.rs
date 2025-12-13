@@ -1,7 +1,8 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use futures::future::join_all;
-use presage::libsignal_service::content::ContentBody;
+use presage::libsignal_service::content::{Content, ContentBody};
+use presage::libsignal_service::zkgroup::GroupMasterKeyBytes;
 use presage::store::ContentsStore;
 use presage::{Manager, manager::Registered, store::Thread};
 use presage_store_sqlite::SqliteStore;
@@ -110,4 +111,40 @@ async fn get_messages_backoff(
         }
     }
     None
+}
+
+pub(super) fn thread_timestamp_from_content(content: &Content) -> Option<(Thread, u64)> {
+    let data_msg = match &content.body {
+        ContentBody::DataMessage(dmsg) => Some(dmsg),
+        ContentBody::SynchronizeMessage(smsg) => smsg.sent.and_then(|sent| sent.message.as_ref()),
+        _ => None,
+    };
+
+    match data_msg {
+        Some(dmsg) => {
+            let thread = match &dmsg.group_v2 {
+                Some(group_ctx) => {
+                    let master_key = &group_ctx.master_key;
+                    let master_key_bytes: GroupMasterKeyBytes = match master_key {
+                        Some(mk) => match mk.get(..32) {
+                            Some(bytes) => match bytes.try_into() {
+                                Ok(bytes) => bytes,
+                                Err(error) => {
+                                    error!(%error, "Invalid master key.");
+                                    return None;
+                                }
+                            },
+                            None => return None,
+                        },
+                        None => return None,
+                    };
+                    Thread::Group(master_key_bytes)
+                }
+                None => Thread::Contact(content.metadata.sender.raw_uuid()),
+            };
+
+            todo!()
+        }
+        None => None,
+    }
 }
