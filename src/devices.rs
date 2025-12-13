@@ -86,13 +86,13 @@ pub async fn link_new_device_for_account(
         match rx.await {
             Ok(url) => {
                 let mut file = File::create(paths::qrcode())
-                    .map_err(|e| anyhow::anyhow!("Failed to create QRcode file: {}", e))?;
+                    .map_err(|e| anyhow::anyhow!("Failed to create QRcode file: {e}"))?;
 
                 file.write_all(url.as_ref().as_bytes())
-                    .map_err(|e| anyhow::anyhow!("Failed to save url to qr code: {}", e))?;
+                    .map_err(|e| anyhow::anyhow!("Failed to save url to qr code: {e}"))?;
                 Ok(())
             }
-            Err(err) => Err(anyhow::anyhow!("Login error: {}", err)),
+            Err(err) => Err(anyhow::anyhow!("Login error: {err}")),
         }
     };
 
