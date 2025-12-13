@@ -5,7 +5,7 @@ use presage::libsignal_service::content::ContentBody;
 use presage::store::ContentsStore;
 use presage::{Manager, manager::Registered, store::Thread};
 use presage_store_sqlite::SqliteStore;
-use tracing::error;
+use tracing::{error, trace};
 
 use crate::app::{
     DisplayRecipient, DisplayRecipientType, contact_to_display_contact, group_to_display_group,
@@ -76,7 +76,6 @@ async fn get_messages_backoff(
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Failed to get current system time");
-    error!(?now);
 
     for hours_backoff in HOURS {
         let start = now.saturating_sub(Duration::from_hours(hours_backoff));
@@ -92,6 +91,9 @@ async fn get_messages_backoff(
                 .flatten()
                 .filter_map(|c| match c.body {
                     ContentBody::DataMessage(dmsg) => Some(dmsg),
+                    ContentBody::SynchronizeMessage(smsg) => {
+                        smsg.sent.and_then(|sent| sent.message)
+                    }
                     _ => None,
                 })
                 .next(),
