@@ -2,7 +2,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::account_management::create_registered_manager;
 use crate::groups::find_master_key;
+use crate::messages::format_message;
 use crate::messages::receive::{MessageDto, receive_messages_cli};
+use crate::messages::send::create_reaction_data_message;
 use anyhow::{Result, bail};
 use presage::proto::data_message::{Delete, Quote};
 use presage::proto::{DataMessage, GroupContextV2};
@@ -218,4 +220,91 @@ pub fn create_delete_data_message(
         delete: Some(del_mes),
         ..Default::default()
     }
+}
+
+async fn send_reaction_message(
+    manager: &mut Manager<SqliteStore, Registered>,
+    master_key: &GroupMasterKeyBytes,
+    target_send_timestamp: u64,
+    target_author_aci: String,
+    remove: bool,
+    emoji: String,
+) -> Result<()> {
+    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
+    let data_message = create_reaction_data_message(
+        timestamp,
+        target_send_timestamp,
+        target_author_aci,
+        remove,
+        emoji,
+    )?;
+
+    send(manager, master_key, data_message, timestamp).await?;
+
+    Ok(())
+}
+
+pub async fn send_reaction_message_tui(
+    mut manager: Manager<SqliteStore, Registered>,
+    master_key: &GroupMasterKeyBytes,
+    target_send_timestamp: u64,
+    target_author_aci: String,
+    remove: bool,
+    emoji: String,
+) -> Result<()> {
+    send_reaction_message(
+        &mut manager,
+        master_key,
+        target_send_timestamp,
+        target_author_aci,
+        remove,
+        emoji,
+    )
+    .await
+}
+
+pub async fn send_reaction_message_cli(
+    recipient: String,
+    target_send_timestamp: u64,
+) -> Result<()> {
+    let mut manager = create_registered_manager().await?;
+
+    let master_key = find_master_key(recipient, &mut manager).await?;
+    let master_key = match master_key {
+        Some(mk) => mk,
+        None => bail!("Group with given name does not exist."),
+    };
+
+    let thread = Thread::Group(master_key);
+
+    let raw_message = match manager
+        .store()
+        .message(&thread, target_send_timestamp)
+        .await?
+    {
+        Some(msg) => msg,
+        None => bail!("Message with given timestamp not found."),
+    };
+
+    let dto = match format_message(&raw_message) {
+        Some(dto) => dto,
+        None => bail!("Could not format message."),
+    };
+
+    let target_author_aci = dto.uuid.to_string();
+
+    let emoji = "👍".to_string();
+    let remove = false;
+
+    send_reaction_message(
+        &mut manager,
+        &master_key,
+        target_send_timestamp,
+        target_author_aci,
+        remove,
+        emoji,
+    )
+    .await?;
+
+    Ok(())
 }

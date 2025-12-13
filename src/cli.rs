@@ -52,40 +52,57 @@ pub async fn print_groups() -> Result<()> {
 }
 
 fn print_message(message: &MessageDto) {
-    let datetime_local = get_local_timestamp(message.timestamp);
+    print_quote(message);
+    print_body(message);
+    print_reactions(message);
+    println!();
+}
 
-    let quote_text = match &message.quote {
-        Some(qu) => {
-            let datetime_guote_utc = get_local_timestamp(qu.id());
-            format!(
-                "┆ Reply:\n┆ {}\n┆ {}\n",
-                datetime_guote_utc.format("%Y-%m-%d %H:%M:%S"),
-                qu.text.clone().unwrap_or("<no text>".to_string())
-            )
-        }
-        None => "".to_string(),
-    };
+fn print_quote(message: &MessageDto) {
+    if let Some(qu) = &message.quote {
+        let datetime_quote_local = get_local_timestamp(qu.id());
 
-    match message.sender {
-        true => {
-            println!(
-                "{}[{}] Me -> {}",
-                quote_text,
-                datetime_local.format("%Y-%m-%d %H:%M:%S"),
-                message.text
-            );
-        }
-        false => {
-            println!(
-                "{}[{}] Them <- {}",
-                quote_text,
-                datetime_local.format("%Y-%m-%d %H:%M:%S"),
-                message.text
-            );
-        }
+        println!(
+            "┆ Reply:\n┆ {}\n┆ {}",
+            datetime_quote_local.format("%Y-%m-%d %H:%M:%S"),
+            qu.text.clone().unwrap_or("<no text>".to_string())
+        );
     }
 }
 
+fn print_body(message: &MessageDto) {
+    let datetime_local = get_local_timestamp(message.timestamp);
+
+    if message.sender {
+        println!(
+            "[{}] Me -> {}",
+            datetime_local.format("%Y-%m-%d %H:%M:%S"),
+            message.text
+        );
+    } else {
+        println!(
+            "[{}] Them <- {}",
+            datetime_local.format("%Y-%m-%d %H:%M:%S"),
+            message.text
+        );
+    }
+}
+
+fn print_reactions(message: &MessageDto) {
+    if message.reactions.is_empty() {
+        return;
+    }
+
+    for reaction in message.reactions.values() {
+        let removed = reaction.remove.unwrap_or(false);
+        if removed {
+            continue;
+        }
+
+        let emoji = reaction.emoji.clone().unwrap_or("?".to_string());
+        println!("┆ Reaction: {emoji}");
+    }
+}
 pub async fn print_messages_from_contact(recipient: String, from: Option<String>) -> Result<()> {
     let mut messages = contact::list_messages_cli(recipient, from).await?;
 

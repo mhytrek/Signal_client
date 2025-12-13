@@ -9,11 +9,10 @@ use presage::{
 };
 use presage_store_sqlite::{SqliteStore, SqliteStoreError};
 
-use crate::account_management::create_registered_manager;
 use crate::{
-    groups::find_master_key,
-    messages::receive::{MessageDto, format_attachments, format_message},
+    account_management::create_registered_manager, messages::receive::get_messages_as_message_dto,
 };
+use crate::{groups::find_master_key, messages::receive::MessageDto};
 
 pub async fn list_messages(
     manager: &Manager<SqliteStore, Registered>,
@@ -45,17 +44,7 @@ pub async fn list_messages_cli(recipient: String, from: Option<String>) -> Resul
     };
 
     let messages = list_messages(&manager, master_key, from).await?;
-
-    let mut result = Vec::new();
-
-    for message in messages.into_iter().flatten() {
-        if let Some(formatted_message) = format_message(&message) {
-            result.push(formatted_message);
-        }
-        let attachment_msgs = format_attachments(&message);
-        result.extend(attachment_msgs);
-    }
-    Ok(result)
+    get_messages_as_message_dto(messages)
 }
 
 pub async fn list_messages_tui(
@@ -64,14 +53,5 @@ pub async fn list_messages_tui(
     from: Option<String>,
 ) -> Result<Vec<MessageDto>> {
     let messages = list_messages(&manager, master_key, from).await?;
-
-    let mut formatted_messages = vec![];
-    for message in messages.into_iter().flatten() {
-        if let Some(formatted_message) = format_message(&message) {
-            formatted_messages.push(formatted_message);
-        }
-        let attachment_msgs = format_attachments(&message);
-        formatted_messages.extend(attachment_msgs);
-    }
-    Ok(formatted_messages)
+    get_messages_as_message_dto(messages)
 }

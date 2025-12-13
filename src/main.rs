@@ -60,6 +60,15 @@ async fn main() -> Result<()> {
             }
             _ => unreachable!(),
         },
+        Command::ReactToMessage(args) => match (args.contact, args.group) {
+            (Some(c), None) => {
+                messages::send::contact::send_reaction_message_cli(c, args.timestamp).await?
+            }
+            (None, Some(g)) => {
+                messages::send::group::send_delete_message_cli(g, args.timestamp).await?
+            }
+            _ => unreachable!(),
+        },
     }
 
     Ok(())

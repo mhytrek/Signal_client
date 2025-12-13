@@ -3,6 +3,7 @@ use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
+    text::Line,
     widgets::{Block, BorderType, Borders, Paragraph, Wrap},
 };
 
@@ -210,7 +211,7 @@ fn render_messages(
         let mut height = heights[idx];
 
         let mut style = Style::default();
-        let block = Block::default()
+        let mut block = Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded);
 
@@ -228,6 +229,22 @@ fn render_messages(
 
         let text_content = build_message_content(app, msg);
 
+        let reactions_display = if !msg.reactions.is_empty() {
+            let joined = msg
+                .reactions
+                .iter()
+                .filter_map(|(_uuid, r)| r.emoji.clone())
+                .collect::<Vec<_>>()
+                .join(" ");
+            Some(joined)
+        } else {
+            None
+        };
+
+        if let Some(reaction_text) = reactions_display {
+            block = block.title_bottom(reaction_text);
+        }
+
         let para: Paragraph = match visibility {
             Visibility::Full => Paragraph::new(text_content)
                 .style(style)
@@ -235,7 +252,10 @@ fn render_messages(
                     block
                         .clone()
                         .title_top(datetime_local.format("%Y-%m-%d %H:%M:%S").to_string())
-                        .title_bottom(get_display_name(app, msg.uuid.to_string().as_str())),
+                        .title_bottom(
+                            Line::from(get_display_name(app, msg.uuid.to_string().as_str()))
+                                .right_aligned(),
+                        ),
                 )
                 .wrap(Wrap { trim: false }),
 
