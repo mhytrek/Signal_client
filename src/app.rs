@@ -1886,8 +1886,6 @@ pub async fn handle_synchronization(
     mut manager: Manager<SqliteStore, Registered>,
 ) {
     let _receiving_span = span!(Level::TRACE, "Receiving loop").entered();
-    // let mut previous_contacts: Vec<DisplayContact> = Vec::new();
-    // let mut previous_groups: Vec<DisplayGroup> = Vec::new();
     let mut initialized = false;
     let mut recipients = Vec::new();
 
