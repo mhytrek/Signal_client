@@ -34,7 +34,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 
-use std::{fs, io};
+use std::{fs, io, mem};
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
 use tokio_util::task::LocalPoolHandle;
@@ -55,7 +55,7 @@ use tokio::time::interval;
 
 mod utils;
 
-#[derive(PartialEq, Clone)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum RecipientId {
     Contact(Uuid),
     Group(GroupMasterKeyBytes),
@@ -664,6 +664,14 @@ impl App {
                 if self.current_screen == CurrentScreen::Syncing {
                     self.current_screen = CurrentScreen::Main;
                 }
+
+                let old_recipients = mem::take(&mut self.recipients);
+                let mut input_map: HashMap<RecipientId, String> = HashMap::new();
+                for recipient in old_recipients {
+                    let id = recipient.0.id();
+                    let input = recipient.1;
+                    input_map.insert(id, input);
+                }
                 // This is added because contacts change order in the contact list
                 // and if that happens the same contact should remain selected
                 let selected_id = self
@@ -674,7 +682,10 @@ impl App {
 
                 self.recipients = recipients
                     .into_iter()
-                    .map(|recipient| (recipient, String::new()))
+                    .map(|recipient| {
+                        let id = recipient.id();
+                        (recipient, input_map.remove(&id).unwrap_or_default())
+                    })
                     .collect();
 
                 self.selected_recipient = self
