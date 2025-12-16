@@ -973,11 +973,17 @@ impl App {
                     self.group_avatar_cache = None;
                     self.group_avatar_image = None;
                 }
+                KeyCode::Char('c') if key.modifiers.bits() == KeyModifiers::CONTROL.bits() => {
+                    return Ok(true);
+                }
                 _ => {}
             },
             Exiting => match key.code {
                 KeyCode::Char('y') | KeyCode::Esc | KeyCode::Char('q') => return Ok(true),
                 KeyCode::Char('n') => self.current_screen = Main,
+                KeyCode::Char('c') if key.modifiers.bits() == KeyModifiers::CONTROL.bits() => {
+                    return Ok(true);
+                }
                 _ => {}
             },
             InspectMesseges => match key.code {
@@ -1091,7 +1097,9 @@ impl App {
                             .unwrap()
                     };
                 }
-
+                KeyCode::Char('c') if key.modifiers.bits() == KeyModifiers::CONTROL.bits() => {
+                    return Ok(true);
+                }
                 KeyCode::Char('c') => {
                     let selected_recipient_id = self.recipients[self.selected_recipient].0.id();
                     let target_send_option = match selected_recipient_id {
@@ -1124,7 +1132,6 @@ impl App {
                             .unwrap();
                     }
                 }
-
                 _ => {}
             },
 
@@ -1157,6 +1164,9 @@ impl App {
                 KeyCode::Enter => {
                     self.submit_message(tx);
                     self.synchronize_messages_for_selected_recipient();
+                }
+                KeyCode::Char('c') if key.modifiers.bits() == KeyModifiers::CONTROL.bits() => {
+                    return Ok(true);
                 }
                 KeyCode::Char(to_insert) => match self.input_focus {
                     InputFocus::Message => self.enter_char(to_insert),
@@ -1301,6 +1311,9 @@ impl App {
                         }
                     }
                 }
+                KeyCode::Char('c') if key.modifiers.bits() == KeyModifiers::CONTROL.bits() => {
+                    return Ok(true);
+                }
                 _ => {}
             },
             AccountSelector => match key.code {
@@ -1337,7 +1350,9 @@ impl App {
                         self.current_screen = CurrentScreen::ConfirmDelete;
                     }
                 }
-
+                KeyCode::Char('c') if key.modifiers.bits() == KeyModifiers::CONTROL.bits() => {
+                    return Ok(true);
+                }
                 _ => {}
             },
             CurrentScreen::ConfirmDelete => match key.code {
@@ -1354,6 +1369,9 @@ impl App {
                 KeyCode::Char('n') | KeyCode::Esc => {
                     self.deleting_account = None;
                     self.current_screen = CurrentScreen::AccountSelector;
+                }
+                KeyCode::Char('c') if key.modifiers.bits() == KeyModifiers::CONTROL.bits() => {
+                    return Ok(true);
                 }
                 _ => {}
             },
@@ -1395,6 +1413,9 @@ impl App {
                     }
                     _ => {}
                 },
+                KeyCode::Char('c') if key.modifiers.bits() == KeyModifiers::CONTROL.bits() => {
+                    return Ok(true);
+                }
                 _ => {}
             },
             ContactInfo => match key.code {
@@ -1403,6 +1424,9 @@ impl App {
                     self.selected_contact_info = None;
                     self.contact_avatar_cache = None;
                     self.contact_avatar_image = None;
+                }
+                KeyCode::Char('c') if key.modifiers.bits() == KeyModifiers::CONTROL.bits() => {
+                    return Ok(true);
                 }
                 _ => {}
             },
@@ -1432,6 +1456,9 @@ impl App {
                         .unwrap();
                     self.current_screen = MemberInfo;
                 }
+                KeyCode::Char('c') if key.modifiers.bits() == KeyModifiers::CONTROL.bits() => {
+                    return Ok(true);
+                }
                 _ => {}
             },
             MemberInfo => match key.code {
@@ -1439,6 +1466,9 @@ impl App {
                     self.current_screen = GroupInfo;
                     self.contact_avatar_cache = None;
                     self.contact_avatar_image = None;
+                }
+                KeyCode::Char('c') if key.modifiers.bits() == KeyModifiers::CONTROL.bits() => {
+                    return Ok(true);
                 }
                 _ => {}
             },
@@ -1504,6 +1534,11 @@ impl App {
                                     self.current_screen = CurrentScreen::LinkingNewDevice;
                                 }
                             }
+                            KeyCode::Char('c')
+                                if key.modifiers.bits() == KeyModifiers::CONTROL.bits() =>
+                            {
+                                return Ok(true);
+                            }
                             KeyCode::Char(value) => self.textarea.push(value),
                             _ => {}
                         }
@@ -1522,6 +1557,11 @@ impl App {
                                     self.linking_status = LinkingStatus::Unlinked;
                                 }
                             }
+                            KeyCode::Char('c')
+                                if key.modifiers.bits() == KeyModifiers::CONTROL.bits() =>
+                            {
+                                return Ok(true);
+                            }
                             _ => {
                                 self.linking_status = LinkingStatus::Unlinked;
                             }
@@ -1529,7 +1569,12 @@ impl App {
                     }
                 }
             },
-            Syncing => {}
+            Syncing => match key.code {
+                KeyCode::Char('c') if key.modifiers.bits() == KeyModifiers::CONTROL.bits() => {
+                    return Ok(true);
+                }
+                _ => {}
+            },
             Recaptcha => match key.code {
                 KeyCode::Enter => {
                     const CAPTCHA_PREFIX: &str = "signalcaptcha://";
@@ -1577,6 +1622,9 @@ impl App {
                 }
                 KeyCode::Esc => {
                     self.current_screen = CurrentScreen::Main;
+                }
+                KeyCode::Char('c') if key.modifiers.bits() == KeyModifiers::CONTROL.bits() => {
+                    return Ok(true);
                 }
                 _ => {}
             },
