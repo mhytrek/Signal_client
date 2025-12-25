@@ -11,7 +11,7 @@ fn ensure_data_dir() -> Result<PathBuf> {
     match dirs::data_dir() {
         Some(data_dir) => {
             if !fs::exists(&data_dir)? {
-                fs::create_dir(&data_dir)?;
+                fs::create_dir_all(&data_dir)?;
             }
             Ok(data_dir)
         }
