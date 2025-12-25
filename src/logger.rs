@@ -31,7 +31,7 @@ fn ensure_log_dir() -> Result<PathBuf> {
             if !fs::exists(state_dir.join("signal_client/logs"))? {
                 fs::create_dir_all(&state_dir)?;
             }
-            Ok(state_dir)
+            Ok(state_dir.join("signal_client/logs"))
         }
         None => bail!("Unable to resolve logging directory."),
     }
