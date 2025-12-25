@@ -527,7 +527,7 @@ impl App {
     pub async fn delete_account(&mut self, account_name: String) -> Result<()> {
         use std::path::Path;
         let is_current = self.current_account.as_ref() == Some(&account_name);
-        let account_dir = format!("{}/{account_name}", paths::accounts_dir());
+        let account_dir = paths::accounts_dir().join(&account_name);
         if Path::new(&account_dir).exists() {
             std::fs::remove_dir_all(&account_dir)?;
         }
