@@ -39,7 +39,7 @@ impl Config {
         } else {
             dirs::config_dir()
                 .unwrap_or_else(|| PathBuf::from("."))
-                .join("signal-tui")
+                .join("signal_client")
                 .join("config.json")
         }
     }
