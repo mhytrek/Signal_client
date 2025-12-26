@@ -1,8 +1,8 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
+use std::path::PathBuf;
 use std::{
-    env::{self, home_dir},
+    env::{self},
     fs,
-    path::Path,
     sync::OnceLock,
 };
 
@@ -12,29 +12,40 @@ use tracing_subscriber::{EnvFilter, fmt::writer::BoxMakeWriter};
 
 use crate::env::{SIGNAL_LOGGER_LEVEL, SIGNAL_ONSCREEN_LOGGER};
 
-fn ensure_local_state(home_dir: &Path) -> Result<()> {
+#[cfg(target_os = "macos")]
+fn ensure_log_dir() -> Result<PathBuf> {
+    let home_dir = match dirs::home_dir() {
+        Some(home_dir) => home_dir,
+        None => bail!("Unable to resolve home directory."),
+    };
     if !fs::exists(home_dir.join(".local/state"))? {
         fs::create_dir_all(home_dir.join(".local/state"))?;
     }
-    Ok(())
+    Ok(home_dir)
 }
 
-fn logs_directory() -> String {
-    static PATH: OnceLock<String> = OnceLock::new();
+#[cfg(target_os = "linux")]
+fn ensure_log_dir() -> Result<PathBuf> {
+    match dirs::state_dir() {
+        Some(state_dir) => {
+            if !fs::exists(state_dir.join("signal_client/logs"))? {
+                fs::create_dir_all(&state_dir)?;
+            }
+            Ok(state_dir.join("signal_client/logs"))
+        }
+        None => bail!("Unable to resolve logging directory."),
+    }
+}
+
+fn logs_directory() -> PathBuf {
+    static PATH: OnceLock<PathBuf> = OnceLock::new();
     PATH.get_or_init(|| {
         if cfg!(debug_assertions) {
-            "./signal_client/logs".to_string()
+            PathBuf::from("./signal_client/logs")
         } else {
-            match home_dir() {
-                Some(home_dir) => match ensure_local_state(&home_dir) {
-                    Ok(_) => home_dir
-                        .join(".local/state/signal_client/logs")
-                        .to_str()
-                        .unwrap_or("./signal_client/logs")
-                        .to_string(),
-                    Err(_) => "./signal_client/logs".to_string(),
-                },
-                None => "./signal_client/logs".to_string(),
+            match ensure_log_dir() {
+                Ok(log_dir) => log_dir,
+                Err(_) => PathBuf::from("./signal_client/logs"),
             }
         }
     })

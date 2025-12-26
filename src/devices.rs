@@ -2,9 +2,9 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
-use crate::account_management::{ensure_accounts_dir, get_account_store_path};
+use crate::account_management::ensure_accounts_dir;
 use crate::open_store;
-use crate::paths;
+use crate::paths::{self, account_store_path};
 use anyhow::Result;
 use futures::{channel::oneshot, future};
 use presage::manager::Registered;
@@ -63,8 +63,8 @@ pub async fn link_new_device_for_account(
 ) -> Result<Manager<SqliteStore, Registered>> {
     ensure_accounts_dir()?;
 
-    let account_dir = format!("{}/{account_name}", paths::accounts_dir());
-    let store_path = get_account_store_path(&account_name);
+    let account_dir = paths::accounts_dir().join(&account_name);
+    let store_path = account_store_path(&account_name);
 
     fs::create_dir_all(&account_dir).await?;
 

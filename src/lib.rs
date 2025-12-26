@@ -2,7 +2,7 @@ use crate::config::Config;
 use anyhow::Result;
 use presage::model::identity::OnNewIdentity;
 use presage_store_sqlite::{SqliteConnectOptions, SqliteStore, SqliteStoreError};
-use std::str::FromStr;
+use std::{path::Path, str::FromStr};
 
 pub mod account_management;
 pub mod app;
@@ -24,7 +24,11 @@ pub mod ui;
 
 pub mod sending {}
 
-pub async fn open_store(path: &str) -> Result<SqliteStore, SqliteStoreError> {
-    let options = SqliteConnectOptions::from_str(path)?.create_if_missing(true);
+pub async fn open_store(path: &Path) -> Result<SqliteStore, SqliteStoreError> {
+    let options = SqliteConnectOptions::from_str(
+        path.to_str()
+            .expect("Failed to resolve database path from `PathBuf`"),
+    )?
+    .create_if_missing(true);
     SqliteStore::open_with_options(options, OnNewIdentity::Trust).await
 }
