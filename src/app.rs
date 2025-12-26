@@ -430,6 +430,7 @@ impl App {
                             rx,
                             manager,
                             self.retry_manager.clone(),
+                            current.clone(),
                         )
                         .await
                         {
@@ -502,6 +503,7 @@ impl App {
                 rx,
                 new_manager,
                 self.retry_manager.clone(),
+                account_name.clone(),
             )
             .await
         {
@@ -739,11 +741,16 @@ impl App {
                                 Err(error) => error!(%error, "Failed to fetch whoami info"),
                             }
 
+                            let current_account = self
+                                .current_account
+                                .clone()
+                                .unwrap_or_else(|| "default".to_string());
                             if let Err(e) = init_background_threads(
                                 self.tx_thread.clone(),
                                 rx,
                                 new_manager,
                                 Arc::clone(&self.retry_manager),
+                                current_account,
                             )
                             .await
                             {
@@ -1719,12 +1726,14 @@ pub async fn init_background_threads(
     rx_thread: mpsc::Receiver<EventSend>,
     manager: Manager<SqliteStore, Registered>,
     retry_manager: Arc<Mutex<RetryManager>>,
+    account_name: String,
 ) -> Result<()> {
     // let local_pool = LocalPoolHandle::new(4);
 
     //spawn thread to sync contacts and new messages
     let tx_synchronization_events = tx_thread.clone();
     let new_manager = manager.clone();
+    let sync_account_name = account_name.clone();
     thread::Builder::new()
         .name(String::from("synchronization_thread"))
         .stack_size(1024 * 1024 * 8)
@@ -1735,7 +1744,8 @@ pub async fn init_background_threads(
                 .build()
                 .unwrap();
             runtime.block_on(async move {
-                handle_synchronization(tx_synchronization_events, new_manager).await;
+                handle_synchronization(tx_synchronization_events, new_manager, sync_account_name)
+                    .await;
             })
         })
         .unwrap();
@@ -1873,6 +1883,7 @@ pub fn handle_input_events(tx: mpsc::Sender<EventApp>) {
 pub async fn handle_synchronization(
     tx: mpsc::Sender<EventApp>,
     mut manager: Manager<SqliteStore, Registered>,
+    account_name: String,
 ) {
     let _receiving_span = span!(Level::TRACE, "Receiving loop").entered();
     let mut previous_contacts: Vec<DisplayContact> = Vec::new();
@@ -1919,7 +1930,8 @@ pub async fn handle_synchronization(
                                 if let Some(formatted_msg) = format_message(&content)
                                     && !formatted_msg.sender
                                 {
-                                    handle_notification(&formatted_msg, &manager).await;
+                                    handle_notification(&formatted_msg, &manager, &account_name)
+                                        .await;
                                 }
 
                                 if let Err(e) = tx.send(EventApp::ReceiveMessage) {
@@ -2045,9 +2057,18 @@ async fn contact_to_display_contact(
 async fn handle_notification(
     formatted_msg: &MessageDto,
     manager: &Manager<SqliteStore, Registered>,
+    account_name: &str,
 ) {
     let config = Config::load();
     if !config.notifications_enabled {
+        return;
+    }
+
+    if config.get_current_account() != Some(&account_name.to_string()) {
+        debug!(
+            "Skipping notification for inactive account: {}",
+            account_name
+        );
         return;
     }
 
@@ -2098,9 +2119,9 @@ async fn handle_notification(
     };
 
     let title = if let Some(group) = group_name {
-        format!("{sender_name} → {group}")
+        format!("[{account_name}] {sender_name} → {group}")
     } else {
-        sender_name
+        format!("[{account_name}] {sender_name}")
     };
 
     info!("Attempting notification for message from: {}", title);
