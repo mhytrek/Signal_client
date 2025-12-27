@@ -18,10 +18,12 @@ fn ensure_log_dir() -> Result<PathBuf> {
         Some(home_dir) => home_dir,
         None => bail!("Unable to resolve home directory."),
     };
-    if !fs::exists(home_dir.join(".local/state"))? {
-        fs::create_dir_all(home_dir.join(".local/state"))?;
+    let state_dir = home_dir.join(".local/state");
+    if !fs::exists(&state_dir)? {
+        fs::create_dir_all(&state_dir)?;
     }
-    Ok(home_dir)
+
+    Ok(state_dir.join("signal_client/logs"))
 }
 
 #[cfg(target_os = "linux")]
