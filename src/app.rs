@@ -665,13 +665,6 @@ impl App {
                     self.current_screen = CurrentScreen::Main;
                 }
 
-                let old_recipients = mem::take(&mut self.recipients);
-                let mut input_map: HashMap<RecipientId, String> = HashMap::new();
-                for recipient in old_recipients {
-                    let id = recipient.0.id();
-                    let input = recipient.1;
-                    input_map.insert(id, input);
-                }
                 // This is added because contacts change order in the contact list
                 // and if that happens the same contact should remain selected
                 let selected_id = self
@@ -679,6 +672,14 @@ impl App {
                     .get(self.selected_recipient)
                     .map(|contact| contact.0.id())
                     .unwrap_or_default();
+
+                let old_recipients = mem::take(&mut self.recipients);
+                let mut input_map: HashMap<RecipientId, String> = HashMap::new();
+                for recipient in old_recipients {
+                    let id = recipient.0.id();
+                    let input = recipient.1;
+                    input_map.insert(id, input);
+                }
 
                 self.recipients = recipients
                     .into_iter()
