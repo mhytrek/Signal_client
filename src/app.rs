@@ -1,10 +1,11 @@
+use crate::app::utils::timestamp_recipient_sort;
+use crate::config::Config;
 use crate::messages::attachments::save_attachment;
 use crate::messages::receive::{self, MessageDto, contact, format_message};
 use crate::messages::send::{self};
 use crate::paths;
 use crate::profile::get_profile_tui;
 use crate::ui::render_ui;
-use crate::{config::Config, contacts, groups};
 use anyhow::{Error, Result, anyhow, bail};
 use arboard::Clipboard;
 use crossterm::event::{self, Event, KeyModifiers};
@@ -18,6 +19,7 @@ use presage::libsignal_service::prelude::{ProfileKey, Uuid};
 use presage::libsignal_service::zkgroup::GroupMasterKeyBytes;
 use presage::manager::Registered;
 use presage::model::contacts::Contact;
+use presage::model::groups::Group;
 use presage::model::messages::Received;
 use presage::proto::{AttachmentPointer, GroupContextV2};
 use presage_store_sqlite::SqliteStore;
@@ -32,7 +34,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 
-use std::{fs, io};
+use std::{fs, io, mem};
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
 use tokio_util::task::LocalPoolHandle;
@@ -51,7 +53,9 @@ use std::thread;
 use std::time::Duration;
 use tokio::time::interval;
 
-#[derive(PartialEq, Clone)]
+mod utils;
+
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum RecipientId {
     Contact(Uuid),
     Group(GroupMasterKeyBytes),
@@ -63,28 +67,35 @@ impl Default for RecipientId {
     }
 }
 
-pub enum DisplayRecipient {
+#[derive(Debug, PartialEq, Clone)]
+pub enum DisplayRecipientType {
     Contact(DisplayContact),
     Group(DisplayGroup),
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct DisplayRecipient {
+    recipient_type: DisplayRecipientType,
+    latest_message_timestamp: Option<u64>,
+}
+
 impl DisplayRecipient {
     pub fn display_name(&self) -> &str {
-        match self {
-            Self::Contact(c) => c.display_name(),
-            Self::Group(g) => g.display_name(),
+        match &self.recipient_type {
+            DisplayRecipientType::Contact(c) => c.display_name(),
+            DisplayRecipientType::Group(g) => g.display_name(),
         }
     }
 
     pub fn id(&self) -> RecipientId {
-        match self {
-            Self::Contact(c) => c.id(),
-            Self::Group(g) => g.id(),
+        match &self.recipient_type {
+            DisplayRecipientType::Contact(c) => c.id(),
+            DisplayRecipientType::Group(g) => g.id(),
         }
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DisplayContact {
     display_name: String,
     uuid: Uuid,
@@ -104,7 +115,7 @@ impl DisplayContact {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DisplayGroup {
     display_name: String,
     master_key: GroupMasterKeyBytes,
@@ -464,7 +475,7 @@ impl App {
 
     pub async fn switch_account(&mut self, account_name: String) -> Result<()> {
         if !self.available_accounts.contains(&account_name) {
-            bail!("Account '{}' does not exist", account_name);
+            bail!("Account '{account_name}' does not exist");
         }
 
         let mut config = Config::load();
@@ -507,7 +518,7 @@ impl App {
             )
             .await
         {
-            bail!("Failed to initialize background threads: {}", e);
+            bail!("Failed to initialize background threads: {e}");
         }
 
         Ok(())
@@ -653,6 +664,7 @@ impl App {
                 if self.current_screen == CurrentScreen::Syncing {
                     self.current_screen = CurrentScreen::Main;
                 }
+
                 // This is added because contacts change order in the contact list
                 // and if that happens the same contact should remain selected
                 let selected_id = self
@@ -661,9 +673,20 @@ impl App {
                     .map(|contact| contact.0.id())
                     .unwrap_or_default();
 
+                let old_recipients = mem::take(&mut self.recipients);
+                let mut input_map: HashMap<RecipientId, String> = HashMap::new();
+                for recipient in old_recipients {
+                    let id = recipient.0.id();
+                    let input = recipient.1;
+                    input_map.insert(id, input);
+                }
+
                 self.recipients = recipients
                     .into_iter()
-                    .map(|recipient| (recipient, String::new()))
+                    .map(|recipient| {
+                        let id = recipient.id();
+                        (recipient, input_map.remove(&id).unwrap_or_default())
+                    })
                     .collect();
 
                 self.selected_recipient = self
@@ -1776,12 +1799,13 @@ pub async fn init_background_threads(
     retry_manager: Arc<Mutex<RetryManager>>,
     account_name: String,
 ) -> Result<()> {
-    // let local_pool = LocalPoolHandle::new(4);
+    let recipients: Arc<Mutex<Vec<DisplayRecipient>>> = Arc::new(Mutex::new(vec![]));
 
     //spawn thread to sync contacts and new messages
     let tx_synchronization_events = tx_thread.clone();
     let new_manager = manager.clone();
     let sync_account_name = account_name.clone();
+    let sync_recipients = recipients.clone();
     thread::Builder::new()
         .name(String::from("synchronization_thread"))
         .stack_size(1024 * 1024 * 8)
@@ -1792,8 +1816,13 @@ pub async fn init_background_threads(
                 .build()
                 .unwrap();
             runtime.block_on(async move {
-                handle_synchronization(tx_synchronization_events, new_manager, sync_account_name)
-                    .await;
+                handle_synchronization(
+                    tx_synchronization_events,
+                    new_manager,
+                    sync_account_name,
+                    sync_recipients,
+                )
+                .await;
             })
         })
         .unwrap();
@@ -1818,6 +1847,7 @@ pub async fn init_background_threads(
                     new_manager,
                     tx_status_clone,
                     retry_manager_clone,
+                    recipients,
                 )
                 .await;
             })
@@ -1932,11 +1962,11 @@ pub async fn handle_synchronization(
     tx: mpsc::Sender<EventApp>,
     mut manager: Manager<SqliteStore, Registered>,
     account_name: String,
+    recipients: Arc<Mutex<Vec<DisplayRecipient>>>,
 ) {
     let _receiving_span = span!(Level::TRACE, "Receiving loop").entered();
-    let mut previous_contacts: Vec<DisplayContact> = Vec::new();
-    let mut previous_groups: Vec<DisplayGroup> = Vec::new();
     let mut initialized = false;
+
     info!("Start initial synchronization");
     loop {
         let messages_stream_result = manager.receive_messages().await;
@@ -1989,67 +2019,17 @@ pub async fn handle_synchronization(
                         }
                     }
 
-                    let contacts_result = contacts::list_contacts_tui(&mut manager).await;
-                    let groups_result = groups::list_groups_tui(&mut manager).await;
+                    let new_recipients = timestamp_recipient_sort(&mut manager).await;
 
-                    let contacts = match contacts_result {
-                        Ok(list) => list,
-                        Err(e) => {
-                            error!("{e}");
-                            continue;
+                    let mut recipients_guard = recipients.lock().await;
+                    if recipients_guard.ne(&new_recipients) {
+                        *recipients_guard = new_recipients.clone();
+                        drop(recipients_guard);
+                        if let Err(error) = tx.send(EventApp::ContactsList(new_recipients)) {
+                            error!(?error, "Failed to send recipient list through channel");
                         }
-                    };
-
-                    let groups = match groups_result {
-                        Ok(list) => list,
-                        Err(e) => {
-                            error!("{e}");
-                            continue;
-                        }
-                    };
-
-                    let contact_displays_futures = contacts
-                        .into_iter()
-                        .map(|contact_res| async {
-                            let contact = contact_res.ok()?;
-                            contact_to_display_contact(contact, manager.clone()).await
-                        })
-                        .collect::<Vec<_>>();
-                    let results = join_all(contact_displays_futures).await;
-                    let contact_displays = results.into_iter().flatten().collect::<Vec<_>>();
-
-                    let group_displays: Vec<DisplayGroup> = groups
-                        .into_iter()
-                        .filter_map(|groups_res| {
-                            let (group_master_key, group) = groups_res.ok()?;
-
-                            let display_name = group.title;
-                            let display_group = DisplayGroup::new(display_name, group_master_key);
-
-                            Some(display_group)
-                        })
-                        .collect();
-
-                    let contacts_differ = contact_displays != previous_contacts;
-                    let groups_differ = group_displays != previous_groups;
-
-                    let display_recipients: Vec<DisplayRecipient> = contact_displays
-                        .iter()
-                        .cloned()
-                        .map(DisplayRecipient::Contact)
-                        .chain(group_displays.iter().cloned().map(DisplayRecipient::Group))
-                        .collect();
-
-                    if contacts_differ || groups_differ {
-                        if tx.send(EventApp::ContactsList(display_recipients)).is_err() {
-                            break;
-                        }
-                        if contacts_differ {
-                            previous_contacts = contact_displays;
-                        }
-                        if groups_differ {
-                            previous_groups = group_displays;
-                        }
+                    } else {
+                        drop(recipients_guard);
                     }
                 }
 
@@ -2100,6 +2080,13 @@ async fn contact_to_display_contact(
     let display_contact = DisplayContact::new(display_name, contact.uuid);
 
     Some(display_contact)
+}
+
+fn group_to_display_group(group: Group, master_key: GroupMasterKeyBytes) -> Option<DisplayGroup> {
+    let display_name = group.title;
+    let display_group = DisplayGroup::new(display_name, master_key);
+
+    Some(display_group)
 }
 
 async fn handle_notification(
@@ -2185,6 +2172,7 @@ pub async fn handle_background_events(
     mut manager: Manager<SqliteStore, Registered>,
     tx_status: mpsc::Sender<EventApp>,
     retry_manager: Arc<Mutex<RetryManager>>,
+    recipients: Arc<Mutex<Vec<DisplayRecipient>>>,
 ) {
     let local_pool = LocalPoolHandle::new(4);
 
@@ -2214,7 +2202,8 @@ pub async fn handle_background_events(
                         &mut manager,
                         &tx_status,
                         &retry_manager,
-                        &local_pool
+                        &local_pool,
+                        &recipients,
                     ).await;
                 } else {
                     break;
@@ -2339,33 +2328,65 @@ async fn handle_incoming_event(
     tx_status: &mpsc::Sender<EventApp>,
     retry_manager: &Arc<Mutex<RetryManager>>,
     local_pool: &LocalPoolHandle,
+    recipients: &Arc<Mutex<Vec<DisplayRecipient>>>,
 ) {
     match event {
         EventSend::SendText(recipient, text, quoted_message) => {
-            handle_send_text_event(
-                recipient,
-                text,
-                quoted_message,
-                manager,
-                tx_status,
-                retry_manager,
-                local_pool,
-            )
-            .await;
+            let mut manager_inner = manager.clone();
+            let tx_status_inner = tx_status.clone();
+            let retry_manager_inner = retry_manager.clone();
+            let recipients_inner = recipients.clone();
+            local_pool.spawn_pinned(move || async move {
+                handle_send_text_event(
+                    recipient,
+                    text,
+                    quoted_message,
+                    manager_inner.clone(),
+                    tx_status_inner.clone(),
+                    retry_manager_inner,
+                )
+                .await;
+                let new_recipients = timestamp_recipient_sort(&mut manager_inner).await;
+                let mut recipients_guard = recipients_inner.lock().await;
+                if recipients_guard.ne(&new_recipients) {
+                    *recipients_guard = new_recipients.clone();
+                    drop(recipients_guard);
+                    if let Err(channel_error) =
+                        tx_status_inner.send(EventApp::ContactsList(new_recipients))
+                    {
+                        error!(%channel_error);
+                    }
+                }
+            });
         }
         EventSend::SendAttachment(recipient, text, attachment_path, quoted_message) => {
-            handle_send_attachment_event(
-                recipient,
-                text,
-                attachment_path,
-                quoted_message,
-                manager,
-                // current_contacts_mutex,
-                tx_status,
-                retry_manager,
-                local_pool,
-            )
-            .await;
+            let mut manager_inner = manager.clone();
+            let tx_status_inner = tx_status.clone();
+            let retry_manager_inner = retry_manager.clone();
+            let recipients_inner = recipients.clone();
+            local_pool.spawn_pinned(move || async move {
+                handle_send_attachment_event(
+                    recipient,
+                    text,
+                    attachment_path,
+                    quoted_message,
+                    manager_inner.clone(),
+                    tx_status_inner.clone(),
+                    retry_manager_inner.clone(),
+                )
+                .await;
+                let new_recipients = timestamp_recipient_sort(&mut manager_inner).await;
+                let mut recipients_guard = recipients_inner.lock().await;
+                if recipients_guard.ne(&new_recipients) {
+                    *recipients_guard = new_recipients.clone();
+                    drop(recipients_guard);
+                    if let Err(channel_error) =
+                        tx_status_inner.send(EventApp::ContactsList(new_recipients))
+                    {
+                        error!(%channel_error);
+                    }
+                }
+            });
         }
         EventSend::DeleteMessage(recipient, target_send_timestamp) => {
             handle_delete_message_event(
@@ -2438,10 +2459,9 @@ async fn handle_send_text_event(
     recipient: RecipientId,
     text: String,
     quoted_message: Option<MessageDto>,
-    manager: &Manager<SqliteStore, Registered>,
-    tx_status: &mpsc::Sender<EventApp>,
-    retry_manager: &Arc<Mutex<RetryManager>>,
-    local_pool: &LocalPoolHandle,
+    manager: Manager<SqliteStore, Registered>,
+    tx_status: mpsc::Sender<EventApp>,
+    retry_manager: Arc<Mutex<RetryManager>>,
 ) {
     let outgoing_msg = OutgoingMessage::new(
         recipient.clone(),
@@ -2459,90 +2479,84 @@ async fn handle_send_text_event(
     let text_clone = text.clone();
     let quoted_message_clone = quoted_message.clone();
     let tx_status_clone = tx_status.clone();
-    let retry_manager_clone = Arc::clone(retry_manager);
+    let retry_manager_clone = Arc::clone(&retry_manager);
     let manager_clone = manager.clone();
 
-    local_pool.spawn_pinned(move || async move {
-        let send_result = match recipient_clone {
-            RecipientId::Contact(uuid) => {
-                send::contact::send_message_tui(
-                    uuid.to_string(),
-                    text_clone,
-                    quoted_message_clone,
-                    manager_clone,
-                )
-                .await
-            }
-            RecipientId::Group(master_key) => {
-                send::group::send_message_tui(
-                    master_key,
-                    text_clone,
-                    manager_clone,
-                    quoted_message_clone,
-                )
-                .await
-            }
-        };
-
-        match send_result {
-            Ok(_) => {
-                // Mark as sent in retry manager
-                let mut retry_mgr = retry_manager_clone.lock().await;
-                retry_mgr.mark_sent(&message_id);
-                drop(retry_mgr);
-
-                let _ =
-                    tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
-                let _ = tx_status_clone.send(EventApp::ReceiveMessage);
-            }
-            Err(e) if is_captcha_error(&e) => {
-                warn!(error = %e);
-                let token_re =
-                    Regex::new(r"^.* token ([a-f0-9-]+)$").expect("Failed to compile RegEx");
-
-                match token_re.captures(e.to_string().as_str()) {
-                    Some(caps) => match caps.get(1) {
-                        Some(token) => {
-                            let token = token.as_str();
-                            if let Err(error) =
-                                tx_status_clone.send(EventApp::CaptchaError(token.to_string()))
-                            {
-                                error!(%error, "Failed to send event");
-                            }
-                        }
-                        None => error!("Failed to extract token from error message."),
-                    },
-                    None => error!("Failed to extract token from error message."),
-                }
-                let mut retry_mgr = retry_manager_clone.lock().await;
-                retry_mgr.mark_sent(&message_id);
-                drop(retry_mgr);
-                _ = tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
-            }
-            Err(e) => {
-                // Mark as failed in retry manager
-                let mut retry_mgr = retry_manager_clone.lock().await;
-
-                if is_delivery_confirmation_timeout(&e) {
-                    retry_mgr.mark_sent(&message_id);
-                    warn!("Message likely delivered despite confirmation timeout");
-                } else {
-                    retry_mgr.mark_failed(&message_id, e.to_string());
-
-                    if is_connection_error(&e) {
-                        let _ = tx_status_clone.send(EventApp::NetworkStatusChanged(
-                            NetworkStatus::Disconnected(
-                                "Cannot send: WiFi disconnected".to_string(),
-                            ),
-                        ));
-                    } else {
-                        error!("Error sending message: {e:?}");
-                    }
-                }
-                drop(retry_mgr);
-            }
+    let send_result = match recipient_clone {
+        RecipientId::Contact(uuid) => {
+            send::contact::send_message_tui(
+                uuid.to_string(),
+                text_clone,
+                quoted_message_clone,
+                manager_clone,
+            )
+            .await
         }
-    });
+        RecipientId::Group(master_key) => {
+            send::group::send_message_tui(
+                master_key,
+                text_clone,
+                manager_clone,
+                quoted_message_clone,
+            )
+            .await
+        }
+    };
+
+    match send_result {
+        Ok(_) => {
+            // Mark as sent in retry manager
+            let mut retry_mgr = retry_manager_clone.lock().await;
+            retry_mgr.mark_sent(&message_id);
+            drop(retry_mgr);
+
+            let _ = tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+            let _ = tx_status_clone.send(EventApp::ReceiveMessage);
+        }
+        Err(e) if is_captcha_error(&e) => {
+            warn!(error = %e);
+            let token_re = Regex::new(r"^.* token ([a-f0-9-]+)$").expect("Failed to compile RegEx");
+
+            match token_re.captures(e.to_string().as_str()) {
+                Some(caps) => match caps.get(1) {
+                    Some(token) => {
+                        let token = token.as_str();
+                        if let Err(error) =
+                            tx_status_clone.send(EventApp::CaptchaError(token.to_string()))
+                        {
+                            error!(%error, "Failed to send event");
+                        }
+                    }
+                    None => error!("Failed to extract token from error message."),
+                },
+                None => error!("Failed to extract token from error message."),
+            }
+            let mut retry_mgr = retry_manager_clone.lock().await;
+            retry_mgr.mark_sent(&message_id);
+            drop(retry_mgr);
+            _ = tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+        }
+        Err(e) => {
+            // Mark as failed in retry manager
+            let mut retry_mgr = retry_manager_clone.lock().await;
+
+            if is_delivery_confirmation_timeout(&e) {
+                retry_mgr.mark_sent(&message_id);
+                warn!("Message likely delivered despite confirmation timeout");
+            } else {
+                retry_mgr.mark_failed(&message_id, e.to_string());
+
+                if is_connection_error(&e) {
+                    let _ = tx_status_clone.send(EventApp::NetworkStatusChanged(
+                        NetworkStatus::Disconnected("Cannot send: WiFi disconnected".to_string()),
+                    ));
+                } else {
+                    error!("Error sending message: {e:?}");
+                }
+            }
+            drop(retry_mgr);
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2551,11 +2565,9 @@ async fn handle_send_attachment_event(
     text: String,
     attachment_path: String,
     quoted_message: Option<MessageDto>,
-    manager: &Manager<SqliteStore, Registered>,
-    // current_contacts_mutex: &AsyncContactsMap,
-    tx_status: &mpsc::Sender<EventApp>,
-    retry_manager: &Arc<Mutex<RetryManager>>,
-    local_pool: &LocalPoolHandle,
+    manager: Manager<SqliteStore, Registered>,
+    tx_status: mpsc::Sender<EventApp>,
+    retry_manager: Arc<Mutex<RetryManager>>,
 ) {
     let outgoing_msg = OutgoingMessage::new(
         recipient.clone(),
@@ -2574,93 +2586,88 @@ async fn handle_send_attachment_event(
     let attachment_path_clone = attachment_path.clone();
     let quoted_message_clone = quoted_message.clone();
     let tx_status_clone = tx_status.clone();
-    let retry_manager_clone = Arc::clone(retry_manager);
+    let retry_manager_clone = Arc::clone(&retry_manager);
     let manager_clone = manager.clone();
 
-    local_pool.spawn_pinned(move || async move {
-        // Handle recipient type - for now, only Contact is implemented
-        let send_result = match recipient_clone {
-            RecipientId::Contact(uuid) => {
-                send::contact::send_attachment_tui(
-                    uuid.to_string(),
-                    text_clone,
-                    attachment_path_clone,
-                    quoted_message_clone,
-                    manager_clone,
-                )
-                .await
-            }
-            RecipientId::Group(master_key) => {
-                send::group::send_attachment_tui(
-                    &master_key,
-                    text_clone,
-                    attachment_path_clone,
-                    quoted_message_clone,
-                    manager_clone,
-                )
-                .await
-            }
-        };
-
-        match send_result {
-            Ok(_) => {
-                // Mark as sent in retry manager
-                let mut retry_mgr = retry_manager_clone.lock().await;
-                retry_mgr.mark_sent(&message_id);
-                drop(retry_mgr);
-
-                _ = tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
-                _ = tx_status_clone.send(EventApp::ReceiveMessage);
-            }
-            Err(e) if is_captcha_error(&e) => {
-                warn!(error = %e);
-                let token_re =
-                    Regex::new(r"^.* token ([a-f0-9-]+)$").expect("Failed to compile RegEx");
-
-                match token_re.captures(e.to_string().as_str()) {
-                    Some(caps) => match caps.get(1) {
-                        Some(token) => {
-                            let token = token.as_str();
-                            if let Err(error) =
-                                tx_status_clone.send(EventApp::CaptchaError(token.to_string()))
-                            {
-                                error!(%error, "Failed to send event");
-                            }
-                        }
-                        None => error!("Failed to extract token from error message."),
-                    },
-                    None => error!("Failed to extract token from error message."),
-                }
-                let mut retry_mgr = retry_manager_clone.lock().await;
-                // Even though not send this message is marked as sent so there is no retry for it.
-                retry_mgr.mark_sent(&message_id);
-                drop(retry_mgr);
-
-                _ = tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
-            }
-            Err(e) => {
-                // Mark as failed in retry manager
-                let mut retry_mgr = retry_manager_clone.lock().await;
-
-                if is_delivery_confirmation_timeout(&e) {
-                    retry_mgr.mark_sent(&message_id);
-                    warn!("Message likely delivered despite confirmation timeout");
-                } else {
-                    retry_mgr.mark_failed(&message_id, e.to_string());
-                    if is_connection_error(&e) {
-                        _ = tx_status_clone.send(EventApp::NetworkStatusChanged(
-                            NetworkStatus::Disconnected(
-                                "Cannot send: WiFi disconnected".to_string(),
-                            ),
-                        ));
-                    } else {
-                        error!("Error sending attachment: {e:?}");
-                    }
-                }
-                drop(retry_mgr);
-            }
+    // Handle recipient type - for now, only Contact is implemented
+    let send_result = match recipient_clone {
+        RecipientId::Contact(uuid) => {
+            send::contact::send_attachment_tui(
+                uuid.to_string(),
+                text_clone,
+                attachment_path_clone,
+                quoted_message_clone,
+                manager_clone,
+            )
+            .await
         }
-    });
+        RecipientId::Group(master_key) => {
+            send::group::send_attachment_tui(
+                &master_key,
+                text_clone,
+                attachment_path_clone,
+                quoted_message_clone,
+                manager_clone,
+            )
+            .await
+        }
+    };
+
+    match send_result {
+        Ok(_) => {
+            // Mark as sent in retry manager
+            let mut retry_mgr = retry_manager_clone.lock().await;
+            retry_mgr.mark_sent(&message_id);
+            drop(retry_mgr);
+
+            _ = tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+            _ = tx_status_clone.send(EventApp::ReceiveMessage);
+        }
+        Err(e) if is_captcha_error(&e) => {
+            warn!(error = %e);
+            let token_re = Regex::new(r"^.* token ([a-f0-9-]+)$").expect("Failed to compile RegEx");
+
+            match token_re.captures(e.to_string().as_str()) {
+                Some(caps) => match caps.get(1) {
+                    Some(token) => {
+                        let token = token.as_str();
+                        if let Err(error) =
+                            tx_status_clone.send(EventApp::CaptchaError(token.to_string()))
+                        {
+                            error!(%error, "Failed to send event");
+                        }
+                    }
+                    None => error!("Failed to extract token from error message."),
+                },
+                None => error!("Failed to extract token from error message."),
+            }
+            let mut retry_mgr = retry_manager_clone.lock().await;
+            // Even though not send this message is marked as sent so there is no retry for it.
+            retry_mgr.mark_sent(&message_id);
+            drop(retry_mgr);
+
+            _ = tx_status_clone.send(EventApp::NetworkStatusChanged(NetworkStatus::Connected));
+        }
+        Err(e) => {
+            // Mark as failed in retry manager
+            let mut retry_mgr = retry_manager_clone.lock().await;
+
+            if is_delivery_confirmation_timeout(&e) {
+                retry_mgr.mark_sent(&message_id);
+                warn!("Message likely delivered despite confirmation timeout");
+            } else {
+                retry_mgr.mark_failed(&message_id, e.to_string());
+                if is_connection_error(&e) {
+                    _ = tx_status_clone.send(EventApp::NetworkStatusChanged(
+                        NetworkStatus::Disconnected("Cannot send: WiFi disconnected".to_string()),
+                    ));
+                } else {
+                    error!("Error sending attachment: {e:?}");
+                }
+            }
+            drop(retry_mgr);
+        }
+    }
 }
 
 async fn handle_delete_message_event(

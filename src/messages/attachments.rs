@@ -20,8 +20,7 @@ pub async fn save_attachment(
         Ok(data) => data,
         Err(e) => {
             return Err(anyhow::anyhow!(
-                "Failed to get attachment data from database: {}",
-                e
+                "Failed to get attachment data from database: {e}"
             ));
         }
     };
@@ -83,7 +82,7 @@ fn get_unique_file_path(dir: &Path, file_name: &str) -> PathBuf {
 pub async fn create_attachment(attachment_path: String) -> Result<(AttachmentSpec, Vec<u8>)> {
     // Resolve absolute path
     let path: PathBuf = fs::canonicalize(&attachment_path)
-        .map_err(|_| anyhow::anyhow!("Failed to resolve path: {}", attachment_path))?;
+        .map_err(|_| anyhow::anyhow!("Failed to resolve path: {attachment_path}"))?;
 
     if !path.exists() {
         return Err(anyhow::anyhow!(

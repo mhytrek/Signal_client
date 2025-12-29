@@ -112,7 +112,7 @@ pub async fn send(
     manager
         .send_message_to_group(recipient, data_message.clone(), timestamp)
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to send message: {}", e))
+        .map_err(|e| anyhow::anyhow!("Failed to send message: {e}"))
 }
 
 pub fn create_data_message(

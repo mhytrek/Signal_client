@@ -96,7 +96,7 @@ pub async fn list_accounts_cli() -> Result<()> {
 pub async fn switch_account_cli(account_name: String) -> Result<()> {
     let accounts = list_accounts()?;
     if !accounts.contains(&account_name) {
-        bail!("Account '{}' does not exist", account_name);
+        bail!("Account '{account_name}' does not exist");
     }
 
     let mut config = Config::load();
@@ -121,7 +121,7 @@ pub async fn get_current_account_cli() -> Result<()> {
 pub async fn unlink_account_cli(account_name: String) -> Result<()> {
     let accounts = list_accounts()?;
     if !accounts.contains(&account_name) {
-        bail!("Account '{}' does not exist", account_name);
+        bail!("Account '{account_name}' does not exist");
     }
 
     let config = Config::load();

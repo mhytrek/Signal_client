@@ -48,7 +48,7 @@ impl TestAccount {
         let config = TestConfig::load()?;
         let account_config = config
             .get_account(alias)
-            .ok_or_else(|| anyhow::anyhow!("Account {} not found in test config", alias))?;
+            .ok_or_else(|| anyhow::anyhow!("Account {alias} not found in test config"))?;
 
         Ok(Self {
             name: account_config.account_name.clone(),
