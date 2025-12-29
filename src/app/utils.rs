@@ -90,9 +90,21 @@ async fn get_messages_backoff(
             Ok(m) => m
                 .flatten()
                 .filter_map(|c| match c.body {
-                    ContentBody::DataMessage(dmsg) => Some(dmsg),
+                    ContentBody::DataMessage(dmsg) => {
+                        if dmsg.body.is_some() || !dmsg.attachments.is_empty() {
+                            Some(dmsg)
+                        } else {
+                            None
+                        }
+                    }
                     ContentBody::SynchronizeMessage(smsg) => {
-                        smsg.sent.and_then(|sent| sent.message)
+                        smsg.sent.and_then(|sent| sent.message).and_then(|dmsg| {
+                            if dmsg.body.is_some() || !dmsg.attachments.is_empty() {
+                                Some(dmsg)
+                            } else {
+                                None
+                            }
+                        })
                     }
                     _ => None,
                 })
