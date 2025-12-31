@@ -1,9 +1,11 @@
-use std::fs;
 use std::path::PathBuf;
 use std::sync::OnceLock;
+use std::{env, fs};
 
 use anyhow::{Result, bail};
 use tracing::error;
+
+use crate::env::ACCOUNTS_DIR;
 
 pub const STORE: &str = "sqlite://store.db";
 
@@ -74,6 +76,9 @@ pub fn assets() -> PathBuf {
 }
 
 pub fn accounts_dir() -> PathBuf {
+    if let Ok(accounts_dir) = env::var(ACCOUNTS_DIR) {
+        return PathBuf::from(accounts_dir);
+    }
     static PATH: OnceLock<PathBuf> = OnceLock::new();
     PATH.get_or_init(|| {
         if cfg!(debug_assertions) {
