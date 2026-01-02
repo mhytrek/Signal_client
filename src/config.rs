@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+use crate::env::SIGNAL_CONFIG_DIR;
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Config {
     pub color_mode: bool,  // true for color, false for black-and-white
@@ -34,12 +36,14 @@ impl Default for Config {
 
 impl Config {
     fn get_config_path() -> PathBuf {
-        if let Ok(config_dir) = std::env::var("SIGNAL_CONFIG_DIR") {
+        if let Ok(config_dir) = std::env::var(SIGNAL_CONFIG_DIR) {
             PathBuf::from(config_dir).join("config.json")
+        } else if cfg!(debug_assertions) {
+            PathBuf::from("./signal_client/config.json")
         } else {
             dirs::config_dir()
                 .unwrap_or_else(|| PathBuf::from("."))
-                .join("signal-tui")
+                .join("signal_client")
                 .join("config.json")
         }
     }

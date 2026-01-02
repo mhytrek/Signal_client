@@ -3,7 +3,7 @@
 ## About the Project
 
 ### Description
-A desktop client for Signal with a terminal interface, providing basic functionalities. It is designed to run on Linux, Windows, and macOS platforms.
+A desktop client for Signal with a terminal interface, providing basic functionalities. It is designed to run on Linux and macOS platforms.
 
 ### Built with
 ![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)

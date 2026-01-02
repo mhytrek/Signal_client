@@ -1,114 +1,101 @@
-use std::env::home_dir;
-use std::fs;
-use std::path::Path;
+use std::path::PathBuf;
 use std::sync::OnceLock;
+use std::{env, fs};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use tracing::error;
+
+use crate::env::ACCOUNTS_DIR;
 
 pub const STORE: &str = "sqlite://store.db";
 
-fn ensure_local_share_dir(home_dir: &Path) -> Result<()> {
-    if !fs::exists(home_dir.join(".local/share"))? {
-        fs::create_dir_all(home_dir.join(".local/share"))?;
+fn ensure_data_dir() -> Result<PathBuf> {
+    match dirs::data_dir() {
+        Some(data_dir) => {
+            if !fs::exists(&data_dir)? {
+                fs::create_dir_all(&data_dir)?;
+            }
+            Ok(data_dir)
+        }
+        None => bail!("Unable to resolve directory to hold client data."),
     }
-    Ok(())
 }
 
-pub fn store() -> String {
-    static PATH: OnceLock<String> = OnceLock::new();
+pub fn store() -> PathBuf {
+    static PATH: OnceLock<PathBuf> = OnceLock::new();
     PATH.get_or_init(|| {
         if cfg!(debug_assertions) {
-            "sqlite://signal_store.db".to_string()
+            PathBuf::from("sqlite://signal_store.db")
         } else {
-            match home_dir() {
-                Some(home_dir) => match ensure_local_share_dir(&home_dir) {
-                    Ok(_) => home_dir
-                        .join(".local/share/signal_client/store.db")
-                        .to_str()
-                        .unwrap_or("sqlite://signal_store.db")
-                        .to_string(),
-                    Err(error) => {
-                        error!(%error, "Unable to ensure if ~/.local/share directory exists.");
-                        "sqlite://signal_store.db".to_string()
-                    }
-                },
-                None => "sqlite://signal_store.db".to_string(),
+            match ensure_data_dir() {
+                Ok(data_dir) => data_dir.join("signal_client/store.db"),
+                Err(error) => {
+                    error!(?error);
+                    PathBuf::from("sqlite://signal_store.db")
+                }
             }
         }
     })
     .into()
 }
 
-pub fn qrcode() -> String {
-    static PATH: OnceLock<String> = OnceLock::new();
+pub fn qrcode() -> PathBuf {
+    static PATH: OnceLock<PathBuf> = OnceLock::new();
     PATH.get_or_init(|| {
         if cfg!(debug_assertions) {
-            "./signal_client/assets/qrcode".to_string()
+            PathBuf::from("./signal_client/assets/qrcode")
         } else {
-            match home_dir() {
-                Some(home_dir) => match ensure_local_share_dir(&home_dir) {
-                    Ok(_) => home_dir
-                        .join(".local/share/signal_client/assets/qrcode")
-                        .to_str()
-                        .unwrap_or("./signal_client/assets/qrcode")
-                        .to_string(),
-                    Err(error) => {
-                        error!(%error, "Unable to ensure if ~/.local/share directory exists.");
-                        "./signal_client/assets/qrcode".to_string()
-                    }
-                },
-                None => "./signal_client/assets/qrcode".to_string(),
+            match ensure_data_dir() {
+                Ok(data_dir) => data_dir.join("signal_client/assets/qrcode"),
+                Err(error) => {
+                    error!(?error);
+                    PathBuf::from("./signal_client/assets/qrcode")
+                }
             }
         }
     })
     .into()
 }
 
-pub fn assets() -> String {
-    static PATH: OnceLock<String> = OnceLock::new();
+pub fn assets() -> PathBuf {
+    static PATH: OnceLock<PathBuf> = OnceLock::new();
     PATH.get_or_init(|| {
         if cfg!(debug_assertions) {
-            "./signal_client/assets".to_string()
+            PathBuf::from("./signal_client/assets")
         } else {
-            match home_dir() {
-                Some(home_dir) => match ensure_local_share_dir(&home_dir) {
-                    Ok(_) => home_dir
-                        .join(".local/share/signal_client/assets")
-                        .to_str()
-                        .unwrap_or("./signal_client/assets")
-                        .to_string(),
-                    Err(error) => {
-                        error!(%error, "Unable to ensure if ~/.local/share directory exists.");
-                        "./signal_client/assets".to_string()
-                    }
-                },
-                None => "./signal_client/assets".to_string(),
+            match ensure_data_dir() {
+                Ok(data_dir) => data_dir.join("signal_client/assets"),
+                Err(error) => {
+                    error!(?error);
+                    PathBuf::from("./signal_client/assets")
+                }
             }
         }
     })
     .into()
 }
 
-pub fn accounts_dir() -> String {
-    std::env::var("ACCOUNTS_DIR").unwrap_or_else(|_| {
+pub fn accounts_dir() -> PathBuf {
+    if let Ok(accounts_dir) = env::var(ACCOUNTS_DIR) {
+        return PathBuf::from(accounts_dir);
+    }
+    static PATH: OnceLock<PathBuf> = OnceLock::new();
+    PATH.get_or_init(|| {
         if cfg!(debug_assertions) {
-            "./signal_client/accounts".to_string()
+            PathBuf::from("./signal_client/accounts")
         } else {
-            match home_dir() {
-                Some(home_dir) => match ensure_local_share_dir(&home_dir) {
-                    Ok(_) => home_dir
-                        .join(".local/share/signal_client/accounts")
-                        .to_str()
-                        .unwrap_or("./signal_client/accounts")
-                        .to_string(),
-                    Err(error) => {
-                        error!(%error, "Unable to ensure if ~/.local/share directory exists.");
-                        "./signal_client/accounts".to_string()
-                    }
-                },
-                None => "./signal_client/accounts".to_string(),
+            match ensure_data_dir() {
+                Ok(data_dir) => data_dir.join("signal_client/accounts"),
+                Err(error) => {
+                    error!(?error);
+                    PathBuf::from("./signal_client/accounts")
+                }
             }
         }
     })
+    .into()
+}
+
+pub fn account_store_path(account_name: &str) -> PathBuf {
+    accounts_dir().join(account_name).join("store.db")
 }
