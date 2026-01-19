@@ -16,6 +16,7 @@ use presage::Manager;
 use presage::libsignal_service::Profile;
 use presage::libsignal_service::groups_v2::Member;
 use presage::libsignal_service::prelude::{ProfileKey, Uuid};
+use presage::libsignal_service::protocol::ServiceId;
 use presage::libsignal_service::zkgroup::GroupMasterKeyBytes;
 use presage::manager::Registered;
 use presage::model::contacts::Contact;
@@ -2049,7 +2050,8 @@ async fn contact_to_display_contact(
     mut manager: Manager<SqliteStore, Registered>,
 ) -> Option<DisplayContact> {
     let uuid_str = contact.uuid.to_string();
-    let profile_key = match manager.store().profile_key(&contact.uuid).await {
+    let service_id = ServiceId::parse_from_service_id_string(&uuid_str).unwrap();
+    let profile_key = match manager.store().profile_key(&service_id).await {
         Ok(profile_key_option) => profile_key_option,
         Err(error) => {
             error!(%error, "Failed to retreive profile key from the store.");
