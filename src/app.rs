@@ -14,7 +14,6 @@ use futures::future::join_all;
 use futures::{StreamExt, pin_mut};
 use presage::Manager;
 use presage::libsignal_service::Profile;
-// use presage::libsignal_service::groups_v2::Member;
 use presage::libsignal_service::prelude::{ProfileKey, Uuid};
 use presage::libsignal_service::protocol::ServiceId;
 use presage::libsignal_service::zkgroup::GroupMasterKeyBytes;
