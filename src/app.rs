@@ -14,12 +14,13 @@ use futures::future::join_all;
 use futures::{StreamExt, pin_mut};
 use presage::Manager;
 use presage::libsignal_service::Profile;
-use presage::libsignal_service::groups_v2::Member;
 use presage::libsignal_service::prelude::{ProfileKey, Uuid};
+use presage::libsignal_service::protocol::ServiceId;
 use presage::libsignal_service::zkgroup::GroupMasterKeyBytes;
 use presage::manager::Registered;
 use presage::model::contacts::Contact;
 use presage::model::groups::Group;
+use presage::model::groups::Member;
 use presage::model::messages::Received;
 use presage::proto::{AttachmentPointer, GroupContextV2};
 use presage_store_sqlite::SqliteStore;
@@ -2049,7 +2050,8 @@ async fn contact_to_display_contact(
     mut manager: Manager<SqliteStore, Registered>,
 ) -> Option<DisplayContact> {
     let uuid_str = contact.uuid.to_string();
-    let profile_key = match manager.store().profile_key(&contact.uuid).await {
+    let service_id = ServiceId::parse_from_service_id_string(&uuid_str).unwrap();
+    let profile_key = match manager.store().profile_key(&service_id).await {
         Ok(profile_key_option) => profile_key_option,
         Err(error) => {
             error!(%error, "Failed to retreive profile key from the store.");
@@ -2842,7 +2844,9 @@ async fn handle_get_contact_info_event(
     if let Ok(uuid) = uuid_str.parse() {
         match manager.store().contact_by_id(&uuid).await {
             Ok(Some(contact)) => {
-                let profile_key = match manager.store().profile_key(&contact.uuid).await {
+                let uuid_str = contact.uuid.to_string();
+                let service_id = ServiceId::parse_from_service_id_string(&uuid_str).unwrap();
+                let profile_key = match manager.store().profile_key(&service_id).await {
                     Ok(pk) => pk,
                     Err(error) => {
                         error!(%error, "Failed to retrieve profile key from the store.");
@@ -2959,7 +2963,8 @@ async fn handle_get_group_info_event(
         .members
         .iter()
         .map(|member: &Member| {
-            let member_uuid = member.uuid;
+            let uuid_string = member.aci.service_id_string();
+            let member_uuid = Uuid::parse_str(&uuid_string).unwrap();
             let mut inner_manager = manager.clone();
             async move {
                 let contact_result = inner_manager.store().contact_by_id(&member_uuid).await;
@@ -3021,7 +3026,8 @@ async fn handle_get_group_info_event(
                         })
                     }
                     None => {
-                        let member_uuid = member.uuid;
+                        let uuid_string = member.aci.service_id_string();
+                        let member_uuid = Uuid::parse_str(&uuid_string).unwrap();
                         let profile_result = inner_manager
                             .retrieve_profile_by_uuid(member_uuid, member.profile_key)
                             .await;
